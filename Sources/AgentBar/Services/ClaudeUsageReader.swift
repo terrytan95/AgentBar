@@ -21,23 +21,7 @@ struct ClaudeUsageReader {
             return UsageSnapshot(
                 service: .claudeCode,
                 status: .needsAuthorization,
-                accounts: [
-                    UsageAccount(
-                        id: "claude-code-local",
-                        service: .claudeCode,
-                        displayName: "Claude Code",
-                        username: nil,
-                        maskedEmail: nil,
-                        plan: nil,
-                        sourceDescription: "~/.claude exists, but no safe documented local usage cache was detected.",
-                        status: .needsAuthorization,
-                        fiveHourWindow: nil,
-                        weeklyWindow: nil,
-                        tokens: .zero,
-                        estimatedCostUSD: nil,
-                        lastUpdated: now
-                    )
-                ],
+                accounts: [],
                 points: [],
                 securityNotes: ["Claude Code requires explicit local CLI data or Anthropic Admin API authorization for live usage and costs."],
                 refreshedAt: now
@@ -52,25 +36,9 @@ struct ClaudeUsageReader {
         return UsageSnapshot(
             service: .claudeCode,
             status: .unavailable,
-            accounts: [
-                UsageAccount(
-                    id: "claude-code-unavailable",
-                    service: .claudeCode,
-                    displayName: "Claude Code",
-                    username: nil,
-                    maskedEmail: nil,
-                    plan: nil,
-                    sourceDescription: source,
-                    status: .unavailable,
-                    fiveHourWindow: nil,
-                    weeklyWindow: nil,
-                    tokens: .zero,
-                    estimatedCostUSD: nil,
-                    lastUpdated: now
-                )
-            ],
+            accounts: [],
             points: [],
-            securityNotes: ["No Claude Code CLI directory was found. Official usage/cost APIs require user-provided Anthropic authorization."],
+            securityNotes: ["\(source) Official usage/cost APIs require user-provided Anthropic authorization."],
             refreshedAt: now
         )
     }

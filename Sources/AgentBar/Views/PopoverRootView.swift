@@ -72,7 +72,7 @@ struct PopoverRootView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L.text("data_sources", store.language))
                 .font(.subheadline.weight(.semibold))
-            ForEach(Array(store.snapshots.values).sorted(by: { $0.service.rawValue < $1.service.rawValue }), id: \.service) { snapshot in
+            ForEach(store.uiDataSourceSnapshots, id: \.service) { snapshot in
                 HStack {
                     Text(snapshot.service.rawValue)
                     Spacer()

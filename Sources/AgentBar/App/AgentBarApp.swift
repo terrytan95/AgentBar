@@ -15,7 +15,13 @@ struct AgentBarApp: App {
     var body: some Scene {
         MenuBarExtra {
             PopoverRootView(store: store)
-                .frame(width: 430, height: 640)
+                .frame(
+                    width: PopoverLayout.width,
+                    height: PopoverLayout.height(
+                        accountCount: store.accounts.count,
+                        sourceCount: store.uiDataSourceSnapshots.count
+                    )
+                )
         } label: {
             HStack(spacing: 4) {
                 Image(nsImage: AppLogo.templateImage())

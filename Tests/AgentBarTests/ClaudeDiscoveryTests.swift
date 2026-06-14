@@ -9,7 +9,19 @@ final class ClaudeDiscoveryTests: XCTestCase {
         let snapshot = ClaudeUsageReader.discover(homeDirectory: root)
 
         XCTAssertEqual(snapshot.status, .unavailable)
-        XCTAssertEqual(snapshot.accounts.first?.displayName, "Claude Code")
-        XCTAssertTrue(snapshot.accounts.first?.sourceDescription.localizedCaseInsensitiveContains("not found") == true)
+        XCTAssertTrue(snapshot.accounts.isEmpty)
+        XCTAssertTrue(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("not found") == true)
+    }
+
+    func testClaudeDiscoveryDoesNotCreatePlaceholderWhenCliDirectoryHasNoSafeUsageSource() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: UUID().uuidString)
+        let claudeDirectory = root.appending(path: ".claude")
+        try FileManager.default.createDirectory(at: claudeDirectory, withIntermediateDirectories: true)
+
+        let snapshot = ClaudeUsageReader.discover(homeDirectory: root)
+
+        XCTAssertEqual(snapshot.status, .needsAuthorization)
+        XCTAssertTrue(snapshot.accounts.isEmpty)
+        XCTAssertTrue(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("authorization"))
     }
 }

@@ -18,16 +18,21 @@ struct SettingsView: View {
                     }
                 }
                 Picker(L.text("refresh_interval", store.language), selection: $settings.refreshInterval) {
-                    Text("15s").tag(TimeInterval(15))
                     Text("30s").tag(TimeInterval(30))
                     Text("60s").tag(TimeInterval(60))
                     Text("5m").tag(TimeInterval(300))
+                    Text("10m").tag(TimeInterval(600))
                 }
                 Toggle(L.text("login_item", store.language), isOn: $settings.launchAtLogin)
                 if let message = settings.loginItemMessage {
                     Text(message.redactedForCredentialWords)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                Picker(L.text("theme_color", store.language), selection: $settings.themeColor) {
+                    ForEach(AppThemeColor.allCases) { theme in
+                        Text(theme.title).tag(theme)
+                    }
                 }
             }
             .padding(18)
@@ -40,8 +45,19 @@ struct SettingsView: View {
                     Text(L.text("total_tokens", store.language)).tag(MenuBarDisplayMode.totalTokens)
                     Text(L.text("codex_only", store.language)).tag(MenuBarDisplayMode.codexRemaining)
                 }
+                Picker(L.text("account_sort", store.language), selection: $settings.accountSortMode) {
+                    ForEach(AccountSortMode.allCases) { mode in
+                        Text(mode.title(store.language)).tag(mode)
+                    }
+                }
                 Toggle("Codex", isOn: $settings.showCodexInMenuBar)
                 Toggle("Claude Code", isOn: $settings.showClaudeInMenuBar)
+                Button(L.text("login_codex", store.language)) {
+                    store.openLogin(for: .codex)
+                }
+                Button(L.text("login_claude", store.language)) {
+                    store.openLogin(for: .claudeCode)
+                }
             }
             .padding(18)
             .tabItem { Label(L.text("menu_item", store.language), systemImage: "menubar.rectangle") }

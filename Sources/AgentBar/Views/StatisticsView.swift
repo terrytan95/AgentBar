@@ -39,7 +39,8 @@ struct StatisticsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.regularMaterial)
         }
-        .background(.regularMaterial)
+        .tint(settings.themeColor.primary)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var sidebar: some View {
@@ -48,11 +49,11 @@ struct StatisticsView: View {
                 sidebarItem(L.text("all", store.language), active: serviceFilter == .all, tint: nil) {
                     serviceFilter = .all
                 }
-                sidebarItem(L.text("openai", store.language), active: serviceFilter == .codex, tint: DashboardStyle.codex) {
+                sidebarItem(L.text("openai", store.language), active: serviceFilter == .codex, tint: settings.themeColor.tertiary) {
                     serviceFilter = .codex
                 }
                 if hasClaudeData {
-                    sidebarItem(L.text("anthropic", store.language), active: serviceFilter == .claude, tint: DashboardStyle.claude) {
+                    sidebarItem(L.text("anthropic", store.language), active: serviceFilter == .claude, tint: settings.themeColor.secondary) {
                         serviceFilter = .claude
                     }
                 }
@@ -110,7 +111,7 @@ struct StatisticsView: View {
             .foregroundStyle(active ? .white : (enabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.72)))
             .padding(.horizontal, 10)
             .frame(height: 30)
-            .background(active ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(active ? settings.themeColor.primary : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
@@ -120,7 +121,7 @@ struct StatisticsView: View {
 
     private var topChrome: some View {
         VStack(spacing: 9) {
-            DashboardTopTabBar(selection: $topTab, language: store.language)
+            DashboardTopTabBar(selection: $topTab, language: store.language, theme: settings.themeColor)
                 .padding(.top, 12)
 
             if topTab == .usage {
@@ -129,17 +130,16 @@ struct StatisticsView: View {
                         LoadingStatusPill(message: L.text("refreshing_accounts", store.language))
                     }
                     Spacer()
-                    DashboardRangeBar(selection: $store.selectedRange, language: store.language)
+                    DashboardRangeBar(selection: $store.selectedRange, language: store.language, theme: settings.themeColor)
 
                     Button {
-                        store.refresh()
+                        store.refresh(force: true)
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .buttonStyle(.borderless)
                     .help(L.text("refresh", store.language))
-                    .disabled(store.isRefreshing)
                 }
                 .padding(.horizontal, 22)
                 .padding(.bottom, 8)
@@ -164,22 +164,22 @@ struct StatisticsView: View {
             }
 
             LazyVGrid(columns: kpiColumns, spacing: 12) {
-                DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens), delta: "↓ 23.6%", accent: .primary)
-                DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary)
-                DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: DashboardStyle.codex, accent: DashboardStyle.codex)
+                DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens), delta: "↓ 23.6%", accent: .primary, theme: settings.themeColor)
+                DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary, theme: settings.themeColor)
+                DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: settings.themeColor.tertiary, accent: settings.themeColor.tertiary, theme: settings.themeColor)
                 if hasClaudeData {
-                    DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: DashboardStyle.claude, accent: DashboardStyle.claude)
+                    DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: settings.themeColor.secondary, accent: settings.themeColor.secondary, theme: settings.themeColor)
                 }
             }
 
-            Panel(title: L.text("daily_usage", store.language)) {
-                DashboardStackedBars(bars: displayBars, language: store.language)
+            Panel(title: "\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))") {
+                DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
                     .frame(height: 206)
                 HStack(spacing: 14) {
                     Spacer()
-                    LegendItem(title: "Codex", color: DashboardStyle.codex)
+                    LegendItem(title: "Codex", color: settings.themeColor.tertiary)
                     if hasClaudeData {
-                        LegendItem(title: "Claude", color: DashboardStyle.claude)
+                        LegendItem(title: "Claude", color: settings.themeColor.secondary)
                     }
                 }
             }
@@ -209,6 +209,25 @@ struct StatisticsView: View {
                 SettingsRow(title: "Claude Code", subtitle: hasClaudeData ? L.text("available", store.language) : L.text("no_safe_local_source", store.language)) {
                     Toggle("", isOn: $settings.showClaudeInMenuBar).labelsHidden()
                 }
+                SettingsRow(title: L.text("login_accounts", store.language), subtitle: L.text("login_accounts_subtitle", store.language)) {
+                    HStack {
+                        Button(L.text("login_codex", store.language)) {
+                            store.openLogin(for: .codex)
+                        }
+                        Button(L.text("login_claude", store.language)) {
+                            store.openLogin(for: .claudeCode)
+                        }
+                    }
+                }
+                SettingsRow(title: L.text("account_sort", store.language), subtitle: L.text("account_sort_subtitle", store.language)) {
+                    Picker("", selection: $settings.accountSortMode) {
+                        ForEach(AccountSortMode.allCases) { mode in
+                            Text(mode.title(store.language)).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 180)
+                }
             }
 
             SettingsGroup(title: L.text("menu_bar", store.language), subtitle: L.text("menu_bar_settings_subtitle", store.language)) {
@@ -227,10 +246,10 @@ struct StatisticsView: View {
             SettingsGroup(title: L.text("refresh", store.language), subtitle: L.text("refresh_settings_subtitle", store.language)) {
                 SettingsRow(title: L.text("refresh_interval", store.language), subtitle: L.text("refresh_interval_subtitle", store.language)) {
                     Picker("", selection: $settings.refreshInterval) {
-                        Text("15s").tag(TimeInterval(15))
                         Text("30s").tag(TimeInterval(30))
                         Text("60s").tag(TimeInterval(60))
                         Text("5m").tag(TimeInterval(300))
+                        Text("10m").tag(TimeInterval(600))
                     }
                     .labelsHidden()
                     .frame(width: 120)
@@ -245,6 +264,15 @@ struct StatisticsView: View {
                     Picker("", selection: $settings.language) {
                         ForEach(AppLanguage.allCases) { language in
                             Text(language.title).tag(language)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 140)
+                }
+                SettingsRow(title: L.text("theme_color", store.language), subtitle: L.text("theme_color_subtitle", store.language)) {
+                    Picker("", selection: $settings.themeColor) {
+                        ForEach(AppThemeColor.allCases) { theme in
+                            Text(theme.title).tag(theme)
                         }
                     }
                     .labelsHidden()
@@ -349,7 +377,7 @@ struct StatisticsView: View {
         return UsageService.allCases.compactMap { service in
             let tokens = summary.serviceBreakdown[service, default: 0]
             guard tokens > 0 || (service == .codex && !codexAccounts.isEmpty) || (service == .claudeCode && hasClaudeData) else { return nil }
-            let color = service == .codex ? DashboardStyle.codex : DashboardStyle.claude
+            let color = service == .codex ? settings.themeColor.tertiary : settings.themeColor.secondary
             return ServiceMixRow(
                 service: service,
                 title: service == .codex ? "Codex" : "Claude Code",
@@ -371,7 +399,7 @@ struct StatisticsView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(accounts) { account in
-                        AccountLimitGroupView(account: account, language: store.language)
+                        AccountLimitGroupView(account: account, language: store.language, theme: settings.themeColor)
                     }
                 }
             }
@@ -383,7 +411,7 @@ struct StatisticsView: View {
         store.accounts.filter { account in
             account.fiveHourWindow != nil || account.weeklyWindow != nil
         }
-        .sortedByActiveThenName()
+        .sorted(using: settings.accountSortMode)
     }
 
     @ViewBuilder
@@ -463,14 +491,10 @@ private enum DashboardViewMode: Hashable {
     case details
 }
 
-private enum DashboardStyle {
-    static let codex = Color(red: 0.43, green: 0.43, blue: 0.46)
-    static let claude = Color(red: 0.80, green: 0.47, blue: 0.34)
-}
-
 private struct DashboardTopTabBar: View {
     @Binding var selection: DashboardTopTab
     var language: AppLanguage
+    var theme: AppThemeColor
 
     var body: some View {
         HStack(spacing: 3) {
@@ -493,7 +517,7 @@ private struct DashboardTopTabBar: View {
                 .foregroundStyle(selection == tab ? Color.white : Color.primary.opacity(0.74))
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selection == tab ? Color.accentColor : Color.clear)
+                        .fill(selection == tab ? theme.primary : Color.clear)
                 )
         }
         .buttonStyle(.plain)
@@ -503,6 +527,7 @@ private struct DashboardTopTabBar: View {
 private struct DashboardRangeBar: View {
     @Binding var selection: UsageRange
     var language: AppLanguage
+    var theme: AppThemeColor
 
     var body: some View {
         HStack(spacing: 2) {
@@ -517,7 +542,7 @@ private struct DashboardRangeBar: View {
                         .foregroundStyle(selection == range ? Color.white : Color.primary.opacity(0.72))
                         .background(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(selection == range ? Color.accentColor : Color.clear)
+                                .fill(selection == range ? theme.primary : Color.clear)
                         )
                 }
                 .buttonStyle(.plain)
@@ -546,13 +571,15 @@ private struct DashboardKPI: View {
     var delta: String
     var marker: Color?
     var accent: Color
+    var theme: AppThemeColor
 
-    init(title: String, value: String, delta: String, marker: Color? = nil, accent: Color) {
+    init(title: String, value: String, delta: String, marker: Color? = nil, accent: Color, theme: AppThemeColor) {
         self.title = title
         self.value = value
         self.delta = delta
         self.marker = marker
         self.accent = accent
+        self.theme = theme
     }
 
     var body: some View {
@@ -576,7 +603,7 @@ private struct DashboardKPI: View {
                     .minimumScaleFactor(0.72)
                 Text(delta)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(theme.primary)
             }
         }
         .padding(.horizontal, 14)
@@ -605,6 +632,7 @@ private struct Panel<Content: View>: View {
 private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
+    var theme: AppThemeColor
 
     var body: some View {
         GeometryReader { proxy in
@@ -613,23 +641,67 @@ private struct DashboardStackedBars: View {
                     .frame(width: proxy.size.width, height: proxy.size.height)
             } else {
                 let maxValue = max(1, bars.map { $0.codexTokens + $0.claudeTokens }.max() ?? 1)
-                HStack(alignment: .bottom, spacing: 15) {
-                    ForEach(bars) { bar in
-                        VStack(spacing: 0) {
-                            Rectangle()
-                                .fill(DashboardStyle.claude)
-                                .frame(height: proxy.size.height * 0.82 * CGFloat(bar.claudeTokens) / CGFloat(maxValue))
-                            Rectangle()
-                                .fill(DashboardStyle.codex)
-                                .frame(height: proxy.size.height * 0.82 * CGFloat(bar.codexTokens) / CGFloat(maxValue))
+                VStack(spacing: 4) {
+                    HStack(alignment: .bottom, spacing: 8) {
+                        VStack(alignment: .trailing) {
+                            Text(DisplayFormatters.compactTokenString(maxValue))
+                            Spacer()
+                            Text(DisplayFormatters.compactTokenString(maxValue / 2))
+                            Spacer()
+                            Text("0")
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-                        .frame(maxWidth: 28)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: max(1, proxy.size.height - 24))
+
+                        ZStack(alignment: .bottom) {
+                            VStack {
+                                Divider()
+                                Spacer()
+                                Divider()
+                                Spacer()
+                                Divider()
+                            }
+                            .opacity(0.45)
+
+                            HStack(alignment: .bottom, spacing: 15) {
+                                ForEach(bars) { bar in
+                                    VStack(spacing: 0) {
+                                        Rectangle()
+                                            .fill(theme.secondary)
+                                            .frame(height: max(0, proxy.size.height - 36) * CGFloat(bar.claudeTokens) / CGFloat(maxValue))
+                                        Rectangle()
+                                            .fill(theme.tertiary)
+                                            .frame(height: max(0, proxy.size.height - 36) * CGFloat(bar.codexTokens) / CGFloat(maxValue))
+                                    }
+                                    .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                                    .frame(maxWidth: 28)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        }
                     }
+                    HStack {
+                        Text(axisDate(bars.first?.day))
+                        Spacer()
+                        Text(axisDate(bars[bars.count / 2].day))
+                        Spacer()
+                        Text(axisDate(bars.last?.day))
+                    }
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 52)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
         }
+    }
+
+    private func axisDate(_ date: Date?) -> String {
+        guard let date else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter.string(from: date)
     }
 }
 
@@ -733,6 +805,7 @@ private struct LoadingAccountPanel: View {
 private struct AccountLimitGroupView: View {
     var account: UsageAccount
     var language: AppLanguage
+    var theme: AppThemeColor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -748,7 +821,7 @@ private struct AccountLimitGroupView: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.accentColor, in: Capsule())
+                                .background(theme.primary, in: Capsule())
                         }
                     }
                     Text(account.username ?? account.maskedEmail ?? account.sourceDescription)
@@ -763,8 +836,8 @@ private struct AccountLimitGroupView: View {
             }
 
             HStack(spacing: 12) {
-                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow)
-                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow)
+                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, theme: theme)
+                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, theme: theme)
             }
 
             HStack {
@@ -886,7 +959,8 @@ private extension View {
         self
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.regularMaterial)
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.86))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)

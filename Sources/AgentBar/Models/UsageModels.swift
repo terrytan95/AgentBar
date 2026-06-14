@@ -92,6 +92,28 @@ extension Array where Element == UsageAccount {
             return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
         }
     }
+
+    func sorted(using mode: AccountSortMode) -> [UsageAccount] {
+        sorted { lhs, rhs in
+            switch mode {
+            case .quotaPressure:
+                let lhsFive = lhs.fiveHourWindow?.remainingPercent ?? Double.greatestFiniteMagnitude
+                let rhsFive = rhs.fiveHourWindow?.remainingPercent ?? Double.greatestFiniteMagnitude
+                if lhsFive != rhsFive { return lhsFive < rhsFive }
+                let lhsWeekly = lhs.weeklyWindow?.remainingPercent ?? Double.greatestFiniteMagnitude
+                let rhsWeekly = rhs.weeklyWindow?.remainingPercent ?? Double.greatestFiniteMagnitude
+                if lhsWeekly != rhsWeekly { return lhsWeekly < rhsWeekly }
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            case .activeFirst:
+                if lhs.isActive != rhs.isActive {
+                    return lhs.isActive && !rhs.isActive
+                }
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            case .alphabetical:
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            }
+        }
+    }
 }
 
 struct UsageSnapshot: Codable, Equatable, Sendable {

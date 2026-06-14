@@ -73,6 +73,7 @@ enum L {
         "loading_account_info": "Loading account information",
         "loading_account_info_subtitle": "Reading local Codex and Claude Code accounts",
         "refreshing_accounts": "Refreshing accounts",
+        "refreshing": "Refreshing",
         "accounts_loaded": "accounts loaded",
         "share": "share",
         "input_abbrev": "In",
@@ -98,6 +99,17 @@ enum L {
         "no_cost_data": "No cost data",
         "usage_windows": "Usage windows",
         "team": "Team"
+        ,"login_accounts": "Login accounts",
+        "login_accounts_subtitle": "Open the provider CLI login flow in Terminal, then refresh AgentBar.",
+        "login_codex": "Login Codex",
+        "login_claude": "Login Claude",
+        "theme_color": "Theme color",
+        "theme_color_subtitle": "Applies to selections, charts, bars, and quota progress.",
+        "account_sort": "Account sorting",
+        "account_sort_subtitle": "Controls account order in the popover and current limits.",
+        "use_account": "Use account",
+        "switching_account": "Switching account",
+        "daily_usage_for": "Daily usage"
     ]
 
     private static let chinese: [String: String] = [
@@ -149,6 +161,7 @@ enum L {
         "loading_account_info": "正在加载账号信息",
         "loading_account_info_subtitle": "正在只读同步本机 Codex 与 Claude Code 账号",
         "refreshing_accounts": "正在刷新账号",
+        "refreshing": "正在刷新",
         "accounts_loaded": "个账号已载入",
         "share": "占比",
         "input_abbrev": "入",
@@ -173,6 +186,17 @@ enum L {
         "current": "当前",
         "no_cost_data": "暂无费用数据",
         "usage_windows": "用量窗口",
-        "team": "团队"
+        "team": "团队",
+        "login_accounts": "登录账号",
+        "login_accounts_subtitle": "在终端打开服务商 CLI 登录流程，然后刷新 AgentBar。",
+        "login_codex": "登录 Codex",
+        "login_claude": "登录 Claude",
+        "theme_color": "主题色",
+        "theme_color_subtitle": "应用到选中态、图表、柱状图和额度进度。",
+        "account_sort": "账号排序",
+        "account_sort_subtitle": "控制下拉菜单和当前限额里的账号顺序。",
+        "use_account": "使用此账号",
+        "switching_account": "正在切换账号",
+        "daily_usage_for": "每日用量"
     ]
 }

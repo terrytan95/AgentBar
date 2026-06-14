@@ -10,6 +10,24 @@ enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum AppThemeColor: String, CaseIterable, Identifiable {
+    case blue
+    case green
+    case purple
+    case orange
+    case graphite
+
+    var id: String { rawValue }
+}
+
+enum AccountSortMode: String, CaseIterable, Identifiable {
+    case quotaPressure
+    case activeFirst
+    case alphabetical
+
+    var id: String { rawValue }
+}
+
 @MainActor
 final class SettingsStore: ObservableObject {
     @Published var language: AppLanguage {
@@ -39,6 +57,14 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
     }
 
+    @Published var themeColor: AppThemeColor {
+        didSet { defaults.set(themeColor.rawValue, forKey: Keys.themeColor) }
+    }
+
+    @Published var accountSortMode: AccountSortMode {
+        didSet { defaults.set(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
+    }
+
     @Published private(set) var loginItemMessage: String?
 
     private let defaults: UserDefaults
@@ -47,7 +73,7 @@ final class SettingsStore: ObservableObject {
         self.defaults = defaults
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? .english
         let savedInterval = defaults.double(forKey: Keys.refreshInterval)
-        refreshInterval = savedInterval > 0 ? savedInterval : 60
+        refreshInterval = savedInterval >= 30 ? savedInterval : 60
         launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
         if !defaults.bool(forKey: Keys.didMigrateActiveAccountMenuBarDefault) {
             defaults.set(MenuBarDisplayMode.activeAccountWindows.rawValue, forKey: Keys.menuBarDisplayMode)
@@ -56,6 +82,8 @@ final class SettingsStore: ObservableObject {
         menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .activeAccountWindows
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
+        themeColor = AppThemeColor(rawValue: defaults.string(forKey: Keys.themeColor) ?? "") ?? .blue
+        accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
     }
 
     private func applyLoginItemPreference() {
@@ -80,5 +108,7 @@ final class SettingsStore: ObservableObject {
         static let showCodexInMenuBar = "showCodexInMenuBar"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
+        static let themeColor = "themeColor"
+        static let accountSortMode = "accountSortMode"
     }
 }

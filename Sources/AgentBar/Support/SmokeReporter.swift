@@ -9,7 +9,6 @@ enum SmokeReporter {
         let accounts = codex.accounts + claude.accounts
         let points = codex.points + claude.points
         let summary = UsageStatistics.summarize(points: points, range: .all)
-        let lowestRemaining = accounts.compactMap(\.mostConstrainedRemainingPercent).min()
         let menuStore = UsageStore(settings: settings)
         menuStore.applyTestData(snapshots: [.codex: codex, .claudeCode: claude], accounts: accounts, points: points)
 
@@ -19,7 +18,6 @@ enum SmokeReporter {
         lines.append("Menu bar title: \(menuStore.menuBarTitle)")
         lines.append("Popover account rows: \(accounts.count)")
         lines.append("Active account: \(accounts.first(where: \.isActive)?.displayName ?? "N/A")")
-        lines.append("HUD remaining percent: \(DisplayFormatters.percentString(lowestRemaining))")
         lines.append("Statistics total tokens: \(DisplayFormatters.tokenString(summary.totalTokens))")
         lines.append("Statistics total cost: \(summary.estimatedCostUSD.map { DisplayFormatters.costString($0) } ?? "No cost data")")
         lines.append("Settings language: \(settings.language.title)")

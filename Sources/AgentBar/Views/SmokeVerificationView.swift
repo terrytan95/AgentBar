@@ -23,7 +23,6 @@ struct SmokeVerificationView: View {
                     .frame(width: 420, height: 560)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 VStack(spacing: 12) {
-                    HUDView(store: store)
                     SettingsView(store: store)
                         .frame(width: 520, height: 320)
                 }

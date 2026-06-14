@@ -5,7 +5,6 @@ struct PopoverRootView: View {
     var onOpenStatistics: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     @Environment(\.openWindow) private var openWindow
-    @State private var hudVisible = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -113,16 +112,6 @@ struct PopoverRootView: View {
 
     private var footer: some View {
         HStack {
-            Button {
-                hudVisible.toggle()
-                if hudVisible {
-                    HUDWindowController.shared.show(store: store)
-                } else {
-                    HUDWindowController.shared.hide()
-                }
-            } label: {
-                Label(hudVisible ? L.text("hide_hud", store.language) : L.text("show_hud", store.language), systemImage: "rectangle.on.rectangle")
-            }
             Button {
                 if let onOpenStatistics {
                     onOpenStatistics()

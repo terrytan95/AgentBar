@@ -167,6 +167,22 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.id), ["b", "c", "a"])
     }
 
+    func testAccountSortingAlwaysKeepsActiveAccountOnTop() {
+        let now = Date()
+        var active = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 1, weeklyUsed: 1, now: now)
+        active.isActive = true
+        let constrained = testAccount(id: "constrained", name: "constrained@example.com", fiveHourUsed: 100, weeklyUsed: 100, now: now)
+
+        let sorted = [constrained, active].sorted(using: .quotaPressure)
+
+        XCTAssertEqual(sorted.map(\.id), ["active", "constrained"])
+    }
+
+    func testEnglishCompactTokenFormattingUsesEnglishUnits() {
+        XCTAssertEqual(DisplayFormatters.compactTokenString(63_229_600, language: .english), "63.2296 million")
+        XCTAssertEqual(DisplayFormatters.compactTokenString(6_322_960_000, language: .english), "6.3230 billion")
+    }
+
     func testCodexAccountSwitcherOnlyUpdatesActiveAccountKey() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let accountDir = temp.appending(path: ".codex/accounts")

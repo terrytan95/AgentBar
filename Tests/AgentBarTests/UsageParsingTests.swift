@@ -88,11 +88,9 @@ final class UsageParsingTests: XCTestCase {
 
         XCTAssertFalse(settings.useDarkAppearance)
         settings.useDarkAppearance = true
-        settings.popoverHeight = 560
 
         let reloaded = SettingsStore(defaults: defaults)
         XCTAssertTrue(reloaded.useDarkAppearance)
-        XCTAssertEqual(reloaded.popoverHeight, 560)
         XCTAssertEqual(L.text("tone_color", .english), "Tone color")
         XCTAssertEqual(L.text("dark_theme", .chinese), "深色主题")
         XCTAssertEqual(AppAppearance.colorScheme(useDarkAppearance: false), .light)

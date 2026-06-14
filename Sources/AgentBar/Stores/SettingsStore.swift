@@ -69,10 +69,6 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
     }
 
-    @Published var popoverHeight: Double {
-        didSet { defaults.set(popoverHeight, forKey: Keys.popoverHeight) }
-    }
-
     @Published private(set) var loginItemMessage: String?
 
     private let defaults: UserDefaults
@@ -93,8 +89,6 @@ final class SettingsStore: ObservableObject {
         themeColor = AppThemeColor(rawValue: defaults.string(forKey: Keys.themeColor) ?? "") ?? .blue
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
-        let savedPopoverHeight = defaults.double(forKey: Keys.popoverHeight)
-        popoverHeight = savedPopoverHeight > 0 ? savedPopoverHeight : Double(PopoverLayout.defaultHeight)
     }
 
     private func applyLoginItemPreference() {
@@ -122,6 +116,5 @@ final class SettingsStore: ObservableObject {
         static let themeColor = "themeColor"
         static let useDarkAppearance = "useDarkAppearance"
         static let accountSortMode = "accountSortMode"
-        static let popoverHeight = "popoverHeight"
     }
 }

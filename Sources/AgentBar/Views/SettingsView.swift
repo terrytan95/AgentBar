@@ -51,17 +51,6 @@ struct SettingsView: View {
                         Text(mode.title(store.language)).tag(mode)
                     }
                 }
-                Slider(
-                    value: $settings.popoverHeight,
-                    in: Double(PopoverLayout.minimumHeight)...Double(PopoverLayout.maximumHeight),
-                    step: 20
-                ) {
-                    Text(L.text("popover_height", store.language))
-                } minimumValueLabel: {
-                    Text("\(Int(PopoverLayout.minimumHeight))")
-                } maximumValueLabel: {
-                    Text("\(Int(PopoverLayout.maximumHeight))")
-                }
                 Toggle("Codex", isOn: $settings.showCodexInMenuBar)
                 Toggle("Claude Code", isOn: $settings.showClaudeInMenuBar)
                 Button(L.text("login_codex", store.language)) {

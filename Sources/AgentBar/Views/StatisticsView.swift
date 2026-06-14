@@ -268,20 +268,6 @@ struct StatisticsView: View {
                     .labelsHidden()
                     .settingsControl(width: SettingsControlLayout.widePickerWidth)
                 }
-                SettingsRow(title: L.text("popover_height", store.language), subtitle: L.text("popover_height_subtitle", store.language)) {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Slider(
-                            value: $settings.popoverHeight,
-                            in: Double(PopoverLayout.minimumHeight)...Double(PopoverLayout.maximumHeight),
-                            step: 20
-                        )
-                        Text("\(Int(settings.popoverHeight)) px")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    .frame(width: 180, alignment: .trailing)
-                }
             }
 
             SettingsGroup(title: L.text("refresh", store.language), subtitle: L.text("refresh_settings_subtitle", store.language)) {

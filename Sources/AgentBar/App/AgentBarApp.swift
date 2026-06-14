@@ -13,30 +13,11 @@ struct AgentBarApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra {
-            PopoverRootView(store: store)
-                .frame(
-                    width: PopoverLayout.width,
-                    height: PopoverLayout.height(
-                        accountCount: store.accounts.count,
-                        sourceCount: store.uiDataSourceSnapshots.count
-                    )
-                )
-        } label: {
-            HStack(spacing: 4) {
-                Image(nsImage: AppLogo.templateImage())
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 18, height: 18)
-                Text(store.menuBarTitle)
-            }
-        }
-        .menuBarExtraStyle(.window)
-
-        WindowGroup("AgentBar Statistics", id: "statistics") {
+        WindowGroup("AgentBar", id: "statistics") {
             StatisticsView(store: store)
-                .frame(minWidth: 860, minHeight: 620)
+                .frame(minWidth: 1180, minHeight: 760)
         }
+        .defaultSize(width: 1480, height: 940)
 
         Settings {
             SettingsView(store: store)
@@ -45,6 +26,7 @@ struct AgentBarApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -57,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        StatusItemController.shared.show()
+
         if CommandLine.arguments.contains("--smoke-ui") {
             Task { @MainActor in
                 SmokeVerificationWindowController.shared.show()
@@ -64,14 +48,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            NSLog("AgentBar showing launch status window")
-            LaunchStatusWindowController.shared.show()
-        }
+        NSLog("AgentBar launched with menu bar status item")
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        DispatchQueue.main.async {
+        if !flag {
             NSLog("AgentBar handling reopen")
             LaunchStatusWindowController.shared.show()
         }

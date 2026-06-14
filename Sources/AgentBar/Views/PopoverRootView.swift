@@ -2,6 +2,8 @@ import SwiftUI
 
 struct PopoverRootView: View {
     @ObservedObject var store: UsageStore
+    var onOpenStatistics: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
     @Environment(\.openWindow) private var openWindow
     @State private var hudVisible = false
 
@@ -97,13 +99,25 @@ struct PopoverRootView: View {
                 Label(hudVisible ? L.text("hide_hud", store.language) : L.text("show_hud", store.language), systemImage: "rectangle.on.rectangle")
             }
             Button {
-                openWindow(id: "statistics")
+                if let onOpenStatistics {
+                    onOpenStatistics()
+                } else {
+                    openWindow(id: "statistics")
+                }
             } label: {
                 Label(L.text("statistics", store.language), systemImage: "chart.bar.xaxis")
             }
             Spacer()
-            SettingsLink {
-                Label(L.text("settings", store.language), systemImage: "gearshape")
+            if let onOpenSettings {
+                Button {
+                    onOpenSettings()
+                } label: {
+                    Label(L.text("settings", store.language), systemImage: "gearshape")
+                }
+            } else {
+                SettingsLink {
+                    Label(L.text("settings", store.language), systemImage: "gearshape")
+                }
             }
         }
         .padding(12)

@@ -3,6 +3,7 @@ dist/
 screenshots/
 verification/
 tmp/
+.superpowers/
 .DS_Store
 *.xcuserdata/
 DerivedData/

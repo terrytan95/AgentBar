@@ -30,7 +30,7 @@ final class UsageStore: ObservableObject {
     var language: AppLanguage { settings.language }
 
     var isLoadingAccountInformation: Bool {
-        !hasLoadedAccountInformation || isRefreshing
+        !hasLoadedAccountInformation
     }
 
     var menuBarTitle: String {

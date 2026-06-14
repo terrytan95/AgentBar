@@ -64,9 +64,6 @@ struct PopoverRootView: View {
             if store.isLoadingAccountInformation && store.accounts.isEmpty {
                 PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
             } else {
-                if store.isLoadingAccountInformation {
-                    PopoverLoadingRow(title: L.text("refreshing_accounts", store.language), subtitle: "\(store.accounts.count) \(L.text("accounts_loaded", store.language))")
-                }
                 ForEach(store.sortedAccounts()) { account in
                     AccountRowView(
                         account: account,

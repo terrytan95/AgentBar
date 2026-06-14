@@ -52,7 +52,7 @@ final class StatusItemController: NSObject {
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = true
         button.image = image
-        let title = store.isRefreshing ? L.text("refreshing", store.language) : store.menuBarTitle
+        let title = store.menuBarTitle
         button.title = " \(title)"
         button.imagePosition = .imageLeading
         button.toolTip = "AgentBar \(title)"

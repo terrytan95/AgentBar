@@ -17,7 +17,8 @@ final class LaunchStatusTests: XCTestCase {
                 weeklyWindow: nil,
                 tokens: .zero,
                 estimatedCostUSD: nil,
-                lastUpdated: nil
+                lastUpdated: nil,
+                isActive: index == 0
             )
         }
 

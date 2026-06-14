@@ -16,6 +16,7 @@ enum SmokeReporter {
         lines.append("Generated: \(ISO8601DateFormatter().string(from: Date()))")
         lines.append("Menu bar title: \(DisplayFormatters.percentString(lowestRemaining))")
         lines.append("Popover account rows: \(accounts.count)")
+        lines.append("Active account: \(accounts.first(where: \.isActive)?.displayName ?? "N/A")")
         lines.append("HUD remaining percent: \(DisplayFormatters.percentString(lowestRemaining))")
         lines.append("Statistics total tokens: \(DisplayFormatters.tokenString(summary.totalTokens))")
         lines.append("Statistics total cost: \(DisplayFormatters.costString(summary.estimatedCostUSD))")
@@ -44,7 +45,7 @@ enum SmokeReporter {
             let fiveHour = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
             let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
             let username = account.username ?? "N/A"
-            lines.append("- \(account.service.rawValue) | \(account.displayName) | \(username) | 5h \(fiveHour) | weekly \(weekly) | \(account.status.rawValue)")
+            lines.append("- \(account.service.rawValue) | \(account.displayName) | \(username) | active \(account.isActive) | 5h \(fiveHour) | weekly \(weekly) | \(account.status.rawValue)")
         }
 
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

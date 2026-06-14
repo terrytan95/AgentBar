@@ -86,7 +86,8 @@ struct CodexUsageReader {
                 weeklyWindow: secondary,
                 tokens: .zero,
                 estimatedCostUSD: nil,
-                lastUpdated: epochDate(raw.lastUsageAt) ?? now
+                lastUpdated: epochDate(raw.lastUsageAt) ?? now,
+                isActive: raw.accountKey == registry.activeAccountKey
             )
         }
 
@@ -169,7 +170,13 @@ struct CodexUsageReader {
 }
 
 private struct CodexRegistry: Decodable {
+    var activeAccountKey: String?
     var accounts: [CodexRegistryAccount]
+
+    enum CodingKeys: String, CodingKey {
+        case activeAccountKey = "active_account_key"
+        case accounts
+    }
 }
 
 private struct CodexRegistryAccount: Decodable {

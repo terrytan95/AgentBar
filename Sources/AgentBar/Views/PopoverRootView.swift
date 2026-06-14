@@ -33,6 +33,12 @@ struct PopoverRootView: View {
                 Text("\(DisplayFormatters.percentString(store.lowestRemaining)) \(L.text("remaining", store.language))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let activeAccount = store.activeAccount {
+                    Text("\(L.text("current_account", store.language)): \(activeAccount.displayName)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
             Button {
@@ -57,12 +63,12 @@ struct PopoverRootView: View {
             Text(L.text("overview", store.language))
                 .font(.subheadline.weight(.semibold))
             if store.isLoadingAccountInformation && store.accounts.isEmpty {
-                PopoverLoadingRow(title: "Loading accounts", subtitle: "Reading local Codex and Claude Code account data")
+                PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
             } else {
                 if store.isLoadingAccountInformation {
-                    PopoverLoadingRow(title: "Refreshing accounts", subtitle: "\(store.accounts.count) accounts loaded")
+                    PopoverLoadingRow(title: L.text("refreshing_accounts", store.language), subtitle: "\(store.accounts.count) \(L.text("accounts_loaded", store.language))")
                 }
-                ForEach(store.accounts) { account in
+                ForEach(store.accounts.sortedByActiveThenName()) { account in
                     AccountRowView(account: account, language: store.language)
                 }
             }
@@ -174,9 +180,19 @@ struct AccountRowView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Text(account.service.rawValue)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 4) {
+                    if account.isActive {
+                        Text(L.text("current", language))
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.accentColor, in: Capsule())
+                    }
+                    Text(account.service.rawValue)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             HStack(spacing: 10) {

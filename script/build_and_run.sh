@@ -5,6 +5,8 @@ MODE="${1:-run}"
 APP_NAME="AgentBar"
 BUNDLE_ID="com.terrytan.AgentBar"
 MIN_SYSTEM_VERSION="14.0"
+APP_VERSION="1.0.0"
+APP_BUILD="100"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -19,8 +21,13 @@ cd "$ROOT_DIR"
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
-swift build
-BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
+BUILD_CONFIGURATION="debug"
+if [ "$MODE" = "--package" ] || [ "$MODE" = "package" ]; then
+  BUILD_CONFIGURATION="release"
+fi
+
+swift build -c "$BUILD_CONFIGURATION"
+BUILD_BINARY="$(swift build -c "$BUILD_CONFIGURATION" --show-bin-path)/$APP_NAME"
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
@@ -48,9 +55,9 @@ cat >"$INFO_PLIST" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleVersion</key>
-  <string>3</string>
+  <string>$APP_BUILD</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.0.3</string>
+  <string>$APP_VERSION</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>

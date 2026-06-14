@@ -1067,8 +1067,10 @@ private struct SettingsGroup<Content: View>: View {
             VStack(spacing: 0) {
                 content()
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .dashboardPanel()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -1089,8 +1091,9 @@ private struct SettingsRow<Content: View>: View {
             }
             Spacer()
             control()
-                .frame(minWidth: 260, alignment: .trailing)
+                .frame(width: 300, alignment: .trailing)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
     }

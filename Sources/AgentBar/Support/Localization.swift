@@ -110,6 +110,8 @@ enum L {
         "tone_color_subtitle": "Applies to selections, charts, bars, and quota progress.",
         "account_sort": "Account sorting",
         "account_sort_subtitle": "Controls account order in the popover and current limits.",
+        "popover_height": "Popover height",
+        "popover_height_subtitle": "Controls the menu bar dropdown height.",
         "use_account": "Use account",
         "switching_account": "Switching account",
         "daily_usage_for": "Daily usage"
@@ -201,6 +203,8 @@ enum L {
         "tone_color_subtitle": "应用到选中态、图表、柱状图和额度进度。",
         "account_sort": "账号排序",
         "account_sort_subtitle": "控制下拉菜单和当前限额里的账号顺序。",
+        "popover_height": "下拉高度",
+        "popover_height_subtitle": "控制菜单栏下拉面板高度。",
         "use_account": "使用此账号",
         "switching_account": "正在切换账号",
         "daily_usage_for": "每日用量"

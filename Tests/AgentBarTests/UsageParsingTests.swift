@@ -88,9 +88,11 @@ final class UsageParsingTests: XCTestCase {
 
         XCTAssertFalse(settings.useDarkAppearance)
         settings.useDarkAppearance = true
+        settings.popoverHeight = 560
 
         let reloaded = SettingsStore(defaults: defaults)
         XCTAssertTrue(reloaded.useDarkAppearance)
+        XCTAssertEqual(reloaded.popoverHeight, 560)
         XCTAssertEqual(L.text("tone_color", .english), "Tone color")
         XCTAssertEqual(L.text("dark_theme", .chinese), "深色主题")
         XCTAssertEqual(AppAppearance.colorScheme(useDarkAppearance: false), .light)
@@ -176,7 +178,29 @@ final class UsageParsingTests: XCTestCase {
         let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl)
 
         XCTAssertEqual(metrics.points.count, 1)
-        XCTAssertEqual(metrics.points[0].estimatedCostUSD ?? 0, 2.1375, accuracy: 0.0001)
+        XCTAssertEqual(metrics.points[0].estimatedCostUSD ?? 0, Decimal(string: "2.1375"))
+    }
+
+    func testPricingNormalizesProviderAndDateSuffixes() {
+        XCTAssertEqual(Pricing.normalize(model: "openai/GPT-5.4@20260131"), "gpt-5.4")
+        XCTAssertEqual(Pricing.normalize(model: "claude-sonnet-4-5-20260229"), "claude-sonnet-4-5")
+        XCTAssertEqual(Pricing.normalize(model: "claude-opus-4-7-2026-02-29"), "claude-opus-4-7")
+    }
+
+    func testPricingUsesDecimalAndUnknownModelsCostZeroButKeepTokens() {
+        let unknown = Pricing.cost(model: "codex-auto-review", input: 99_000_000, output: 1_000_000, cacheRead: 0, cacheCreation: 0)
+        XCTAssertEqual(unknown, 0)
+
+        let known = Pricing.cost(model: "openai/gpt-5.4@20260131", input: 1_000_000, output: 100_000, cacheRead: 100_000, cacheCreation: 0)
+        XCTAssertEqual(known, Decimal(string: "4.025"))
+    }
+
+    func testPricingFingerprintIsStableSHA256AndIncludedInSummary() {
+        XCTAssertEqual(Pricing.fingerprint.count, 64)
+        XCTAssertTrue(Pricing.fingerprint.allSatisfy { $0.isHexDigit })
+
+        let summary = UsageStatistics.summarize(points: [], range: .all)
+        XCTAssertEqual(summary.pricingFingerprint, Pricing.fingerprint)
     }
 
     @MainActor

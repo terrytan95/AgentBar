@@ -20,6 +20,7 @@ enum SmokeReporter {
         lines.append("Active account: \(accounts.first(where: \.isActive)?.displayName ?? "N/A")")
         lines.append("Statistics total tokens: \(DisplayFormatters.tokenString(summary.totalTokens))")
         lines.append("Statistics total cost: \(summary.estimatedCostUSD.map { DisplayFormatters.costString($0) } ?? "No cost data")")
+        lines.append("Pricing fingerprint: \(summary.pricingFingerprint)")
         lines.append("Settings language: \(settings.language.title)")
         lines.append("Settings refresh interval: \(Int(settings.refreshInterval))s")
         lines.append("Settings launch at login: \(settings.launchAtLogin)")

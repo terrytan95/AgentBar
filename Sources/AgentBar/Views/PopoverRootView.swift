@@ -89,7 +89,7 @@ struct PopoverRootView: View {
         }
     }
 
-    private func costText(_ value: Double?) -> String {
+    private func costText(_ value: Decimal?) -> String {
         value.map { DisplayFormatters.costString($0) } ?? L.text("no_cost_data", store.language)
     }
 

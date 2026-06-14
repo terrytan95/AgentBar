@@ -17,7 +17,7 @@ enum UsageStatistics {
 
         let total = filtered.reduce(TokenTotals.zero) { $0 + $1.tokens }
         let costValues = filtered.compactMap(\.estimatedCostUSD)
-        let cost = costValues.isEmpty ? nil : costValues.reduce(0, +)
+        let cost = costValues.isEmpty ? nil : costValues.reduce(Decimal(0), +)
         let serviceBreakdown = Dictionary(grouping: filtered, by: \.service)
             .mapValues { $0.reduce(0) { $0 + $1.tokens.total } }
         let modelBreakdown = Dictionary(grouping: filtered, by: \.model)
@@ -32,7 +32,8 @@ enum UsageStatistics {
             estimatedCostUSD: cost,
             serviceBreakdown: serviceBreakdown,
             modelBreakdown: modelBreakdown,
-            dailyBars: dailyBars
+            dailyBars: dailyBars,
+            pricingFingerprint: Pricing.fingerprint
         )
     }
 

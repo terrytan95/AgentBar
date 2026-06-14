@@ -110,6 +110,10 @@ enum L {
         "tone_color_subtitle": "Applies to selections, charts, bars, and quota progress.",
         "account_sort": "Account sorting",
         "account_sort_subtitle": "Controls account order in the popover and current limits.",
+        "auto_codex_rotation": "Auto-switch Codex accounts",
+        "auto_codex_rotation_subtitle": "When the current Codex account is low on 5-hour quota, switch to the best available account.",
+        "codex_rotation_threshold": "Switch below",
+        "codex_rotation_threshold_subtitle": "Remaining 5-hour quota that triggers automatic switching.",
         "use_account": "Use account",
         "switching_account": "Switching account",
         "daily_usage_for": "Daily usage"
@@ -201,6 +205,10 @@ enum L {
         "tone_color_subtitle": "应用到选中态、图表、柱状图和额度进度。",
         "account_sort": "账号排序",
         "account_sort_subtitle": "控制下拉菜单和当前限额里的账号顺序。",
+        "auto_codex_rotation": "自动切换 Codex 账号",
+        "auto_codex_rotation_subtitle": "当前 Codex 账号 5 小时额度偏低时，自动切换到最佳可用账号。",
+        "codex_rotation_threshold": "低于此值切换",
+        "codex_rotation_threshold_subtitle": "触发自动切换的 5 小时剩余额度。",
         "use_account": "使用此账号",
         "switching_account": "正在切换账号",
         "daily_usage_for": "每日用量"

@@ -27,18 +27,21 @@ struct LaunchStatusView: View {
                 KPIPill(title: L.text("total_tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), tint: .blue)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(store.accounts.prefix(4)) { account in
-                    HStack {
-                        Text(account.displayName)
-                            .lineLimit(1)
-                        Spacer()
-                        Text("\(L.text("five_hour", store.language)) \(DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent))")
-                            .foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(LaunchStatusAccountList.accountsToDisplay(from: store.accounts)) { account in
+                        HStack {
+                            Text(account.displayName)
+                                .lineLimit(1)
+                            Spacer()
+                            Text("\(L.text("five_hour", store.language)) \(DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent))")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
                     }
-                    .font(.caption)
                 }
             }
+            .frame(maxHeight: 150)
 
             HStack {
                 Button {
@@ -60,6 +63,12 @@ struct LaunchStatusView: View {
         .padding(20)
         .frame(width: 520)
         .background(.regularMaterial)
+    }
+}
+
+enum LaunchStatusAccountList {
+    static func accountsToDisplay(from accounts: [UsageAccount]) -> [UsageAccount] {
+        accounts
     }
 }
 

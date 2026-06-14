@@ -38,8 +38,10 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts[0].maskedEmail, "p***@example.com")
         XCTAssertEqual(snapshot.accounts[0].fiveHourWindow?.usedPercent, 18)
         XCTAssertEqual(snapshot.accounts[0].weeklyWindow?.usedPercent, 51)
+        XCTAssertTrue(snapshot.accounts[0].isActive)
         XCTAssertEqual(snapshot.accounts[1].displayName, "Personal")
         XCTAssertEqual(snapshot.accounts[1].username, "Personal")
+        XCTAssertFalse(snapshot.accounts[1].isActive)
         XCTAssertFalse(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("token"))
     }
 

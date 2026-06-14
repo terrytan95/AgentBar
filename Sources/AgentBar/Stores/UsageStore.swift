@@ -59,6 +59,10 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    var activeAccount: UsageAccount? {
+        accounts.first(where: \.isActive) ?? accounts.first
+    }
+
     var summary: UsageSummary {
         UsageStatistics.summarize(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
     }

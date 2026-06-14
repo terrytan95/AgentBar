@@ -91,7 +91,12 @@ enum L {
         "open_at_login_subtitle": "Open AgentBar at login.",
         "general": "General",
         "general_settings_subtitle": "Language and app behavior.",
-        "language_subtitle": "Interface language."
+        "language_subtitle": "Interface language.",
+        "current_account": "Current account",
+        "current": "Current",
+        "no_cost_data": "No cost data",
+        "usage_windows": "Usage windows",
+        "team": "Team"
     ]
 
     private static let chinese: [String: String] = [
@@ -161,6 +166,11 @@ enum L {
         "open_at_login_subtitle": "登录时打开 AgentBar。",
         "general": "通用",
         "general_settings_subtitle": "语言和应用行为。",
-        "language_subtitle": "界面语言。"
+        "language_subtitle": "界面语言。",
+        "current_account": "当前账号",
+        "current": "当前",
+        "no_cost_data": "暂无费用数据",
+        "usage_windows": "用量窗口",
+        "team": "团队"
     ]
 }

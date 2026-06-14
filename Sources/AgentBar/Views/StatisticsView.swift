@@ -17,24 +17,24 @@ struct StatisticsView: View {
             sidebar
                 .frame(width: 216)
 
-            ZStack(alignment: .top) {
+            VStack(spacing: 0) {
+                topChrome
+
                 if topTab == .usage {
                     ScrollView(.vertical, showsIndicators: false) {
                         dashboardContent
-                            .padding(.top, 70)
+                            .padding(.top, 12)
                             .padding(.horizontal, 22)
                             .padding(.bottom, 26)
                     }
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         settingsContent
-                            .padding(.top, 56)
+                            .padding(.top, 12)
                             .padding(.horizontal, 28)
                             .padding(.bottom, 28)
                     }
                 }
-
-                topChrome
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.regularMaterial)
@@ -121,7 +121,7 @@ struct StatisticsView: View {
     private var topChrome: some View {
         VStack(spacing: 9) {
             DashboardTopTabBar(selection: $topTab, language: store.language)
-                .padding(.top, 10)
+                .padding(.top, 12)
 
             if topTab == .usage {
                 HStack {
@@ -142,9 +142,11 @@ struct StatisticsView: View {
                     .disabled(store.isRefreshing)
                 }
                 .padding(.horizontal, 22)
+                .padding(.bottom, 8)
             }
         }
         .frame(maxWidth: .infinity, alignment: .top)
+        .background(.thinMaterial)
     }
 
     @ViewBuilder
@@ -169,7 +171,7 @@ struct StatisticsView: View {
 
             LazyVGrid(columns: kpiColumns, spacing: 12) {
                 DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens), delta: "↓ 23.6%", accent: .primary)
-                DashboardKPI(title: L.text("total_cost", store.language), value: DisplayFormatters.costString(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary)
+                DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary)
                 DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: DashboardStyle.codex, accent: DashboardStyle.codex)
                 if hasClaudeData {
                     DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: DashboardStyle.claude, accent: DashboardStyle.claude)
@@ -300,7 +302,7 @@ struct StatisticsView: View {
 
     private func serviceCostText(_ service: UsageService) -> String {
         let costs = filteredPoints.filter { $0.service == service }.compactMap(\.estimatedCostUSD)
-        guard !costs.isEmpty else { return "N/A" }
+        guard !costs.isEmpty else { return L.text("no_cost_data", store.language) }
         return DisplayFormatters.costString(costs.reduce(0, +))
     }
 
@@ -308,6 +310,11 @@ struct StatisticsView: View {
         let total = max(1, summary.serviceBreakdown.values.reduce(0, +))
         let value = summary.serviceBreakdown[service, default: 0]
         return "\(Int((Double(value) / Double(total) * 100).rounded()))% \(L.text("share", store.language))"
+    }
+
+    private func costText(_ value: Double?) -> String {
+        guard let value else { return L.text("no_cost_data", store.language) }
+        return DisplayFormatters.costString(value)
     }
 
     @ViewBuilder
@@ -361,54 +368,26 @@ struct StatisticsView: View {
 
     @ViewBuilder
     private var currentLimitsRows: some View {
-        let limitRows = currentLimitRows
-        if limitRows.isEmpty {
+        let accounts = currentLimitAccounts
+        if accounts.isEmpty {
             EmptyPanelMessage(L.text("no_quota_windows", store.language))
         } else {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(limitRows) { row in
-                    HStack(spacing: 12) {
-                        ProgressRing(value: row.percent / 100, tint: row.color, diameter: 38, stroke: 5) {
-                            Text("\(Int(row.percent.rounded()))")
-                                .font(.system(size: 10, weight: .bold))
-                                .monospacedDigit()
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(row.title)
-                                    .font(.system(size: 13, weight: .bold))
-                                Text(row.accountName)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Text(row.subtitle)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            Text(row.accountDetail)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 8)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(accounts) { account in
+                        AccountLimitGroupView(account: account, language: store.language)
                     }
                 }
             }
+            .frame(maxHeight: 360)
         }
     }
 
-    private var currentLimitRows: [LimitRow] {
-        store.accounts.flatMap { account -> [LimitRow] in
-            let color = account.service == .codex ? DashboardStyle.codex : DashboardStyle.claude
-            return [
-                account.fiveHourWindow.map {
-                    LimitRow(account: account, kind: "5H", subtitle: resetText($0.resetsAt), percent: $0.remainingPercent, color: statusColor($0.remainingPercent, fallback: color))
-                },
-                account.weeklyWindow.map {
-                    LimitRow(account: account, kind: "WK", subtitle: resetText($0.resetsAt), percent: $0.remainingPercent, color: statusColor($0.remainingPercent, fallback: color))
-                }
-            ].compactMap { $0 }
+    private var currentLimitAccounts: [UsageAccount] {
+        store.accounts.filter { account in
+            account.fiveHourWindow != nil || account.weeklyWindow != nil
         }
+        .sortedByActiveThenName()
     }
 
     @ViewBuilder
@@ -752,6 +731,56 @@ private struct LoadingAccountPanel: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassPanel(cornerRadius: 14, interactive: true)
+    }
+}
+
+private struct AccountLimitGroupView: View {
+    var account: UsageAccount
+    var language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(account.displayName)
+                            .font(.system(size: 13, weight: .bold))
+                            .lineLimit(1)
+                        if account.isActive {
+                            Text(L.text("current", language))
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor, in: Capsule())
+                        }
+                    }
+                    Text(account.username ?? account.maskedEmail ?? account.sourceDescription)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text(account.service.rawValue)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 12) {
+                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow)
+                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow)
+            }
+
+            HStack {
+                Text(account.plan?.uppercased() ?? account.status.label)
+                Spacer()
+                Text(DisplayFormatters.tokenString(account.tokens.total))
+            }
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

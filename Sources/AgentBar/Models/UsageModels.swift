@@ -74,11 +74,23 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var tokens: TokenTotals
     var estimatedCostUSD: Double?
     var lastUpdated: Date?
+    var isActive: Bool
 
     var mostConstrainedRemainingPercent: Double? {
         [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]
             .compactMap { $0 }
             .min()
+    }
+}
+
+extension Array where Element == UsageAccount {
+    func sortedByActiveThenName() -> [UsageAccount] {
+        sorted { lhs, rhs in
+            if lhs.isActive != rhs.isActive {
+                return lhs.isActive && !rhs.isActive
+            }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
     }
 }
 

@@ -6,6 +6,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var accounts: [UsageAccount] = []
     @Published private(set) var points: [UsagePoint] = []
     @Published private(set) var isRefreshing = false
+    @Published private(set) var hasLoadedAccountInformation = false
     @Published private(set) var lastError: String?
     @Published var selectedRange: UsageRange = .today
     @Published var customStart = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -25,6 +26,10 @@ final class UsageStore: ObservableObject {
     }
 
     var language: AppLanguage { settings.language }
+
+    var isLoadingAccountInformation: Bool {
+        !hasLoadedAccountInformation || isRefreshing
+    }
 
     var menuBarTitle: String {
         switch settings.menuBarDisplayMode {
@@ -85,6 +90,7 @@ final class UsageStore: ObservableObject {
                 self.snapshots = [.codex: codex, .claudeCode: claude]
                 self.accounts = codex.accounts + claude.accounts
                 self.points = codex.points + claude.points
+                self.hasLoadedAccountInformation = true
                 self.isRefreshing = false
                 self.refreshInFlight = false
             }

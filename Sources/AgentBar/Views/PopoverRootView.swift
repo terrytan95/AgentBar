@@ -38,7 +38,12 @@ struct PopoverRootView: View {
             Button {
                 store.refresh()
             } label: {
-                Image(systemName: "arrow.clockwise")
+                if store.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
             }
             .buttonStyle(.borderless)
             .help(L.text("refresh", store.language))
@@ -51,8 +56,15 @@ struct PopoverRootView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L.text("overview", store.language))
                 .font(.subheadline.weight(.semibold))
-            ForEach(store.accounts) { account in
-                AccountRowView(account: account, language: store.language)
+            if store.isLoadingAccountInformation && store.accounts.isEmpty {
+                PopoverLoadingRow(title: "Loading accounts", subtitle: "Reading local Codex and Claude Code account data")
+            } else {
+                if store.isLoadingAccountInformation {
+                    PopoverLoadingRow(title: "Refreshing accounts", subtitle: "\(store.accounts.count) accounts loaded")
+                }
+                ForEach(store.accounts) { account in
+                    AccountRowView(account: account, language: store.language)
+                }
             }
         }
     }
@@ -121,6 +133,28 @@ struct PopoverRootView: View {
             }
         }
         .padding(12)
+    }
+}
+
+struct PopoverLoadingRow: View {
+    var title: String
+    var subtitle: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(10)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

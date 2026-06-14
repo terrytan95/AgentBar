@@ -54,7 +54,7 @@ struct StatisticsView: View {
                 sidebarItem(L.text("all", store.language), active: serviceFilter == .all, tint: nil) {
                     serviceFilter = .all
                 }
-                sidebarItem(L.text("openai", store.language), active: serviceFilter == .codex, tint: settings.themeColor.tertiary) {
+                sidebarItem(L.text("openai", store.language), active: serviceFilter == .codex, service: .codex, tint: settings.themeColor.tertiary) {
                     serviceFilter = .codex
                 }
                 if hasClaudeData {
@@ -94,6 +94,7 @@ struct StatisticsView: View {
         _ title: String,
         systemImage: String? = nil,
         active: Bool,
+        service: UsageService? = nil,
         tint: Color? = nil,
         enabled: Bool = true,
         action: @escaping () -> Void
@@ -103,6 +104,9 @@ struct StatisticsView: View {
                 if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 14)
+                } else if service == .codex {
+                    OpenAILogoMark(size: 12)
                         .frame(width: 14)
                 } else {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -183,7 +187,7 @@ struct StatisticsView: View {
             LazyVGrid(columns: kpiColumns, spacing: 12) {
                 DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language), delta: "↓ 23.6%", accent: .primary, theme: settings.themeColor)
                 DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary, theme: settings.themeColor)
-                DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: settings.themeColor.tertiary, accent: settings.themeColor.tertiary, theme: settings.themeColor)
+                DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), service: .codex, marker: settings.themeColor.tertiary, accent: settings.themeColor.tertiary, theme: settings.themeColor)
                 if hasClaudeData {
                     DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: settings.themeColor.secondary, accent: settings.themeColor.secondary, theme: settings.themeColor)
                 }
@@ -259,14 +263,12 @@ struct StatisticsView: View {
                     Toggle("", isOn: $settings.autoCodexAccountRotationEnabled).labelsHidden()
                 }
                 SettingsRow(title: L.text("codex_rotation_threshold", store.language), subtitle: L.text("codex_rotation_threshold_subtitle", store.language)) {
-                    Stepper(
-                        "\(Int(settings.codexRotationThresholdRemainingPercent))%",
-                        value: $settings.codexRotationThresholdRemainingPercent,
-                        in: 1...100,
-                        step: 1
+                    CodexRotationThresholdControl(
+                        threshold: $settings.codexRotationThresholdRemainingPercent,
+                        isEnabled: settings.autoCodexAccountRotationEnabled,
+                        language: store.language
                     )
-                    .disabled(!settings.autoCodexAccountRotationEnabled)
-                    .settingsControl(width: SettingsControlLayout.compactPickerWidth)
+                    .settingsControl(width: SettingsControlLayout.widePickerWidth)
                 }
             }
 

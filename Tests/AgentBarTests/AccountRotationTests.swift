@@ -160,14 +160,14 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsDefaultEnableAutoRotationWithConservativeThreshold() {
+    func testSettingsDefaultDisablesAutoRotationWithConservativeThreshold() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let settings = SettingsStore(defaults: defaults)
 
-        XCTAssertTrue(settings.autoCodexAccountRotationEnabled)
+        XCTAssertFalse(settings.autoCodexAccountRotationEnabled)
         XCTAssertEqual(settings.codexRotationThresholdRemainingPercent, 10)
     }
 
@@ -178,11 +178,11 @@ final class AccountRotationTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
 
-        settings.autoCodexAccountRotationEnabled = false
+        settings.autoCodexAccountRotationEnabled = true
         settings.codexRotationThresholdRemainingPercent = 15
 
         let reloaded = SettingsStore(defaults: defaults)
-        XCTAssertFalse(reloaded.autoCodexAccountRotationEnabled)
+        XCTAssertTrue(reloaded.autoCodexAccountRotationEnabled)
         XCTAssertEqual(reloaded.codexRotationThresholdRemainingPercent, 15)
     }
 
@@ -192,6 +192,7 @@ final class AccountRotationTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
+        settings.autoCodexAccountRotationEnabled = true
         let expectation = expectation(description: "automatic switch completed")
         let recorder = AccountRotationRecorder()
         let store = UsageStore(

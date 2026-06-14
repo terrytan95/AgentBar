@@ -52,12 +52,15 @@ struct SettingsView: View {
                     }
                 }
                 Toggle(L.text("auto_codex_rotation", store.language), isOn: $settings.autoCodexAccountRotationEnabled)
-                Stepper(
-                    "\(L.text("codex_rotation_threshold", store.language)): \(Int(settings.codexRotationThresholdRemainingPercent))%",
-                    value: $settings.codexRotationThresholdRemainingPercent,
-                    in: 1...100,
-                    step: 1
-                )
+                HStack {
+                    Text(L.text("codex_rotation_threshold", store.language))
+                    Spacer()
+                    CodexRotationThresholdControl(
+                        threshold: $settings.codexRotationThresholdRemainingPercent,
+                        isEnabled: settings.autoCodexAccountRotationEnabled,
+                        language: store.language
+                    )
+                }
                 .disabled(!settings.autoCodexAccountRotationEnabled)
                 Toggle("Codex", isOn: $settings.showCodexInMenuBar)
                 Toggle("Claude Code", isOn: $settings.showClaudeInMenuBar)
@@ -75,5 +78,38 @@ struct SettingsView: View {
             store.configureTimer()
         }
         .frame(width: 520, height: 390)
+    }
+}
+
+struct CodexRotationThresholdControl: View {
+    @Binding var threshold: Double
+    var isEnabled: Bool
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField(
+                L.text("codex_rotation_threshold", language),
+                value: $threshold,
+                format: .number.precision(.fractionLength(0))
+            )
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .frame(width: 58)
+
+            Text("%")
+                .foregroundStyle(.secondary)
+
+            Stepper(
+                "",
+                value: $threshold,
+                in: 1...100,
+                step: 1
+            )
+            .labelsHidden()
+        }
+        .disabled(!isEnabled)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(L.text("codex_rotation_threshold", language))
     }
 }

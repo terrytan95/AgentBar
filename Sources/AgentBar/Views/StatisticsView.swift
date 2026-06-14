@@ -296,7 +296,11 @@ struct StatisticsView: View {
                     .labelsHidden()
                     .frame(width: 140)
                 }
-                SettingsRow(title: L.text("theme_color", store.language), subtitle: L.text("theme_color_subtitle", store.language)) {
+                SettingsRow(title: L.text("dark_theme", store.language), subtitle: L.text("dark_theme_subtitle", store.language)) {
+                    Toggle("", isOn: $settings.useDarkAppearance)
+                        .labelsHidden()
+                }
+                SettingsRow(title: L.text("tone_color", store.language), subtitle: L.text("tone_color_subtitle", store.language)) {
                     Picker("", selection: $settings.themeColor) {
                         ForEach(AppThemeColor.allCases) { theme in
                             Text(theme.title).tag(theme)

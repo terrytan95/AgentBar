@@ -22,6 +22,7 @@ struct PopoverRootView: View {
             footer
         }
         .background(.regularMaterial)
+        .preferredColorScheme(store.settings.useDarkAppearance ? .dark : nil)
     }
 
     private var header: some View {

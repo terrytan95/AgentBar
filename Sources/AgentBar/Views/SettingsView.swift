@@ -29,7 +29,8 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Picker(L.text("theme_color", store.language), selection: $settings.themeColor) {
+                Toggle(L.text("dark_theme", store.language), isOn: $settings.useDarkAppearance)
+                Picker(L.text("tone_color", store.language), selection: $settings.themeColor) {
                     ForEach(AppThemeColor.allCases) { theme in
                         Text(theme.title).tag(theme)
                     }
@@ -65,6 +66,6 @@ struct SettingsView: View {
         .onChange(of: settings.refreshInterval) {
             store.configureTimer()
         }
-        .frame(width: 520, height: 320)
+        .frame(width: 520, height: 350)
     }
 }

@@ -61,6 +61,10 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(themeColor.rawValue, forKey: Keys.themeColor) }
     }
 
+    @Published var useDarkAppearance: Bool {
+        didSet { defaults.set(useDarkAppearance, forKey: Keys.useDarkAppearance) }
+    }
+
     @Published var accountSortMode: AccountSortMode {
         didSet { defaults.set(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
     }
@@ -83,6 +87,7 @@ final class SettingsStore: ObservableObject {
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
         themeColor = AppThemeColor(rawValue: defaults.string(forKey: Keys.themeColor) ?? "") ?? .blue
+        useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
     }
 
@@ -109,6 +114,7 @@ final class SettingsStore: ObservableObject {
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let themeColor = "themeColor"
+        static let useDarkAppearance = "useDarkAppearance"
         static let accountSortMode = "accountSortMode"
     }
 }

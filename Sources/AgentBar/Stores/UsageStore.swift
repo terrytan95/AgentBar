@@ -62,6 +62,14 @@ final class UsageStore: ObservableObject {
         snapshots.values.flatMap(\.securityNotes)
     }
 
+    var uiDataSourceSnapshots: [UsageSnapshot] {
+        snapshots.values
+            .filter { snapshot in
+                snapshot.status == .live || !snapshot.accounts.isEmpty
+            }
+            .sorted(by: { $0.service.rawValue < $1.service.rawValue })
+    }
+
     func refresh() {
         guard !refreshInFlight else { return }
         refreshInFlight = true

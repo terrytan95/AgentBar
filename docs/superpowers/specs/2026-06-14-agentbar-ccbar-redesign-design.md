@@ -42,6 +42,7 @@ The popover becomes a compact quota console with fixed visual hierarchy:
    - No `prefix(4)` or fixed account cap.
    - Each row shows account name or username, plan when available, 5H and WK progress rows, percent, and reset time.
    - The section scrolls only when needed, keeping the popover usable with 8+ accounts.
+   - The menu bar dropdown height grows with account count until a safe maximum height, rather than staying at a fixed short height.
 
 4. **Data source state**
    - Long security/source notes are removed from the main popover body.
@@ -114,7 +115,7 @@ No new data-source assumptions are introduced in this redesign.
 
 - If no services are enabled, the popover shows a compact "No services enabled" state with a settings action.
 - If accounts are present but quota windows are missing, rows show `--%` and source state rather than disappearing.
-- If Claude Code has no safe local source, it remains visible as unavailable when enabled.
+- If Claude Code has no safe local account or usage source, it does not create a placeholder account row in the UI.
 - Credential, token, cookie, session, or private key values must never be printed, committed, or shown.
 
 ## Implementation Scope

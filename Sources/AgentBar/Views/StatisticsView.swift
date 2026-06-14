@@ -700,35 +700,6 @@ private struct ResizablePanel<Content: View>: View {
     }
 }
 
-private struct VerticalResizeCursorModifier: ViewModifier {
-    @State private var isHovering = false
-
-    func body(content: Content) -> some View {
-        content
-            .onHover { hovering in
-                guard hovering != isHovering else { return }
-                isHovering = hovering
-                if hovering {
-                    NSCursor.resizeUpDown.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            .onDisappear {
-                if isHovering {
-                    NSCursor.pop()
-                    isHovering = false
-                }
-            }
-    }
-}
-
-private extension View {
-    func verticalResizeCursor() -> some View {
-        modifier(VerticalResizeCursorModifier())
-    }
-}
-
 private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage

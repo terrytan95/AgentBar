@@ -123,6 +123,26 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
+    func testPopoverHeaderShowsActiveAccountFiveHourAndWeeklyRemaining() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        let store = UsageStore(settings: settings)
+        let now = Date()
+        store.applyTestData(accounts: [
+            testAccount(id: "empty", name: "empty@example.com", fiveHourUsed: 100, weeklyUsed: 100, now: now),
+            {
+                var account = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 1, weeklyUsed: 8, now: now)
+                account.isActive = true
+                return account
+            }()
+        ])
+
+        XCTAssertEqual(store.popoverHeaderQuotaTitle, "5H 99% remaining · WK 92% remaining")
+    }
+
+    @MainActor
     func testMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

@@ -46,6 +46,15 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    var popoverHeaderQuotaTitle: String {
+        guard let account = activeAccount else {
+            return "\(DisplayFormatters.percentString(lowestRemaining)) \(L.text("remaining", language))"
+        }
+        let fiveHour = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
+        let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
+        return "5H \(fiveHour) \(L.text("remaining", language)) · WK \(weekly) \(L.text("remaining", language))"
+    }
+
     private var activeAccountWindowTitle: String {
         guard let account = activeAccount else {
             return DisplayFormatters.percentString(lowestRemaining)

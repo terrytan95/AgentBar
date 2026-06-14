@@ -191,6 +191,49 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(active.weeklyWindow?.usedPercent, 11)
     }
 
+    func testCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "new-active",
+          "active_account_activated_at_ms": 1781420400000,
+          "accounts": [
+            {
+              "account_key": "old-active",
+              "email": "old@example.com",
+              "last_usage": {
+                "primary": {"used_percent": 90, "window_minutes": 300, "resets_at": 1781400000},
+                "secondary": {"used_percent": 80, "window_minutes": 10080, "resets_at": 1781900000}
+              }
+            },
+            {
+              "account_key": "new-active",
+              "email": "new@example.com",
+              "last_usage": {
+                "primary": {"used_percent": 22, "window_minutes": 300, "resets_at": 1781410000},
+                "secondary": {"used_percent": 44, "window_minutes": 10080, "resets_at": 1781910000}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"type":"event_msg","timestamp":"2026-06-14T06:30:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":91,"window_minutes":300,"resets_at":1781400000},"secondary":{"used_percent":81,"window_minutes":10080,"resets_at":1781900000},"plan_type":"team"}}}
+        """.data(using: .utf8)!.write(to: sessionDir.appending(path: "previous-account.jsonl"))
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let active = try XCTUnwrap(snapshot.accounts.first { $0.id == "new-active" })
+
+        XCTAssertEqual(active.fiveHourWindow?.usedPercent, 22)
+        XCTAssertEqual(active.weeklyWindow?.usedPercent, 44)
+    }
+
     func testOpenAIModelPricingCalculatesPointCost() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"model":"gpt-5.1","last_token_usage":{"input_tokens":1000000,"cached_input_tokens":100000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}

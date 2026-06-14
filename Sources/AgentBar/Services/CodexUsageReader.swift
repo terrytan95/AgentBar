@@ -17,14 +17,16 @@ struct CodexUsageReader {
         let registryURL = homeDirectory.appending(path: ".codex/accounts/registry.json")
         var accounts: [UsageAccount] = []
         var points: [UsagePoint] = []
+        var activeAccountActivatedAt: Date?
         var notes = [
             "Read-only local Codex registry and usage JSONL; credential auth files are not opened."
         ]
 
         if let data = try? Data(contentsOf: registryURL),
-           let snapshot = try? Self.parseRegistry(data: data, now: now) {
-            accounts = snapshot.accounts
-            notes.append(contentsOf: snapshot.securityNotes)
+           let registryDetails = try? Self.parseRegistryDetails(data: data, now: now) {
+            accounts = registryDetails.snapshot.accounts
+            activeAccountActivatedAt = registryDetails.activeAccountActivatedAt
+            notes.append(contentsOf: registryDetails.snapshot.securityNotes)
         } else {
             notes.append("Codex registry not found at ~/.codex/accounts/registry.json.")
         }
@@ -36,14 +38,19 @@ struct CodexUsageReader {
         if !accounts.isEmpty {
             accounts = accounts.map { account in
                 var account = account
-                if account.isActive, let latestFiveHour = metrics.latestFiveHour {
+                let canUseSessionRateLimitsForActiveAccount = Self.canUseSessionRateLimits(
+                    for: account,
+                    activeAccountActivatedAt: activeAccountActivatedAt,
+                    latestRateLimitAt: metrics.latestRateLimitAt
+                )
+                if account.isActive, canUseSessionRateLimitsForActiveAccount, let latestFiveHour = metrics.latestFiveHour {
                     account.fiveHourWindow = latestFiveHour
-                } else if account.fiveHourWindow == nil {
+                } else if !account.isActive, account.fiveHourWindow == nil {
                     account.fiveHourWindow = metrics.latestFiveHour
                 }
-                if account.isActive, let latestWeekly = metrics.latestWeekly {
+                if account.isActive, canUseSessionRateLimitsForActiveAccount, let latestWeekly = metrics.latestWeekly {
                     account.weeklyWindow = latestWeekly
-                } else if account.weeklyWindow == nil {
+                } else if !account.isActive, account.weeklyWindow == nil {
                     account.weeklyWindow = metrics.latestWeekly
                 }
                 if account.tokens.total == 0 {
@@ -71,6 +78,10 @@ struct CodexUsageReader {
     }
 
     static func parseRegistry(data: Data, now: Date) throws -> UsageSnapshot {
+        try parseRegistryDetails(data: data, now: now).snapshot
+    }
+
+    private static func parseRegistryDetails(data: Data, now: Date) throws -> (snapshot: UsageSnapshot, activeAccountActivatedAt: Date?) {
         let registry = try JSONDecoder().decode(CodexRegistry.self, from: data)
         let accounts = registry.accounts.map { raw in
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
@@ -100,7 +111,7 @@ struct CodexUsageReader {
             )
         }
 
-        return UsageSnapshot(
+        let snapshot = UsageSnapshot(
             service: .codex,
             status: accounts.isEmpty ? .unavailable : .live,
             accounts: accounts,
@@ -109,6 +120,7 @@ struct CodexUsageReader {
             refreshedAt: now,
             pricingFingerprint: Pricing.fingerprint
         )
+        return (snapshot, epochMillisecondsDate(registry.activeAccountActivatedAtMs))
     }
 
     static func parseSessionJsonl(data: Data) throws -> CodexSessionMetrics {
@@ -195,14 +207,27 @@ struct CodexUsageReader {
 
         return aggregate
     }
+
+    private static func canUseSessionRateLimits(
+        for account: UsageAccount,
+        activeAccountActivatedAt: Date?,
+        latestRateLimitAt: Date?
+    ) -> Bool {
+        guard account.isActive else { return false }
+        guard let activeAccountActivatedAt else { return true }
+        guard let latestRateLimitAt else { return false }
+        return latestRateLimitAt >= activeAccountActivatedAt
+    }
 }
 
 private struct CodexRegistry: Decodable {
     var activeAccountKey: String?
+    var activeAccountActivatedAtMs: Double?
     var accounts: [CodexRegistryAccount]
 
     enum CodingKeys: String, CodingKey {
         case activeAccountKey = "active_account_key"
+        case activeAccountActivatedAtMs = "active_account_activated_at_ms"
         case accounts
     }
 }
@@ -328,4 +353,9 @@ private func maskEmail(_ email: String?) -> String? {
 private func epochDate(_ value: Double?) -> Date? {
     guard let value else { return nil }
     return Date(timeIntervalSince1970: value)
+}
+
+private func epochMillisecondsDate(_ value: Double?) -> Date? {
+    guard let value else { return nil }
+    return Date(timeIntervalSince1970: value / 1000)
 }

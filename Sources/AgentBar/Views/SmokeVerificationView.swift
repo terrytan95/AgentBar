@@ -1,0 +1,61 @@
+import AppKit
+import SwiftUI
+
+struct SmokeVerificationView: View {
+    @StateObject private var store = UsageStore()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("AgentBar smoke verification", systemImage: "checkmark.seal")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Text("Menu bar: \(store.menuBarTitle)")
+                    .font(.headline.monospacedDigit())
+            }
+            HStack(alignment: .top, spacing: 12) {
+                PopoverRootView(store: store)
+                    .frame(width: 420, height: 560)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                VStack(spacing: 12) {
+                    HUDView(store: store)
+                    SettingsView(store: store)
+                        .frame(width: 520, height: 320)
+                }
+            }
+            StatisticsView(store: store)
+                .frame(height: 390)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .padding(16)
+        .frame(width: 990, height: 1040)
+        .background(.regularMaterial)
+    }
+}
+
+@MainActor
+final class SmokeVerificationWindowController {
+    static let shared = SmokeVerificationWindowController()
+
+    private var window: NSWindow?
+
+    func show() {
+        if let window {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 120, y: 60, width: 990, height: 1040),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "AgentBar Smoke Verification"
+        window.contentView = NSHostingView(rootView: SmokeVerificationView())
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        self.window = window
+    }
+}

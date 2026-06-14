@@ -38,10 +38,11 @@ final class PopoverLayoutTests: XCTestCase {
         XCTAssertEqual(SettingsControlLayout.leadingInset, SettingsControlLayout.trailingInset)
     }
 
-    func testPopoverHeightCanUseUserPreferenceWithinBounds() {
-        XCTAssertEqual(PopoverLayout.height(accountCount: 32, sourceCount: 2, preferredHeight: 560), 560)
-        XCTAssertEqual(PopoverLayout.height(accountCount: 32, sourceCount: 2, preferredHeight: 100), PopoverLayout.minimumHeight)
-        XCTAssertEqual(PopoverLayout.height(accountCount: 32, sourceCount: 2, preferredHeight: 1_400), PopoverLayout.maximumHeight)
+    func testPopoverHeightDoesNotUseUserPreferenceOverride() {
+        XCTAssertEqual(
+            PopoverLayout.height(accountCount: 32, sourceCount: 2),
+            PopoverLayout.defaultHeight
+        )
     }
 
     func testChartTooltipTracksPointerAndClampsInsidePlot() {

@@ -10,10 +10,7 @@ enum PopoverLayout {
     private static let accountRowHeight: CGFloat = 84
     private static let sourceRowHeight: CGFloat = 22
 
-    static func height(accountCount: Int, sourceCount: Int, preferredHeight: CGFloat? = nil) -> CGFloat {
-        if let preferredHeight {
-            return min(maximumHeight, max(minimumHeight, preferredHeight))
-        }
+    static func height(accountCount: Int, sourceCount: Int) -> CGFloat {
         let contentHeight = baseHeight
             + CGFloat(max(0, accountCount)) * accountRowHeight
             + CGFloat(max(0, sourceCount)) * sourceRowHeight

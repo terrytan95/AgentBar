@@ -63,22 +63,31 @@ final class StatusItemController: NSObject {
             closePopover(sender)
             return
         }
+        let maximumHeight = PopoverLayout.maximumHeight(
+            forScreenHeight: sender.window?.screen?.visibleFrame.height ?? NSScreen.main?.visibleFrame.height
+        )
+        settings.updatePopoverMaximumHeight(Double(maximumHeight))
         let height = PopoverLayout.height(
             accountCount: store.accounts.count,
-            sourceCount: store.uiDataSourceSnapshots.count
-        )
-
-        let content = PopoverRootView(
-            store: store,
-            onOpenStatistics: { MainWindowPresenter.showMainWindow() },
-            onOpenSettings: { NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) }
-        )
-        .frame(
-            width: PopoverLayout.width,
-            height: height
+            sourceCount: store.uiDataSourceSnapshots.count,
+            preferredHeight: CGFloat(settings.popoverHeight),
+            maximumHeight: maximumHeight
         )
 
         let popover = NSPopover()
+        let content = ResizablePopoverRootView(
+            store: store,
+            maximumHeight: maximumHeight,
+            onOpenStatistics: { MainWindowPresenter.showMainWindow() },
+            onOpenSettings: { NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) },
+            onHeightChange: { [weak popover] height in
+                popover?.contentSize = NSSize(
+                    width: PopoverLayout.width,
+                    height: height
+                )
+            }
+        )
+
         popover.behavior = .transient
         popover.delegate = self
         popover.contentSize = NSSize(

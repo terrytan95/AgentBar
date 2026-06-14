@@ -168,40 +168,7 @@ struct AccountRowView: View {
     var onSwitch: () -> Void
 
     var body: some View {
-        DisclosureGroup {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, theme: theme)
-                    UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, theme: theme)
-                }
-
-                HStack {
-                    Text(account.plan?.uppercased() ?? account.status.label)
-                    Spacer()
-                    Text(DisplayFormatters.tokenString(account.tokens.total))
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-                if !account.isActive {
-                    Button {
-                        onSwitch()
-                    } label: {
-                        if isSwitching {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Label(L.text("use_account", language), systemImage: "arrow.triangle.2.circlepath")
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(theme.primary)
-                    .disabled(isSwitching)
-                }
-            }
-            .padding(.top, 7)
-        } label: {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.displayName)
@@ -226,6 +193,35 @@ struct AccountRowView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            HStack(spacing: 10) {
+                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language, theme: theme)
+                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account.lastActivityLine(language: language))
+                Text(account.accountTypeLine(language: language))
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
+            if !account.isActive {
+                Button {
+                    onSwitch()
+                } label: {
+                    if isSwitching {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label(L.text("use_account", language), systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(theme.primary)
+                .disabled(isSwitching)
+            }
         }
         .padding(10)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -242,6 +238,7 @@ struct AccountRowView: View {
 struct UsageWindowGauge: View {
     var title: String
     var window: UsageWindow?
+    var language: AppLanguage
     var theme: AppThemeColor
 
     var body: some View {
@@ -254,6 +251,11 @@ struct UsageWindowGauge: View {
             .font(.caption2)
             ProgressView(value: (window?.remainingPercent ?? 0) / 100)
                 .tint(tint)
+            Text(window?.resetLine(language: language) ?? L.text("reset_time_unknown", language))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
     }
 

@@ -66,6 +66,14 @@ enum DisplayFormatters {
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
     }
+
+    static func shortDateTimeString(for date: Date, language: AppLanguage) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
 }
 
 extension String {

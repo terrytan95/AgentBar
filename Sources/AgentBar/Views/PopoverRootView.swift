@@ -88,14 +88,17 @@ struct PopoverRootView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollView {
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 12) {
                     accountSection
                     summarySection
                     dataSourceSection
                 }
                 .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(HiddenScrollIndicators())
             }
+            .scrollIndicators(.hidden)
             Divider()
             footer
         }
@@ -154,6 +157,7 @@ struct PopoverRootView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var summarySection: some View {
@@ -233,6 +237,7 @@ struct PopoverLoadingRow: View {
             Spacer()
         }
         .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -301,6 +306,7 @@ struct AccountRowView: View {
             }
         }
         .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 

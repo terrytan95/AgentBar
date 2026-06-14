@@ -37,9 +37,9 @@ struct StatisticsView: View {
                 topChrome
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(.regularMaterial)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.regularMaterial)
     }
 
     private var sidebar: some View {
@@ -71,7 +71,7 @@ struct StatisticsView: View {
         .padding(.horizontal, 12)
         .padding(.top, 58)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(.ultraThinMaterial)
     }
 
     private func sidebarGroup<Content: View>(title: String, chinese: String, @ViewBuilder content: () -> Content) -> some View {
@@ -131,6 +131,9 @@ struct StatisticsView: View {
 
             if topTab == .usage {
                 HStack {
+                    if store.isLoadingAccountInformation {
+                        LoadingStatusPill(message: store.hasLoadedAccountInformation ? "正在刷新账号" : "正在加载账号")
+                    }
                     Spacer()
                     Picker("", selection: $store.selectedRange) {
                         ForEach(UsageRange.allCases) { range in
@@ -144,10 +147,16 @@ struct StatisticsView: View {
                     Button {
                         store.refresh()
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        if store.isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
                     }
                     .buttonStyle(.borderless)
                     .help(L.text("refresh", store.language))
+                    .disabled(store.isRefreshing)
                 }
                 .padding(.horizontal, 22)
             }
@@ -155,8 +164,26 @@ struct StatisticsView: View {
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
+    @ViewBuilder
     private var dashboardContent: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 14) {
+                dashboardContentStack
+            }
+        } else {
+            dashboardContentStack
+        }
+    }
+
+    private var dashboardContentStack: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if !store.hasLoadedAccountInformation {
+                LoadingAccountPanel(
+                    title: "正在加载账号信息",
+                    subtitle: "正在只读同步本机 Codex 与 Claude Code 账号"
+                )
+            }
+
             LazyVGrid(columns: kpiColumns, spacing: 12) {
                 DashboardKPI(title: "总 Tokens", value: DisplayFormatters.compactTokenString(summary.totalTokens), delta: "↓ 23.6%", accent: .primary)
                 DashboardKPI(title: "总花费", value: DisplayFormatters.costString(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary)
@@ -364,12 +391,23 @@ struct StatisticsView: View {
                                 .monospacedDigit()
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(row.title)
-                                .font(.system(size: 13, weight: .bold))
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(row.title)
+                                    .font(.system(size: 13, weight: .bold))
+                                Text(row.accountName)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                             Text(row.subtitle)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
+                            Text(row.accountDetail)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
                         }
+                        Spacer(minLength: 8)
                     }
                 }
             }
@@ -381,15 +419,13 @@ struct StatisticsView: View {
             let color = account.service == .codex ? DashboardStyle.codex : DashboardStyle.claude
             return [
                 account.fiveHourWindow.map {
-                    LimitRow(title: "\(account.service.rawValue) 5H", subtitle: resetText($0.resetsAt), percent: $0.remainingPercent, color: statusColor($0.remainingPercent, fallback: color))
+                    LimitRow(account: account, kind: "5H", subtitle: resetText($0.resetsAt), percent: $0.remainingPercent, color: statusColor($0.remainingPercent, fallback: color))
                 },
                 account.weeklyWindow.map {
-                    LimitRow(title: "\(account.service.rawValue) WK", subtitle: resetText($0.resetsAt), percent: $0.remainingPercent, color: statusColor($0.remainingPercent, fallback: color))
+                    LimitRow(account: account, kind: "WK", subtitle: resetText($0.resetsAt), percent: $0.remainingPercent, color: statusColor($0.remainingPercent, fallback: color))
                 }
             ].compactMap { $0 }
         }
-        .prefix(6)
-        .map { $0 }
     }
 
     @ViewBuilder
@@ -623,6 +659,46 @@ private struct EmptyPanelMessage: View {
     }
 }
 
+private struct LoadingStatusPill: View {
+    var message: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ProgressView()
+                .controlSize(.small)
+            Text(message)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 24)
+        .glassPanel(cornerRadius: 12, interactive: false)
+    }
+}
+
+private struct LoadingAccountPanel: View {
+    var title: String
+    var subtitle: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.regular)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassPanel(cornerRadius: 14, interactive: true)
+    }
+}
+
 private struct SettingsGroup<Content: View>: View {
     var title: String
     var subtitle: String
@@ -679,11 +755,34 @@ private struct ServiceMixRow {
 }
 
 private struct LimitRow: Identifiable {
-    var id: String { title + subtitle }
+    var id: String { accountID + kind }
+    var accountID: String
+    var kind: String
     var title: String
     var subtitle: String
+    var accountName: String
+    var accountDetail: String
     var percent: Double
     var color: Color
+
+    init(account: UsageAccount, kind: String, subtitle: String, percent: Double, color: Color) {
+        self.accountID = account.id
+        self.kind = kind
+        self.title = "\(account.service.rawValue) \(kind)"
+        self.subtitle = subtitle
+        self.accountName = account.displayName
+        self.accountDetail = LimitRow.detailText(for: account)
+        self.percent = percent
+        self.color = color
+    }
+
+    private static func detailText(for account: UsageAccount) -> String {
+        let identity = account.username ?? account.maskedEmail ?? account.sourceDescription
+        if let plan = account.plan, !plan.isEmpty {
+            return "\(identity) · \(plan)"
+        }
+        return identity
+    }
 }
 
 private struct ModelBreakdownRow: Identifiable {
@@ -698,14 +797,24 @@ private struct ModelBreakdownRow: Identifiable {
 
 private extension View {
     func dashboardPanel() -> some View {
-        background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .textBackgroundColor).opacity(0.72))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
-                )
-        )
+        glassPanel(cornerRadius: 12, interactive: true)
+    }
+
+    @ViewBuilder
+    func glassPanel(cornerRadius: CGFloat, interactive: Bool) -> some View {
+        if #available(macOS 26.0, *) {
+            let glass = interactive ? Glass.regular.interactive() : Glass.regular
+            self.glassEffect(glass, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        } else {
+            self.background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.regularMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    )
+            )
+        }
     }
 }
 

@@ -9,6 +9,25 @@ final class PopoverLayoutTests: XCTestCase {
         XCTAssertEqual(resize.height(startHeight: 360, translation: -80), 280)
     }
 
+    func testPopoverResizeDragUsesStableScreenCoordinates() {
+        let resize = PopoverResizeDrag(bounds: PanelResizeBounds(minHeight: 420, maxHeight: 860))
+
+        XCTAssertEqual(resize.height(startHeight: 560, startScreenY: 700, currentScreenY: 620), 640)
+        XCTAssertEqual(resize.height(startHeight: 560, startScreenY: 700, currentScreenY: 760), 500)
+    }
+
+    func testPopoverMaximumHeightCanUseScreenHeight() {
+        XCTAssertEqual(PopoverLayout.maximumHeight(forScreenHeight: 1_440), 1_392)
+        XCTAssertEqual(PopoverLayout.maximumHeight(forScreenHeight: 300), PopoverLayout.minimumHeight)
+        XCTAssertEqual(PopoverLayout.maximumHeight(forScreenHeight: nil), PopoverLayout.maximumHeight)
+    }
+
+    func testPopoverResizeDragFiltersSubpixelIntermediateUpdates() {
+        XCTAssertFalse(PopoverResizeDrag.shouldEmit(previousHeight: 560, nextHeight: 560.2, isFinal: false))
+        XCTAssertTrue(PopoverResizeDrag.shouldEmit(previousHeight: 560, nextHeight: 560.6, isFinal: false))
+        XCTAssertTrue(PopoverResizeDrag.shouldEmit(previousHeight: 560, nextHeight: 560.2, isFinal: true))
+    }
+
     func testResizablePanelHeightClampsAtBounds() {
         let resize = PanelResizeBounds(minHeight: 240, maxHeight: 720)
 
@@ -42,6 +61,7 @@ final class PopoverLayoutTests: XCTestCase {
         XCTAssertEqual(PopoverLayout.height(accountCount: 32, sourceCount: 2, preferredHeight: 560), 560)
         XCTAssertEqual(PopoverLayout.height(accountCount: 32, sourceCount: 2, preferredHeight: 100), PopoverLayout.minimumHeight)
         XCTAssertEqual(PopoverLayout.height(accountCount: 32, sourceCount: 2, preferredHeight: 1_400), PopoverLayout.maximumHeight)
+        XCTAssertEqual(PopoverLayout.height(accountCount: 32, sourceCount: 2, preferredHeight: 1_400, maximumHeight: 1_392), 1_392)
     }
 
     func testChartTooltipTracksPointerAndClampsInsidePlot() {

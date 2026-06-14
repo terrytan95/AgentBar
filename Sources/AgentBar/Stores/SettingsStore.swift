@@ -69,13 +69,25 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
     }
 
-    @Published var popoverHeight: Double {
-        didSet { defaults.set(popoverHeight, forKey: Keys.popoverHeight) }
+    var popoverHeight: Double {
+        get { storedPopoverHeight }
+        set {
+            let clampedHeight = Self.clampedPopoverHeight(newValue, maximumHeight: popoverMaximumHeight)
+            guard storedPopoverHeight != clampedHeight else {
+                defaults.set(clampedHeight, forKey: Keys.popoverHeight)
+                return
+            }
+            objectWillChange.send()
+            storedPopoverHeight = clampedHeight
+            defaults.set(clampedHeight, forKey: Keys.popoverHeight)
+        }
     }
 
     @Published private(set) var loginItemMessage: String?
 
     private let defaults: UserDefaults
+    private var storedPopoverHeight = Double(PopoverLayout.defaultHeight)
+    private var popoverMaximumHeight = Double(PopoverLayout.maximumHeight)
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -94,7 +106,24 @@ final class SettingsStore: ObservableObject {
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         let savedPopoverHeight = defaults.double(forKey: Keys.popoverHeight)
-        popoverHeight = savedPopoverHeight > 0 ? savedPopoverHeight : Double(PopoverLayout.defaultHeight)
+        storedPopoverHeight = Self.clampedPopoverHeight(
+            savedPopoverHeight > 0 ? savedPopoverHeight : Double(PopoverLayout.defaultHeight),
+            maximumHeight: popoverMaximumHeight
+        )
+        defaults.set(popoverHeight, forKey: Keys.popoverHeight)
+    }
+
+    func updatePopoverMaximumHeight(_ maximumHeight: Double) {
+        let nextMaximumHeight = max(Double(PopoverLayout.minimumHeight), maximumHeight)
+        popoverMaximumHeight = nextMaximumHeight
+        popoverHeight = storedPopoverHeight
+    }
+
+    static func clampedPopoverHeight(
+        _ height: Double,
+        maximumHeight: Double = Double(PopoverLayout.maximumHeight)
+    ) -> Double {
+        min(maximumHeight, max(Double(PopoverLayout.minimumHeight), height))
     }
 
     private func applyLoginItemPreference() {

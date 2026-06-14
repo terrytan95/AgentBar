@@ -1,5 +1,83 @@
 import SwiftUI
 
+struct ResizablePopoverRootView: View {
+    @ObservedObject var store: UsageStore
+    var maximumHeight: CGFloat
+    var onOpenStatistics: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
+    var onHeightChange: (CGFloat) -> Void
+    @ObservedObject private var settings: SettingsStore
+
+    init(
+        store: UsageStore,
+        maximumHeight: CGFloat,
+        onOpenStatistics: (() -> Void)?,
+        onOpenSettings: (() -> Void)?,
+        onHeightChange: @escaping (CGFloat) -> Void
+    ) {
+        self.store = store
+        self.maximumHeight = maximumHeight
+        self.onOpenStatistics = onOpenStatistics
+        self.onOpenSettings = onOpenSettings
+        self.onHeightChange = onHeightChange
+        self.settings = store.settings
+    }
+
+    private var resize: PopoverResizeDrag {
+        PopoverResizeDrag(
+            bounds: PanelResizeBounds(
+                minHeight: Double(PopoverLayout.minimumHeight),
+                maxHeight: Double(maximumHeight)
+            )
+        )
+    }
+
+    var body: some View {
+        PopoverRootView(
+            store: store,
+            onOpenStatistics: onOpenStatistics,
+            onOpenSettings: onOpenSettings
+        )
+        .frame(width: PopoverLayout.width)
+        .frame(minHeight: PopoverLayout.minimumHeight, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+            resizeBorder
+        }
+        .onChange(of: settings.popoverHeight) { _, newHeight in
+            onHeightChange(CGFloat(newHeight))
+        }
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+    }
+
+    private var resizeBorder: some View {
+        ZStack(alignment: .bottom) {
+            PopoverResizeHandle(
+                startHeight: CGFloat(settings.popoverHeight),
+                resize: resize
+            ) { height, isFinal in
+                onHeightChange(height)
+                if isFinal {
+                    settings.updatePopoverMaximumHeight(Double(maximumHeight))
+                    settings.popoverHeight = Double(height)
+                    onHeightChange(CGFloat(settings.popoverHeight))
+                }
+            }
+            .frame(height: 12)
+            .accessibilityLabel("Resize popover")
+
+            Capsule()
+                .fill(settings.themeColor.primary.opacity(0.30))
+                .frame(width: 48, height: 4)
+                .padding(.bottom, 3)
+                .allowsHitTesting(false)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 12)
+    }
+}
+
 struct PopoverRootView: View {
     @ObservedObject var store: UsageStore
     var onOpenStatistics: (() -> Void)?

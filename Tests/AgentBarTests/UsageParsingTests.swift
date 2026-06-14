@@ -65,6 +65,20 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
+    func testRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UsageStore(settings: SettingsStore(defaults: defaults))
+        store.applyTestData(accounts: [testAccount(id: "active", name: "active@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: Date())])
+
+        store.refresh(force: true)
+
+        XCTAssertTrue(store.hasLoadedAccountInformation)
+        XCTAssertFalse(store.isLoadingAccountInformation)
+    }
+
+    @MainActor
     func testDarkThemeSettingPersistsAndToneColorCopyIsLocalized() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

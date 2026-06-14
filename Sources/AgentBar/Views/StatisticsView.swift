@@ -128,9 +128,6 @@ struct StatisticsView: View {
 
             if topTab == .usage {
                 HStack {
-                    if store.isLoadingAccountInformation && store.hasLoadedAccountInformation {
-                        LoadingStatusPill(message: L.text("refreshing_accounts", store.language))
-                    }
                     Spacer()
                     HStack(spacing: 8) {
                         Text(L.text("interval", store.language))
@@ -625,10 +622,15 @@ private struct ResizablePanel<Content: View>: View {
     var maxHeight: CGFloat
     var theme: AppThemeColor
     @ViewBuilder var content: () -> Content
-    @GestureState private var dragOffset: CGFloat = 0
+    @State private var dragStartHeight: CGFloat?
+    @State private var liveHeight: CGFloat?
 
     private var effectiveHeight: CGFloat {
-        clamped(height + dragOffset)
+        liveHeight ?? height
+    }
+
+    private var bounds: PanelResizeBounds {
+        PanelResizeBounds(minHeight: Double(minHeight), maxHeight: Double(maxHeight))
     }
 
     var body: some View {
@@ -643,6 +645,9 @@ private struct ResizablePanel<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .dashboardPanel()
+        .transaction { transaction in
+            transaction.animation = nil
+        }
     }
 
     private var resizeHandle: some View {
@@ -657,22 +662,33 @@ private struct ResizablePanel<Content: View>: View {
                 }
                 .contentShape(Rectangle())
                 .gesture(
-                    DragGesture(minimumDistance: 1)
-                        .updating($dragOffset) { value, state, _ in
-                            state = value.translation.height
+                    DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { value in
+                            let startHeight = dragStartHeight ?? height
+                            dragStartHeight = startHeight
+                            let nextHeight = CGFloat(bounds.height(
+                                startHeight: Double(startHeight),
+                                translation: Double(value.location.y - value.startLocation.y)
+                            ))
+                            if abs((liveHeight ?? height) - nextHeight) >= 0.5 {
+                                liveHeight = nextHeight
+                            }
                         }
                         .onEnded { value in
-                            height = clamped(height + value.translation.height)
+                            let startHeight = dragStartHeight ?? height
+                            let nextHeight = CGFloat(bounds.height(
+                                startHeight: Double(startHeight),
+                                translation: Double(value.location.y - value.startLocation.y)
+                            ))
+                            liveHeight = nil
+                            dragStartHeight = nil
+                            height = nextHeight
                         }
                 )
                 .accessibilityLabel("Resize Current limits")
             Spacer()
         }
         .padding(.top, 1)
-    }
-
-    private func clamped(_ value: CGFloat) -> CGFloat {
-        min(max(value, minHeight), maxHeight)
     }
 }
 

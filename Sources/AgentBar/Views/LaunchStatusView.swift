@@ -1,6 +1,18 @@
 import AppKit
 import SwiftUI
 
+@MainActor
+enum MainWindowPresenter {
+    static func showMainWindow() {
+        if let window = NSApp.windows.first(where: { $0.title == "AgentBar" && $0.isVisible }) {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        LaunchStatusWindowController.shared.show()
+    }
+}
+
 struct LaunchStatusView: View {
     @StateObject private var store = UsageStore()
 

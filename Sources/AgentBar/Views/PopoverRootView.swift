@@ -42,7 +42,7 @@ struct PopoverRootView: View {
             }
             Spacer()
             Button {
-                store.refresh()
+                store.refresh(force: true)
             } label: {
                 if store.isRefreshing {
                     ProgressView()
@@ -53,7 +53,6 @@ struct PopoverRootView: View {
             }
             .buttonStyle(.borderless)
             .help(L.text("refresh", store.language))
-            .disabled(store.isRefreshing)
         }
         .padding(16)
     }
@@ -68,8 +67,14 @@ struct PopoverRootView: View {
                 if store.isLoadingAccountInformation {
                     PopoverLoadingRow(title: L.text("refreshing_accounts", store.language), subtitle: "\(store.accounts.count) \(L.text("accounts_loaded", store.language))")
                 }
-                ForEach(store.accounts.sortedByActiveThenName()) { account in
-                    AccountRowView(account: account, language: store.language)
+                ForEach(store.sortedAccounts()) { account in
+                    AccountRowView(
+                        account: account,
+                        language: store.language,
+                        theme: store.settings.themeColor,
+                        isSwitching: store.switchingAccountID == account.id,
+                        onSwitch: { store.switchActiveAccount(account) }
+                    )
                 }
             }
         }
@@ -80,8 +85,8 @@ struct PopoverRootView: View {
             Text(L.text("statistics", store.language))
                 .font(.subheadline.weight(.semibold))
             HStack {
-                KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), tint: .blue)
-                KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), tint: .green)
+                KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), tint: store.settings.themeColor.primary)
+                KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), tint: store.settings.themeColor.secondary)
             }
         }
     }
@@ -99,7 +104,7 @@ struct PopoverRootView: View {
                     Text(snapshot.service.rawValue)
                     Spacer()
                     Text(snapshot.status.label)
-                        .foregroundStyle(snapshot.status == .live ? .green : .orange)
+                        .foregroundStyle(snapshot.status == .live ? store.settings.themeColor.primary : .orange)
                 }
                 .font(.caption)
             }
@@ -169,9 +174,45 @@ struct PopoverLoadingRow: View {
 struct AccountRowView: View {
     var account: UsageAccount
     var language: AppLanguage
+    var theme: AppThemeColor
+    var isSwitching: Bool
+    var onSwitch: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, theme: theme)
+                    UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, theme: theme)
+                }
+
+                HStack {
+                    Text(account.plan?.uppercased() ?? account.status.label)
+                    Spacer()
+                    Text(DisplayFormatters.tokenString(account.tokens.total))
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                if !account.isActive {
+                    Button {
+                        onSwitch()
+                    } label: {
+                        if isSwitching {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label(L.text("use_account", language), systemImage: "arrow.triangle.2.circlepath")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(theme.primary)
+                    .disabled(isSwitching)
+                }
+            }
+            .padding(.top, 7)
+        } label: {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.displayName)
@@ -189,26 +230,13 @@ struct AccountRowView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(Color.accentColor, in: Capsule())
+                            .background(theme.primary, in: Capsule())
                     }
                     Text(account.service.rawValue)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-
-            HStack(spacing: 10) {
-                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow)
-                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow)
-            }
-
-            HStack {
-                Text(account.plan?.uppercased() ?? account.status.label)
-                Spacer()
-                Text(DisplayFormatters.tokenString(account.tokens.total))
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
         }
         .padding(10)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -225,6 +253,7 @@ struct AccountRowView: View {
 struct UsageWindowGauge: View {
     var title: String
     var window: UsageWindow?
+    var theme: AppThemeColor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -243,7 +272,7 @@ struct UsageWindowGauge: View {
         guard let remaining = window?.remainingPercent else { return .gray }
         if remaining < 15 { return .red }
         if remaining < 35 { return .orange }
-        return .green
+        return theme.primary
     }
 }
 

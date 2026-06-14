@@ -8,6 +8,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var hasLoadedAccountInformation = false
     @Published private(set) var lastError: String?
+    @Published private(set) var switchingAccountID: String?
     @Published var selectedRange: UsageRange = .today
     @Published var customStart = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
     @Published var customEnd = Date()
@@ -15,13 +16,14 @@ final class UsageStore: ObservableObject {
     let settings: SettingsStore
     private var timer: Timer?
     private var refreshInFlight = false
+    private var refreshQueued = false
 
     init(settings: SettingsStore = SettingsStore()) {
         self.settings = settings
         configureTimer()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
-            refresh()
+            refresh(force: true)
         }
     }
 
@@ -90,8 +92,11 @@ final class UsageStore: ObservableObject {
             .sorted(by: { $0.service.rawValue < $1.service.rawValue })
     }
 
-    func refresh() {
-        guard !refreshInFlight else { return }
+    func refresh(force: Bool = false) {
+        if refreshInFlight {
+            if force { refreshQueued = true }
+            return
+        }
         refreshInFlight = true
         isRefreshing = true
         lastError = nil
@@ -108,17 +113,56 @@ final class UsageStore: ObservableObject {
                 self.hasLoadedAccountInformation = true
                 self.isRefreshing = false
                 self.refreshInFlight = false
+                if self.refreshQueued {
+                    self.refreshQueued = false
+                    self.refresh(force: true)
+                }
             }
         }
     }
 
     func configureTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: max(15, settings.refreshInterval), repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: max(30, settings.refreshInterval), repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()
             }
         }
+    }
+
+    func sortedAccounts(_ accounts: [UsageAccount]? = nil) -> [UsageAccount] {
+        (accounts ?? self.accounts).sorted(using: settings.accountSortMode)
+    }
+
+    func switchActiveAccount(_ account: UsageAccount) {
+        guard switchingAccountID == nil else { return }
+        guard account.service == .codex else {
+            lastError = AccountActionError.unsupportedService.localizedDescription
+            return
+        }
+        switchingAccountID = account.id
+        lastError = nil
+
+        DispatchQueue.global(qos: .utility).async {
+            let result = Result {
+                try CodexAccountSwitcher().switchActiveAccount(accountID: account.id)
+            }
+            if case .success = result {
+                AccountLoginLauncher.restartIntegration(for: account.service)
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                self?.switchingAccountID = nil
+                if case let .failure(error) = result {
+                    self?.lastError = error.localizedDescription.redactedForCredentialWords
+                }
+                self?.refresh(force: true)
+            }
+        }
+    }
+
+    func openLogin(for service: UsageService) {
+        AccountLoginLauncher.openLogin(for: service)
     }
 
     func applyTestData(
@@ -132,5 +176,6 @@ final class UsageStore: ObservableObject {
         hasLoadedAccountInformation = true
         isRefreshing = false
         refreshInFlight = false
+        refreshQueued = false
     }
 }

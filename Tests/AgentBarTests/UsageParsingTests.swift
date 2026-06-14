@@ -153,4 +153,55 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(all.serviceBreakdown[.codex], 36)
         XCTAssertEqual(all.serviceBreakdown[.claudeCode], 36)
     }
+
+    func testAccountSortingUsesFiveHourThenWeeklyPressure() {
+        let now = Date()
+        let accounts = [
+            testAccount(id: "a", name: "a@example.com", fiveHourUsed: 1, weeklyUsed: 10, now: now),
+            testAccount(id: "b", name: "b@example.com", fiveHourUsed: 100, weeklyUsed: 1, now: now),
+            testAccount(id: "c", name: "c@example.com", fiveHourUsed: 1, weeklyUsed: 40, now: now)
+        ]
+
+        let sorted = accounts.sorted(using: .quotaPressure)
+
+        XCTAssertEqual(sorted.map(\.id), ["b", "c", "a"])
+    }
+
+    func testCodexAccountSwitcherOnlyUpdatesActiveAccountKey() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registry = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"a@example.com"},{"account_key":"acct-b","email":"b@example.com"}]}
+        """.data(using: .utf8)!.write(to: registry)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        try CodexAccountSwitcher(homeDirectory: temp).switchActiveAccount(accountID: "acct-b")
+        let data = try Data(contentsOf: registry)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(json["active_account_key"] as? String, "acct-b")
+        XCTAssertEqual(json["schema_version"] as? Int, 3)
+        XCTAssertEqual((json["accounts"] as? [[String: Any]])?.count, 2)
+    }
+
+    private func testAccount(id: String, name: String, fiveHourUsed: Double, weeklyUsed: Double, now: Date) -> UsageAccount {
+        UsageAccount(
+            id: id,
+            service: .codex,
+            displayName: name,
+            username: name,
+            maskedEmail: nil,
+            plan: "team",
+            sourceDescription: "test",
+            status: .live,
+            fiveHourWindow: UsageWindow(kind: .fiveHour, usedPercent: fiveHourUsed, windowMinutes: 300, resetsAt: now),
+            weeklyWindow: UsageWindow(kind: .weekly, usedPercent: weeklyUsed, windowMinutes: 10080, resetsAt: now),
+            tokens: .zero,
+            estimatedCostUSD: nil,
+            lastUpdated: now,
+            isActive: false
+        )
+    }
 }

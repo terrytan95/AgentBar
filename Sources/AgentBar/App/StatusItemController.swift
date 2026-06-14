@@ -52,9 +52,10 @@ final class StatusItemController: NSObject {
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = true
         button.image = image
-        button.title = " \(store.menuBarTitle)"
+        let title = store.isRefreshing ? L.text("refreshing", store.language) : store.menuBarTitle
+        button.title = " \(title)"
         button.imagePosition = .imageLeading
-        button.toolTip = "AgentBar \(store.menuBarTitle)"
+        button.toolTip = "AgentBar \(title)"
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -65,7 +66,7 @@ final class StatusItemController: NSObject {
 
         let content = PopoverRootView(
             store: store,
-            onOpenStatistics: { LaunchStatusWindowController.shared.show() },
+            onOpenStatistics: { MainWindowPresenter.showMainWindow() },
             onOpenSettings: { NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) }
         )
         .frame(

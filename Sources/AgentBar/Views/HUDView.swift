@@ -25,7 +25,7 @@ struct HUDView: View {
             }
             Spacer()
             Button {
-                store.refresh()
+                store.refresh(force: true)
             } label: {
                 Image(systemName: "arrow.clockwise")
             }

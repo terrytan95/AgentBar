@@ -19,6 +19,17 @@ enum DisplayFormatters {
         integer.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
+    static func compactTokenString(_ value: Int) -> String {
+        let absolute = abs(value)
+        if absolute >= 100_000_000 {
+            return String(format: "%.2f亿", Double(value) / 100_000_000)
+        }
+        if absolute >= 10_000 {
+            return String(format: "%.2f万", Double(value) / 10_000)
+        }
+        return tokenString(value)
+    }
+
     static func costString(_ value: Double?) -> String {
         guard let value else { return "N/A" }
         return currency.string(from: NSNumber(value: value)) ?? String(format: "$%.4f", value)

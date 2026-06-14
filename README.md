@@ -8,6 +8,7 @@ AgentBar is a native macOS menu bar app for monitoring local AI coding agent usa
 
 - Menu bar usage indicator for the lowest remaining quota with a compact AgentBar status icon.
 - Popover with multi-account Codex rows, full username display, 5-hour quota, and weekly quota.
+- Automatic Codex account rotation when the current account runs low on 5-hour quota, with a safe restart guard that avoids restarting Codex while CLI work is active.
 - Floating, non-activating HUD with edge snapping.
 - Statistics window with today, yesterday, this week, this month, this year, 7-day, 30-day, all-time, and custom ranges.
 - KPI cards, stacked usage bars, service mix, and model detail.

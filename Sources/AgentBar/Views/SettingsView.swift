@@ -51,6 +51,14 @@ struct SettingsView: View {
                         Text(mode.title(store.language)).tag(mode)
                     }
                 }
+                Toggle(L.text("auto_codex_rotation", store.language), isOn: $settings.autoCodexAccountRotationEnabled)
+                Stepper(
+                    "\(L.text("codex_rotation_threshold", store.language)): \(Int(settings.codexRotationThresholdRemainingPercent))%",
+                    value: $settings.codexRotationThresholdRemainingPercent,
+                    in: 1...100,
+                    step: 1
+                )
+                .disabled(!settings.autoCodexAccountRotationEnabled)
                 Toggle("Codex", isOn: $settings.showCodexInMenuBar)
                 Toggle("Claude Code", isOn: $settings.showClaudeInMenuBar)
                 Button(L.text("login_codex", store.language)) {
@@ -66,6 +74,6 @@ struct SettingsView: View {
         .onChange(of: settings.refreshInterval) {
             store.configureTimer()
         }
-        .frame(width: 520, height: 350)
+        .frame(width: 520, height: 390)
     }
 }

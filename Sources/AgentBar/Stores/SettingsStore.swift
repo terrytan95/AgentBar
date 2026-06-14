@@ -69,6 +69,21 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
     }
 
+    @Published var autoCodexAccountRotationEnabled: Bool {
+        didSet { defaults.set(autoCodexAccountRotationEnabled, forKey: Keys.autoCodexAccountRotationEnabled) }
+    }
+
+    @Published var codexRotationThresholdRemainingPercent: Double {
+        didSet {
+            let clamped = Self.clampedRotationThreshold(codexRotationThresholdRemainingPercent)
+            if clamped != codexRotationThresholdRemainingPercent {
+                codexRotationThresholdRemainingPercent = clamped
+                return
+            }
+            defaults.set(clamped, forKey: Keys.codexRotationThresholdRemainingPercent)
+        }
+    }
+
     var popoverHeight: Double {
         get { storedPopoverHeight }
         set {
@@ -105,6 +120,9 @@ final class SettingsStore: ObservableObject {
         themeColor = AppThemeColor(rawValue: defaults.string(forKey: Keys.themeColor) ?? "") ?? .blue
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
+        autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? true
+        let savedRotationThreshold = defaults.double(forKey: Keys.codexRotationThresholdRemainingPercent)
+        codexRotationThresholdRemainingPercent = Self.clampedRotationThreshold(savedRotationThreshold > 0 ? savedRotationThreshold : 10)
         let savedPopoverHeight = defaults.double(forKey: Keys.popoverHeight)
         storedPopoverHeight = Self.clampedPopoverHeight(
             savedPopoverHeight > 0 ? savedPopoverHeight : Double(PopoverLayout.defaultHeight),
@@ -124,6 +142,10 @@ final class SettingsStore: ObservableObject {
         maximumHeight: Double = Double(PopoverLayout.maximumHeight)
     ) -> Double {
         min(maximumHeight, max(Double(PopoverLayout.minimumHeight), height))
+    }
+
+    static func clampedRotationThreshold(_ threshold: Double) -> Double {
+        min(100, max(1, threshold))
     }
 
     private func applyLoginItemPreference() {
@@ -151,6 +173,8 @@ final class SettingsStore: ObservableObject {
         static let themeColor = "themeColor"
         static let useDarkAppearance = "useDarkAppearance"
         static let accountSortMode = "accountSortMode"
+        static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
+        static let codexRotationThresholdRemainingPercent = "codexRotationThresholdRemainingPercent"
         static let popoverHeight = "popoverHeight"
     }
 }

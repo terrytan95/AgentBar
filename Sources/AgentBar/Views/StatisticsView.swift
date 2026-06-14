@@ -255,6 +255,19 @@ struct StatisticsView: View {
                     .labelsHidden()
                     .settingsControl(width: SettingsControlLayout.widePickerWidth)
                 }
+                SettingsRow(title: L.text("auto_codex_rotation", store.language), subtitle: L.text("auto_codex_rotation_subtitle", store.language)) {
+                    Toggle("", isOn: $settings.autoCodexAccountRotationEnabled).labelsHidden()
+                }
+                SettingsRow(title: L.text("codex_rotation_threshold", store.language), subtitle: L.text("codex_rotation_threshold_subtitle", store.language)) {
+                    Stepper(
+                        "\(Int(settings.codexRotationThresholdRemainingPercent))%",
+                        value: $settings.codexRotationThresholdRemainingPercent,
+                        in: 1...100,
+                        step: 1
+                    )
+                    .disabled(!settings.autoCodexAccountRotationEnabled)
+                    .settingsControl(width: SettingsControlLayout.compactPickerWidth)
+                }
             }
 
             SettingsGroup(title: L.text("menu_bar", store.language), subtitle: L.text("menu_bar_settings_subtitle", store.language)) {

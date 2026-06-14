@@ -105,6 +105,17 @@ enum AccountLoginLauncher {
         runAppleScript(script)
     }
 
+    static func forceRestartCodexApp() {
+        let script = """
+        tell application "Codex" to quit
+        delay 1
+        do shell script "/usr/bin/pkill -x Codex || true"
+        delay 1
+        tell application "Codex" to activate
+        """
+        runAppleScript(script)
+    }
+
     private static func runAppleScript(_ script: String) {
         DispatchQueue.global(qos: .utility).async {
             let process = Process()

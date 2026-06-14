@@ -16,8 +16,23 @@ enum AppLogo {
         return NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: "AgentBar") ?? NSImage()
     }
 
+    static func menuBarImage() -> NSImage {
+        if let image = NSImage(named: "AgentBarMenuIcon") {
+            return image
+        }
+        if let url = Bundle.main.url(forResource: "AgentBarMenuIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        if let url = Bundle.module.url(forResource: "AgentBarMenuIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        return image()
+    }
+
     static func templateImage() -> NSImage {
-        let image = image().copy() as? NSImage ?? image()
+        let image = menuBarImage().copy() as? NSImage ?? menuBarImage()
         image.isTemplate = false
         return image
     }

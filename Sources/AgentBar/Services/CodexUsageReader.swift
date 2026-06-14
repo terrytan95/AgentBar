@@ -64,7 +64,8 @@ struct CodexUsageReader {
     static func parseRegistry(data: Data, now: Date) throws -> UsageSnapshot {
         let registry = try JSONDecoder().decode(CodexRegistry.self, from: data)
         let accounts = registry.accounts.map { raw in
-            let displayName = firstNonEmpty([raw.alias, raw.accountName, maskEmail(raw.email), shortKey(raw.accountKey)])
+            let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
+            let displayName = username ?? "Codex Account"
             let primary = raw.lastUsage?.primary.map {
                 UsageWindow(kind: .fiveHour, usedPercent: $0.usedPercent, windowMinutes: $0.windowMinutes, resetsAt: epochDate($0.resetsAt))
             }
@@ -76,6 +77,7 @@ struct CodexUsageReader {
                 id: raw.accountKey,
                 service: .codex,
                 displayName: displayName,
+                username: username,
                 maskedEmail: maskEmail(raw.email),
                 plan: raw.plan ?? raw.lastUsage?.planType,
                 sourceDescription: "Local Codex account registry",
@@ -273,16 +275,11 @@ private struct CodexTokenUsage: Decodable {
     }
 }
 
-private func firstNonEmpty(_ values: [String?]) -> String {
+private func firstNonEmptyOptional(_ values: [String?]) -> String? {
     values.compactMap { value -> String? in
         guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return value
-    }.first ?? "Codex Account"
-}
-
-private func shortKey(_ value: String?) -> String? {
-    guard let value else { return nil }
-    return String(value.prefix(8))
+    }.first
 }
 
 private func maskEmail(_ email: String?) -> String? {

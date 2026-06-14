@@ -120,7 +120,7 @@ struct AccountRowView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.displayName)
                         .font(.callout.weight(.semibold))
-                    Text(account.maskedEmail ?? account.sourceDescription)
+                    Text(secondaryIdentity)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -146,6 +146,13 @@ struct AccountRowView: View {
         }
         .padding(10)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var secondaryIdentity: String {
+        if let username = account.username, username != account.displayName {
+            return username
+        }
+        return account.sourceDescription
     }
 }
 

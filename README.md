@@ -6,13 +6,13 @@ AgentBar is a native macOS menu bar app for monitoring local AI coding agent usa
 
 ## Features
 
-- Menu bar usage indicator for the lowest remaining quota.
-- Popover with multi-account Codex rows, masked account identity, 5-hour quota, and weekly quota.
+- Menu bar usage indicator for the lowest remaining quota with a compact AgentBar status icon.
+- Popover with multi-account Codex rows, full username display, 5-hour quota, and weekly quota.
 - Floating, non-activating HUD with edge snapping.
 - Statistics window with today, yesterday, this week, this month, this year, 7-day, 30-day, all-time, and custom ranges.
 - KPI cards, stacked usage bars, service mix, and model detail.
 - Settings for language, refresh interval, login item, and menu bar display mode.
-- Custom AgentBar app logo bundled as PNG and `.icns`.
+- Custom AgentBar app logo, app icon, and dedicated menu bar icon bundled as app resources.
 
 ## Data Sources
 
@@ -34,7 +34,7 @@ The app bundle is staged at `dist/AgentBar.app`.
 
 ```bash
 ./script/build_and_run.sh --package
-ditto -c -k --keepParent dist/AgentBar.app dist/AgentBar-v0.0.2.zip
+ditto -c -k --keepParent dist/AgentBar.app dist/AgentBar-v0.0.3.zip
 ```
 
 The local bundle is ad-hoc signed for development and local use. It is not notarized.
@@ -43,6 +43,6 @@ The local bundle is ad-hoc signed for development and local use. It is not notar
 
 GitHub releases attach a zipped `.app` bundle:
 
-- `AgentBar-v0.0.2.zip`
+- `AgentBar-v0.0.3.zip`
 
 After unzipping, move `AgentBar.app` to `/Applications` or run it from the extracted folder.

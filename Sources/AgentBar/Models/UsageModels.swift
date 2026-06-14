@@ -64,6 +64,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var service: UsageService
     var displayName: String
+    var username: String?
     var maskedEmail: String?
     var plan: String?
     var sourceDescription: String

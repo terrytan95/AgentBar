@@ -250,7 +250,7 @@ struct StatisticsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 180)
+                    .settingsControl(width: SettingsControlLayout.widePickerWidth)
                 }
             }
 
@@ -263,7 +263,7 @@ struct StatisticsView: View {
                         Text(L.text("codex_only", store.language)).tag(MenuBarDisplayMode.codexRemaining)
                     }
                     .labelsHidden()
-                    .frame(width: 180)
+                    .settingsControl(width: SettingsControlLayout.widePickerWidth)
                 }
             }
 
@@ -276,7 +276,7 @@ struct StatisticsView: View {
                         Text("10m").tag(TimeInterval(600))
                     }
                     .labelsHidden()
-                    .frame(width: 120)
+                    .settingsControl(width: SettingsControlLayout.compactPickerWidth)
                 }
                 SettingsRow(title: L.text("login_item", store.language), subtitle: settings.loginItemMessage ?? L.text("open_at_login_subtitle", store.language)) {
                     Toggle("", isOn: $settings.launchAtLogin).labelsHidden()
@@ -291,7 +291,7 @@ struct StatisticsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 140)
+                    .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
                 }
                 SettingsRow(title: L.text("dark_theme", store.language), subtitle: L.text("dark_theme_subtitle", store.language)) {
                     Toggle("", isOn: $settings.useDarkAppearance)
@@ -304,7 +304,7 @@ struct StatisticsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 140)
+                    .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
                 }
             }
         }
@@ -685,10 +685,40 @@ private struct ResizablePanel<Content: View>: View {
                             height = nextHeight
                         }
                 )
+                .verticalResizeCursor()
                 .accessibilityLabel("Resize Current limits")
             Spacer()
         }
         .padding(.top, 1)
+    }
+}
+
+private struct VerticalResizeCursorModifier: ViewModifier {
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                guard hovering != isHovering else { return }
+                isHovering = hovering
+                if hovering {
+                    NSCursor.resizeUpDown.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .onDisappear {
+                if isHovering {
+                    NSCursor.pop()
+                    isHovering = false
+                }
+            }
+    }
+}
+
+private extension View {
+    func verticalResizeCursor() -> some View {
+        modifier(VerticalResizeCursorModifier())
     }
 }
 
@@ -1111,11 +1141,19 @@ private struct SettingsRow<Content: View>: View {
             }
             Spacer()
             control()
-                .frame(width: 300, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
+        .padding(.leading, 14)
+        .padding(.trailing, SettingsControlLayout.trailingInset)
         .padding(.vertical, 12)
+    }
+}
+
+private extension View {
+    func settingsControl(width: CGFloat) -> some View {
+        frame(width: width, alignment: .trailing)
+            .fixedSize(horizontal: true, vertical: false)
     }
 }
 

@@ -29,7 +29,7 @@ struct PopoverRootView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("AgentBar")
                     .font(.headline)
-                Text("\(DisplayFormatters.percentString(store.lowestRemaining)) \(L.text("remaining", store.language))")
+                Text(store.popoverHeaderQuotaTitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let activeAccount = store.activeAccount {

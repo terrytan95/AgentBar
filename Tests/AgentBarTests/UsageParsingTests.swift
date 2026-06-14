@@ -99,6 +99,27 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(AppAppearance.colorScheme(useDarkAppearance: true), .dark)
     }
 
+    @MainActor
+    func testPopoverHeightPreferenceIsClampedWhenLoadedAndSaved() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(2_000, forKey: "popoverHeight")
+        let settings = SettingsStore(defaults: defaults)
+
+        XCTAssertEqual(settings.popoverHeight, Double(PopoverLayout.maximumHeight))
+
+        settings.popoverHeight = 120
+        XCTAssertEqual(settings.popoverHeight, Double(PopoverLayout.minimumHeight))
+        XCTAssertEqual(defaults.double(forKey: "popoverHeight"), Double(PopoverLayout.minimumHeight))
+
+        settings.updatePopoverMaximumHeight(1_440)
+        settings.popoverHeight = 1_200
+        XCTAssertEqual(settings.popoverHeight, 1_200)
+        XCTAssertEqual(defaults.double(forKey: "popoverHeight"), 1_200)
+    }
+
     func testCodexReadPrefersLatestSessionRateLimitsForActiveAccount() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }

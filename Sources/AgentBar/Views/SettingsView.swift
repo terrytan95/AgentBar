@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -7,6 +8,10 @@ struct SettingsView: View {
     init(store: UsageStore) {
         self.store = store
         self.settings = store.settings
+    }
+
+    private var popoverMaximumHeight: Double {
+        Double(PopoverLayout.maximumHeight(forScreenHeight: NSScreen.main?.visibleFrame.height))
     }
 
     var body: some View {
@@ -53,14 +58,14 @@ struct SettingsView: View {
                 }
                 Slider(
                     value: $settings.popoverHeight,
-                    in: Double(PopoverLayout.minimumHeight)...Double(PopoverLayout.maximumHeight),
+                    in: Double(PopoverLayout.minimumHeight)...popoverMaximumHeight,
                     step: 20
                 ) {
                     Text(L.text("popover_height", store.language))
                 } minimumValueLabel: {
                     Text("\(Int(PopoverLayout.minimumHeight))")
                 } maximumValueLabel: {
-                    Text("\(Int(PopoverLayout.maximumHeight))")
+                    Text("\(Int(popoverMaximumHeight))")
                 }
                 Toggle("Codex", isOn: $settings.showCodexInMenuBar)
                 Toggle("Claude Code", isOn: $settings.showClaudeInMenuBar)
@@ -76,6 +81,9 @@ struct SettingsView: View {
         }
         .onChange(of: settings.refreshInterval) {
             store.configureTimer()
+        }
+        .onAppear {
+            settings.updatePopoverMaximumHeight(popoverMaximumHeight)
         }
         .frame(width: 520, height: 350)
     }

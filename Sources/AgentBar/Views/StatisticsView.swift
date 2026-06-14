@@ -14,6 +14,10 @@ struct StatisticsView: View {
         self.settings = store.settings
     }
 
+    private var popoverMaximumHeight: Double {
+        Double(PopoverLayout.maximumHeight(forScreenHeight: NSScreen.main?.visibleFrame.height))
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             sidebar
@@ -45,6 +49,9 @@ struct StatisticsView: View {
             }
         }
         .tint(settings.themeColor.primary)
+        .onAppear {
+            settings.updatePopoverMaximumHeight(popoverMaximumHeight)
+        }
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -272,7 +279,7 @@ struct StatisticsView: View {
                     VStack(alignment: .trailing, spacing: 4) {
                         Slider(
                             value: $settings.popoverHeight,
-                            in: Double(PopoverLayout.minimumHeight)...Double(PopoverLayout.maximumHeight),
+                            in: Double(PopoverLayout.minimumHeight)...popoverMaximumHeight,
                             step: 20
                         )
                         Text("\(Int(settings.popoverHeight)) px")
@@ -711,35 +718,6 @@ private struct ResizablePanel<Content: View>: View {
             Spacer()
         }
         .padding(.top, 1)
-    }
-}
-
-private struct VerticalResizeCursorModifier: ViewModifier {
-    @State private var isHovering = false
-
-    func body(content: Content) -> some View {
-        content
-            .onHover { hovering in
-                guard hovering != isHovering else { return }
-                isHovering = hovering
-                if hovering {
-                    NSCursor.resizeUpDown.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            .onDisappear {
-                if isHovering {
-                    NSCursor.pop()
-                    isHovering = false
-                }
-            }
-    }
-}
-
-private extension View {
-    func verticalResizeCursor() -> some View {
-        modifier(VerticalResizeCursorModifier())
     }
 }
 

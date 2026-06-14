@@ -33,11 +33,13 @@ final class UsageParsingTests: XCTestCase {
         let snapshot = try CodexUsageReader.parseRegistry(data: registry, now: Date(timeIntervalSince1970: 1_781_388_300))
 
         XCTAssertEqual(snapshot.accounts.count, 2)
-        XCTAssertEqual(snapshot.accounts[0].displayName, "Work")
+        XCTAssertEqual(snapshot.accounts[0].displayName, "person@example.com")
+        XCTAssertEqual(snapshot.accounts[0].username, "person@example.com")
         XCTAssertEqual(snapshot.accounts[0].maskedEmail, "p***@example.com")
         XCTAssertEqual(snapshot.accounts[0].fiveHourWindow?.usedPercent, 18)
         XCTAssertEqual(snapshot.accounts[0].weeklyWindow?.usedPercent, 51)
         XCTAssertEqual(snapshot.accounts[1].displayName, "Personal")
+        XCTAssertEqual(snapshot.accounts[1].username, "Personal")
         XCTAssertFalse(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("token"))
     }
 

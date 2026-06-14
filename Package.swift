@@ -15,6 +15,7 @@ let package = Package(
             path: "Sources/AgentBar",
             resources: [
                 .copy("Resources/AgentBarLogo.png"),
+                .copy("Resources/AgentBarMenuIcon.png"),
                 .copy("Resources/AgentBarIcon.icns")
             ]
         ),

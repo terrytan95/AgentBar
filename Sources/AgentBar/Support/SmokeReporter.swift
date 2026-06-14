@@ -43,8 +43,8 @@ enum SmokeReporter {
         for account in accounts {
             let fiveHour = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
             let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
-            let email = account.maskedEmail ?? "N/A"
-            lines.append("- \(account.service.rawValue) | \(account.displayName) | \(email) | 5h \(fiveHour) | weekly \(weekly) | \(account.status.rawValue)")
+            let username = account.username ?? "N/A"
+            lines.append("- \(account.service.rawValue) | \(account.displayName) | \(username) | 5h \(fiveHour) | weekly \(weekly) | \(account.status.rawValue)")
         }
 
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

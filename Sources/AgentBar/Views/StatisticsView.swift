@@ -130,7 +130,22 @@ struct StatisticsView: View {
                         LoadingStatusPill(message: L.text("refreshing_accounts", store.language))
                     }
                     Spacer()
-                    DashboardRangeBar(selection: $store.selectedRange, language: store.language, theme: settings.themeColor)
+                    HStack(spacing: 8) {
+                        Text(L.text("interval", store.language))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Picker("", selection: $store.selectedRange) {
+                            ForEach(UsageRange.allCases) { range in
+                                Text(range.dashboardLabel(store.language)).tag(range)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 130)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .glassPanel(cornerRadius: 12, interactive: true)
 
                     Button {
                         store.refresh(force: true)
@@ -164,7 +179,7 @@ struct StatisticsView: View {
             }
 
             LazyVGrid(columns: kpiColumns, spacing: 12) {
-                DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens), delta: "↓ 23.6%", accent: .primary, theme: settings.themeColor)
+                DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language), delta: "↓ 23.6%", accent: .primary, theme: settings.themeColor)
                 DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary, theme: settings.themeColor)
                 DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: settings.themeColor.tertiary, accent: settings.themeColor.tertiary, theme: settings.themeColor)
                 if hasClaudeData {
@@ -360,7 +375,7 @@ struct StatisticsView: View {
                         ProgressView(value: row.share)
                             .tint(row.color)
                         HStack {
-                            Text(DisplayFormatters.compactTokenString(row.tokens) + " \(L.text("tokens", store.language))")
+                            Text(DisplayFormatters.compactTokenString(row.tokens, language: store.language) + " \(L.text("tokens", store.language))")
                             Spacer()
                             Text("\(Int((row.share * 100).rounded()))% \(L.text("share", store.language))")
                         }
@@ -426,8 +441,8 @@ struct StatisticsView: View {
                         Text(row.name)
                             .font(.system(size: 13, weight: .medium))
                         Spacer()
-                        Text("\(L.text("input_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.input))")
-                        Text("\(L.text("output_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.output))")
+                        Text("\(L.text("input_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.input, language: store.language))")
+                        Text("\(L.text("output_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.output, language: store.language))")
                             .frame(width: 96, alignment: .trailing)
                         Text(costText(row.cost))
                             .font(.system(size: 13, weight: .bold))
@@ -524,47 +539,6 @@ private struct DashboardTopTabBar: View {
     }
 }
 
-private struct DashboardRangeBar: View {
-    @Binding var selection: UsageRange
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(UsageRange.allCases) { range in
-                Button {
-                    selection = range
-                } label: {
-                    Text(range.dashboardLabel(language))
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(1)
-                        .frame(width: width(for: range), height: 24)
-                        .foregroundStyle(selection == range ? Color.white : Color.primary.opacity(0.72))
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(selection == range ? theme.primary : Color.clear)
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(3)
-        .frame(height: 30)
-        .glassPanel(cornerRadius: 12, interactive: true)
-    }
-
-    private func width(for range: UsageRange) -> CGFloat {
-        switch range {
-        case .last30Days, .custom:
-            return language == .english ? 62 : 50
-        case .thisMonth, .thisWeek, .thisYear, .yesterday:
-            return language == .english ? 58 : 44
-        default:
-            return language == .english ? 50 : 40
-        }
-    }
-}
-
 private struct DashboardKPI: View {
     var title: String
     var value: String
@@ -644,9 +618,9 @@ private struct DashboardStackedBars: View {
                 VStack(spacing: 4) {
                     HStack(alignment: .bottom, spacing: 8) {
                         VStack(alignment: .trailing) {
-                            Text(DisplayFormatters.compactTokenString(maxValue))
+                            Text(DisplayFormatters.compactTokenString(maxValue, language: language))
                             Spacer()
-                            Text(DisplayFormatters.compactTokenString(maxValue / 2))
+                            Text(DisplayFormatters.compactTokenString(maxValue / 2, language: language))
                             Spacer()
                             Text("0")
                         }

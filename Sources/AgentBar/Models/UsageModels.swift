@@ -95,6 +95,9 @@ extension Array where Element == UsageAccount {
 
     func sorted(using mode: AccountSortMode) -> [UsageAccount] {
         sorted { lhs, rhs in
+            if lhs.isActive != rhs.isActive {
+                return lhs.isActive && !rhs.isActive
+            }
             switch mode {
             case .quotaPressure:
                 let lhsFive = lhs.fiveHourWindow?.remainingPercent ?? Double.greatestFiniteMagnitude
@@ -105,9 +108,6 @@ extension Array where Element == UsageAccount {
                 if lhsWeekly != rhsWeekly { return lhsWeekly < rhsWeekly }
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             case .activeFirst:
-                if lhs.isActive != rhs.isActive {
-                    return lhs.isActive && !rhs.isActive
-                }
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             case .alphabetical:
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending

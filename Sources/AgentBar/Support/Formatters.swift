@@ -20,12 +20,33 @@ enum DisplayFormatters {
     }
 
     static func compactTokenString(_ value: Int) -> String {
+        compactTokenString(value, language: .chinese)
+    }
+
+    static func compactTokenString(_ value: Int, language: AppLanguage) -> String {
+        guard language == .chinese else {
+            return englishCompactTokenString(value)
+        }
         let absolute = abs(value)
         if absolute >= 100_000_000 {
             return String(format: "%.2f亿", Double(value) / 100_000_000)
         }
         if absolute >= 10_000 {
             return String(format: "%.2f万", Double(value) / 10_000)
+        }
+        return tokenString(value)
+    }
+
+    private static func englishCompactTokenString(_ value: Int) -> String {
+        let absolute = abs(value)
+        if absolute >= 1_000_000_000 {
+            return String(format: "%.4f billion", Double(value) / 1_000_000_000)
+        }
+        if absolute >= 1_000_000 {
+            return String(format: "%.4f million", Double(value) / 1_000_000)
+        }
+        if absolute >= 1_000 {
+            return String(format: "%.1fK", Double(value) / 1_000)
         }
         return tokenString(value)
     }

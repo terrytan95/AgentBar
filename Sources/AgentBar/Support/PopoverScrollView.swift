@@ -17,6 +17,9 @@ struct PopoverScrollView<Content: View>: NSViewRepresentable {
 
 final class PopoverConfiguredScrollView: NSScrollView {
     private var hostingView: NSHostingView<AnyView>?
+    private var measuredContentWidth: CGFloat = 0
+    private var measuredDocumentHeight: CGFloat = 1
+    private var needsDocumentMeasurement = true
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -33,12 +36,14 @@ final class PopoverConfiguredScrollView: NSScrollView {
         hostingView.translatesAutoresizingMaskIntoConstraints = true
         self.hostingView = hostingView
         documentView = hostingView
+        needsDocumentMeasurement = true
         applyScrollConfiguration()
         refreshLayout()
     }
 
     func updateHostedContent(_ content: AnyView) {
         hostingView?.rootView = content
+        needsDocumentMeasurement = true
         applyScrollConfiguration()
         refreshLayout()
     }
@@ -116,10 +121,16 @@ final class PopoverConfiguredScrollView: NSScrollView {
         let width = contentView.bounds.width
         guard width > 0 else { return }
 
-        hostingView.setFrameSize(NSSize(width: width, height: 1))
-        hostingView.layoutSubtreeIfNeeded()
-        let fittingHeight = hostingView.fittingSize.height
-        let nextSize = NSSize(width: width, height: max(fittingHeight, 1))
+        let widthChanged = abs(width - measuredContentWidth) >= 0.5
+        if needsDocumentMeasurement || widthChanged {
+            hostingView.setFrameSize(NSSize(width: width, height: 1))
+            hostingView.layoutSubtreeIfNeeded()
+            measuredContentWidth = width
+            measuredDocumentHeight = max(hostingView.fittingSize.height, 1)
+            needsDocumentMeasurement = false
+        }
+
+        let nextSize = NSSize(width: width, height: measuredDocumentHeight)
 
         if hostingView.frame.size != nextSize {
             hostingView.setFrameSize(nextSize)

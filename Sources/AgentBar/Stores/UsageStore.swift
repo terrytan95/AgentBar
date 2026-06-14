@@ -6,6 +6,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var accounts: [UsageAccount] = []
     @Published private(set) var points: [UsagePoint] = []
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isManualRefreshFeedbackVisible = false
     @Published private(set) var hasLoadedAccountInformation = false
     @Published private(set) var lastError: String?
     @Published private(set) var switchingAccountID: String?
@@ -19,6 +20,7 @@ final class UsageStore: ObservableObject {
     private var timer: Timer?
     private var refreshInFlight = false
     private var refreshQueued = false
+    private var manualRefreshQueued = false
 
     init(
         settings: SettingsStore = SettingsStore(),
@@ -113,9 +115,18 @@ final class UsageStore: ObservableObject {
             .sorted(by: { $0.service.rawValue < $1.service.rawValue })
     }
 
-    func refresh(force: Bool = false) {
+    func refresh(force: Bool = false, showManualFeedback: Bool = false) {
+        if showManualFeedback {
+            isManualRefreshFeedbackVisible = true
+        }
+
         if refreshInFlight {
-            if force { refreshQueued = true }
+            if force {
+                refreshQueued = true
+                if showManualFeedback {
+                    manualRefreshQueued = true
+                }
+            }
             return
         }
         refreshInFlight = true
@@ -135,9 +146,12 @@ final class UsageStore: ObservableObject {
                 self.isRefreshing = false
                 self.refreshInFlight = false
                 if self.refreshQueued {
+                    let queuedShowsManualFeedback = self.manualRefreshQueued
                     self.refreshQueued = false
-                    self.refresh(force: true)
+                    self.manualRefreshQueued = false
+                    self.refresh(force: true, showManualFeedback: queuedShowsManualFeedback)
                 } else {
+                    self.isManualRefreshFeedbackVisible = false
                     self.evaluateAutomaticCodexRotation()
                 }
             }
@@ -218,8 +232,10 @@ final class UsageStore: ObservableObject {
         self.points = points
         hasLoadedAccountInformation = true
         isRefreshing = false
+        isManualRefreshFeedbackVisible = false
         refreshInFlight = false
         refreshQueued = false
+        manualRefreshQueued = false
     }
 
     private enum CodexSwitchRestartMode {

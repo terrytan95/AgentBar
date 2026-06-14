@@ -23,9 +23,28 @@ final class PopoverLayoutTests: XCTestCase {
     }
 
     func testPopoverResizeDragFiltersSubpixelIntermediateUpdates() {
-        XCTAssertFalse(PopoverResizeDrag.shouldEmit(previousHeight: 560, nextHeight: 560.2, isFinal: false))
-        XCTAssertTrue(PopoverResizeDrag.shouldEmit(previousHeight: 560, nextHeight: 560.6, isFinal: false))
+        XCTAssertFalse(PopoverResizeDrag.shouldEmit(previousHeight: 560, nextHeight: 561.5, isFinal: false))
+        XCTAssertTrue(PopoverResizeDrag.shouldEmit(previousHeight: 560, nextHeight: 562, isFinal: false))
         XCTAssertTrue(PopoverResizeDrag.shouldEmit(previousHeight: 560, nextHeight: 560.2, isFinal: true))
+    }
+
+    func testPopoverResizeDragCanUseCustomEmissionThreshold() {
+        XCTAssertFalse(
+            PopoverResizeDrag.shouldEmit(
+                previousHeight: 560,
+                nextHeight: 560.2,
+                isFinal: false,
+                minimumDelta: 0.5
+            )
+        )
+        XCTAssertTrue(
+            PopoverResizeDrag.shouldEmit(
+                previousHeight: 560,
+                nextHeight: 560.6,
+                isFinal: false,
+                minimumDelta: 0.5
+            )
+        )
     }
 
     func testResizablePanelHeightClampsAtBounds() {

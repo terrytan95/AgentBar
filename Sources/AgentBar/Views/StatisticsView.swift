@@ -21,14 +21,14 @@ struct StatisticsView: View {
                 if topTab == .usage {
                     ScrollView(.vertical, showsIndicators: false) {
                         dashboardContent
-                            .padding(.top, 86)
+                            .padding(.top, 70)
                             .padding(.horizontal, 22)
                             .padding(.bottom, 26)
                     }
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         settingsContent
-                            .padding(.top, 86)
+                            .padding(.top, 56)
                             .padding(.horizontal, 28)
                             .padding(.bottom, 28)
                     }
@@ -44,26 +44,26 @@ struct StatisticsView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 22) {
-            sidebarGroup(title: "Service", chinese: "服务") {
-                sidebarItem("All", chinese: "全部", active: serviceFilter == .all, tint: nil) {
+            sidebarGroup(title: L.text("service", store.language)) {
+                sidebarItem(L.text("all", store.language), active: serviceFilter == .all, tint: nil) {
                     serviceFilter = .all
                 }
-                sidebarItem("OpenAI", chinese: "OpenAI", active: serviceFilter == .codex, tint: DashboardStyle.codex) {
+                sidebarItem(L.text("openai", store.language), active: serviceFilter == .codex, tint: DashboardStyle.codex) {
                     serviceFilter = .codex
                 }
                 if hasClaudeData {
-                    sidebarItem("Anthropic", chinese: "Anthropic", active: serviceFilter == .claude, tint: DashboardStyle.claude) {
+                    sidebarItem(L.text("anthropic", store.language), active: serviceFilter == .claude, tint: DashboardStyle.claude) {
                         serviceFilter = .claude
                     }
                 }
             }
 
-            sidebarGroup(title: "View", chinese: "视图") {
-                sidebarItem("Overview", chinese: "概览", systemImage: "rectangle.split.2x2", active: viewMode == .overview) {
+            sidebarGroup(title: L.text("view", store.language)) {
+                sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: viewMode == .overview) {
                     viewMode = .overview
                 }
-                sidebarItem("Timeline", chinese: "时间线", systemImage: "chart.line.uptrend.xyaxis", active: viewMode == .timeline, enabled: false) {}
-                sidebarItem("Details", chinese: "明细", systemImage: "list.bullet", active: viewMode == .details, enabled: false) {}
+                sidebarItem(L.text("timeline", store.language), systemImage: "chart.line.uptrend.xyaxis", active: viewMode == .timeline, enabled: false) {}
+                sidebarItem(L.text("details", store.language), systemImage: "list.bullet", active: viewMode == .details, enabled: false) {}
             }
 
             Spacer()
@@ -71,22 +71,21 @@ struct StatisticsView: View {
         .padding(.horizontal, 12)
         .padding(.top, 58)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(.ultraThinMaterial)
+        .glassPanel(cornerRadius: 0, interactive: false)
     }
 
-    private func sidebarGroup<Content: View>(title: String, chinese: String, @ViewBuilder content: () -> Content) -> some View {
+    private func sidebarGroup<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(chinese)
+            Text(title)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)
             content()
         }
     }
 
     private func sidebarItem(
-        _ english: String,
-        chinese: String,
+        _ title: String,
         systemImage: String? = nil,
         active: Bool,
         tint: Color? = nil,
@@ -104,55 +103,39 @@ struct StatisticsView: View {
                         .fill(tint ?? Color.secondary)
                         .frame(width: 8, height: 8)
                 }
-                Text(chinese)
+                Text(title)
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
             }
-            .foregroundStyle(active ? .white : (enabled ? Color.primary.opacity(0.82) : Color.secondary.opacity(0.42)))
+            .foregroundStyle(active ? .white : (enabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.72)))
             .padding(.horizontal, 10)
-            .frame(height: 28)
-            .background(active ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .frame(height: 30)
+            .background(active ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.55)
+        .opacity(enabled ? 1 : 0.86)
+        .glassPanel(cornerRadius: 8, interactive: enabled)
     }
 
     private var topChrome: some View {
-        VStack(spacing: 34) {
-            Picker("", selection: $topTab) {
-                Text("用量统计").tag(DashboardTopTab.usage)
-                Text("设置").tag(DashboardTopTab.settings)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 168)
-            .controlSize(.small)
-            .padding(.top, 10)
+        VStack(spacing: 9) {
+            DashboardTopTabBar(selection: $topTab, language: store.language)
+                .padding(.top, 10)
 
             if topTab == .usage {
                 HStack {
-                    if store.isLoadingAccountInformation {
-                        LoadingStatusPill(message: store.hasLoadedAccountInformation ? "正在刷新账号" : "正在加载账号")
+                    if store.isLoadingAccountInformation && store.hasLoadedAccountInformation {
+                        LoadingStatusPill(message: L.text("refreshing_accounts", store.language))
                     }
                     Spacer()
-                    Picker("", selection: $store.selectedRange) {
-                        ForEach(UsageRange.allCases) { range in
-                            Text(range.dashboardLabel).tag(range)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 584)
-                    .controlSize(.small)
+                    DashboardRangeBar(selection: $store.selectedRange, language: store.language)
 
                     Button {
                         store.refresh()
                     } label: {
-                        if store.isRefreshing {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
                     }
                     .buttonStyle(.borderless)
                     .help(L.text("refresh", store.language))
@@ -179,22 +162,22 @@ struct StatisticsView: View {
         VStack(alignment: .leading, spacing: 14) {
             if !store.hasLoadedAccountInformation {
                 LoadingAccountPanel(
-                    title: "正在加载账号信息",
-                    subtitle: "正在只读同步本机 Codex 与 Claude Code 账号"
+                    title: L.text("loading_account_info", store.language),
+                    subtitle: L.text("loading_account_info_subtitle", store.language)
                 )
             }
 
             LazyVGrid(columns: kpiColumns, spacing: 12) {
-                DashboardKPI(title: "总 Tokens", value: DisplayFormatters.compactTokenString(summary.totalTokens), delta: "↓ 23.6%", accent: .primary)
-                DashboardKPI(title: "总花费", value: DisplayFormatters.costString(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary)
+                DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens), delta: "↓ 23.6%", accent: .primary)
+                DashboardKPI(title: L.text("total_cost", store.language), value: DisplayFormatters.costString(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary)
                 DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: DashboardStyle.codex, accent: DashboardStyle.codex)
                 if hasClaudeData {
                     DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: DashboardStyle.claude, accent: DashboardStyle.claude)
                 }
             }
 
-            Panel(title: "每日用量") {
-                DashboardStackedBars(bars: displayBars)
+            Panel(title: L.text("daily_usage", store.language)) {
+                DashboardStackedBars(bars: displayBars, language: store.language)
                     .frame(height: 206)
                 HStack(spacing: 14) {
                     Spacer()
@@ -206,15 +189,15 @@ struct StatisticsView: View {
             }
 
             HStack(alignment: .top, spacing: 14) {
-                Panel(title: "按服务") {
+                Panel(title: L.text("by_service", store.language)) {
                     serviceMixRows
                 }
-                Panel(title: "当前限额") {
+                Panel(title: L.text("current_limits", store.language)) {
                     currentLimitsRows
                 }
             }
 
-            Panel(title: "按模型") {
+            Panel(title: L.text("by_model", store.language)) {
                 modelRows
             }
         }
@@ -222,17 +205,17 @@ struct StatisticsView: View {
 
     private var settingsContent: some View {
         VStack(alignment: .leading, spacing: 18) {
-            SettingsGroup(title: "账号", subtitle: "自动检测本机账号；无安全数据源时不显示占位账号。") {
-                SettingsRow(title: "Codex", subtitle: "\(codexAccounts.count) accounts detected") {
+            SettingsGroup(title: L.text("accounts", store.language), subtitle: L.text("accounts_settings_subtitle", store.language)) {
+                SettingsRow(title: "Codex", subtitle: "\(codexAccounts.count) \(L.text("accounts_loaded", store.language))") {
                     Toggle("", isOn: $settings.showCodexInMenuBar).labelsHidden()
                 }
-                SettingsRow(title: "Claude Code", subtitle: hasClaudeData ? "Available" : "No safe local source") {
+                SettingsRow(title: "Claude Code", subtitle: hasClaudeData ? L.text("available", store.language) : L.text("no_safe_local_source", store.language)) {
                     Toggle("", isOn: $settings.showClaudeInMenuBar).labelsHidden()
                 }
             }
 
-            SettingsGroup(title: "菜单栏", subtitle: "控制菜单栏状态项显示。") {
-                SettingsRow(title: "显示内容", subtitle: "Choose the value next to the icon.") {
+            SettingsGroup(title: L.text("menu_bar", store.language), subtitle: L.text("menu_bar_settings_subtitle", store.language)) {
+                SettingsRow(title: L.text("display_value", store.language), subtitle: L.text("display_value_subtitle", store.language)) {
                     Picker("", selection: $settings.menuBarDisplayMode) {
                         Text(L.text("lowest_remaining", store.language)).tag(MenuBarDisplayMode.lowestRemaining)
                         Text(L.text("total_tokens", store.language)).tag(MenuBarDisplayMode.totalTokens)
@@ -243,8 +226,8 @@ struct StatisticsView: View {
                 }
             }
 
-            SettingsGroup(title: "刷新", subtitle: "后台轮询用量的频率。") {
-                SettingsRow(title: L.text("refresh_interval", store.language), subtitle: "Applies to local read-only data sync.") {
+            SettingsGroup(title: L.text("refresh", store.language), subtitle: L.text("refresh_settings_subtitle", store.language)) {
+                SettingsRow(title: L.text("refresh_interval", store.language), subtitle: L.text("refresh_interval_subtitle", store.language)) {
                     Picker("", selection: $settings.refreshInterval) {
                         Text("15s").tag(TimeInterval(15))
                         Text("30s").tag(TimeInterval(30))
@@ -254,13 +237,13 @@ struct StatisticsView: View {
                     .labelsHidden()
                     .frame(width: 120)
                 }
-                SettingsRow(title: L.text("login_item", store.language), subtitle: settings.loginItemMessage ?? "Open AgentBar at login.") {
+                SettingsRow(title: L.text("login_item", store.language), subtitle: settings.loginItemMessage ?? L.text("open_at_login_subtitle", store.language)) {
                     Toggle("", isOn: $settings.launchAtLogin).labelsHidden()
                 }
             }
 
-            SettingsGroup(title: "通用", subtitle: "Language and app behavior.") {
-                SettingsRow(title: L.text("language", store.language), subtitle: "Interface language.") {
+            SettingsGroup(title: L.text("general", store.language), subtitle: L.text("general_settings_subtitle", store.language)) {
+                SettingsRow(title: L.text("language", store.language), subtitle: L.text("language_subtitle", store.language)) {
                     Picker("", selection: $settings.language) {
                         ForEach(AppLanguage.allCases) { language in
                             Text(language.title).tag(language)
@@ -324,14 +307,14 @@ struct StatisticsView: View {
     private func serviceShareText(_ service: UsageService) -> String {
         let total = max(1, summary.serviceBreakdown.values.reduce(0, +))
         let value = summary.serviceBreakdown[service, default: 0]
-        return "\(Int((Double(value) / Double(total) * 100).rounded()))% 占比"
+        return "\(Int((Double(value) / Double(total) * 100).rounded()))% \(L.text("share", store.language))"
     }
 
     @ViewBuilder
     private var serviceMixRows: some View {
         let rows = serviceRows
         if rows.isEmpty {
-            EmptyPanelMessage("No usage data")
+            EmptyPanelMessage(L.text("no_usage_data", store.language))
         } else {
             VStack(spacing: 16) {
                 ForEach(rows, id: \.service) { row in
@@ -346,9 +329,9 @@ struct StatisticsView: View {
                         ProgressView(value: row.share)
                             .tint(row.color)
                         HStack {
-                            Text(DisplayFormatters.compactTokenString(row.tokens) + " Tokens")
+                            Text(DisplayFormatters.compactTokenString(row.tokens) + " \(L.text("tokens", store.language))")
                             Spacer()
-                            Text("\(Int((row.share * 100).rounded()))% 占比")
+                            Text("\(Int((row.share * 100).rounded()))% \(L.text("share", store.language))")
                         }
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
@@ -380,7 +363,7 @@ struct StatisticsView: View {
     private var currentLimitsRows: some View {
         let limitRows = currentLimitRows
         if limitRows.isEmpty {
-            EmptyPanelMessage("No quota windows")
+            EmptyPanelMessage(L.text("no_quota_windows", store.language))
         } else {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(limitRows) { row in
@@ -432,7 +415,7 @@ struct StatisticsView: View {
     private var modelRows: some View {
         let rows = modelBreakdownRows
         if rows.isEmpty {
-            EmptyPanelMessage("No model data")
+            EmptyPanelMessage(L.text("no_model_data", store.language))
         } else {
             VStack(spacing: 0) {
                 ForEach(rows) { row in
@@ -440,8 +423,8 @@ struct StatisticsView: View {
                         Text(row.name)
                             .font(.system(size: 13, weight: .medium))
                         Spacer()
-                        Text("入 \(DisplayFormatters.compactTokenString(row.input))")
-                        Text("出 \(DisplayFormatters.compactTokenString(row.output))")
+                        Text("\(L.text("input_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.input))")
+                        Text("\(L.text("output_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.output))")
                             .frame(width: 96, alignment: .trailing)
                         Text(DisplayFormatters.costString(row.cost))
                             .font(.system(size: 13, weight: .bold))
@@ -476,8 +459,8 @@ struct StatisticsView: View {
     }
 
     private func resetText(_ date: Date?) -> String {
-        guard let date else { return "重置时间未知" }
-        return "\(DisplayFormatters.relativeString(for: date)) 后重置"
+        guard let date else { return L.text("reset_time_unknown", store.language) }
+        return "\(DisplayFormatters.relativeString(for: date)) \(L.text("resets_after", store.language))"
     }
 
     private func statusColor(_ percent: Double?, fallback: Color) -> Color {
@@ -508,6 +491,78 @@ private enum DashboardViewMode: Hashable {
 private enum DashboardStyle {
     static let codex = Color(red: 0.43, green: 0.43, blue: 0.46)
     static let claude = Color(red: 0.80, green: 0.47, blue: 0.34)
+}
+
+private struct DashboardTopTabBar: View {
+    @Binding var selection: DashboardTopTab
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 3) {
+            tabButton(.usage, title: L.text("usage_statistics", language))
+            tabButton(.settings, title: L.text("settings", language))
+        }
+        .padding(3)
+        .frame(height: 30)
+        .glassPanel(cornerRadius: 12, interactive: true)
+    }
+
+    private func tabButton(_ tab: DashboardTopTab, title: String) -> some View {
+        Button {
+            selection = tab
+        } label: {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .frame(width: 70, height: 24)
+                .foregroundStyle(selection == tab ? Color.white : Color.primary.opacity(0.74))
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(selection == tab ? Color.accentColor : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct DashboardRangeBar: View {
+    @Binding var selection: UsageRange
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(UsageRange.allCases) { range in
+                Button {
+                    selection = range
+                } label: {
+                    Text(range.dashboardLabel(language))
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                        .frame(width: width(for: range), height: 24)
+                        .foregroundStyle(selection == range ? Color.white : Color.primary.opacity(0.72))
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(selection == range ? Color.accentColor : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .frame(height: 30)
+        .glassPanel(cornerRadius: 12, interactive: true)
+    }
+
+    private func width(for range: UsageRange) -> CGFloat {
+        switch range {
+        case .last30Days, .custom:
+            return language == .english ? 62 : 50
+        case .thisMonth, .thisWeek, .thisYear, .yesterday:
+            return language == .english ? 58 : 44
+        default:
+            return language == .english ? 50 : 40
+        }
+    }
 }
 
 private struct DashboardKPI: View {
@@ -574,11 +629,12 @@ private struct Panel<Content: View>: View {
 
 private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
+    var language: AppLanguage
 
     var body: some View {
         GeometryReader { proxy in
             if bars.isEmpty {
-                EmptyPanelMessage("No usage events")
+                EmptyPanelMessage(L.text("no_usage_events", language))
                     .frame(width: proxy.size.width, height: proxy.size.height)
             } else {
                 let maxValue = max(1, bars.map { $0.codexTokens + $0.claudeTokens }.max() ?? 1)
@@ -819,17 +875,30 @@ private extension View {
 }
 
 private extension UsageRange {
-    var dashboardLabel: String {
+    func dashboardLabel(_ language: AppLanguage) -> String {
+        guard language == .chinese else {
+            switch self {
+            case .today: return "Today"
+            case .yesterday: return "Yesterday"
+            case .thisWeek: return "Week"
+            case .thisMonth: return "Month"
+            case .thisYear: return "Year"
+            case .last7Days: return "7 Days"
+            case .last30Days: return "30 Days"
+            case .all: return "All"
+            case .custom: return "Custom"
+            }
+        }
         switch self {
-        case .today: "今天"
-        case .yesterday: "昨天"
-        case .thisWeek: "本周"
-        case .thisMonth: "本月"
-        case .thisYear: "本年"
-        case .last7Days: "7 天"
-        case .last30Days: "30 天"
-        case .all: "全部"
-        case .custom: "自定义"
+        case .today: return "今天"
+        case .yesterday: return "昨天"
+        case .thisWeek: return "本周"
+        case .thisMonth: return "本月"
+        case .thisYear: return "本年"
+        case .last7Days: return "7 天"
+        case .last30Days: return "30 天"
+        case .all: return "全部"
+        case .custom: return "自定义"
         }
     }
 }

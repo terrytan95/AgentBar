@@ -126,7 +126,16 @@ struct CodexUsageReader {
                 eventCount += 1
                 let model = payload.info?.model ?? "Codex local"
                 let pointUsage = payload.info?.lastTokenUsage ?? cumulativeUsage
-                points.append(UsagePoint(service: .codex, model: model, date: eventDate, tokens: pointUsage.toTotals(), estimatedCostUSD: nil))
+                let tokens = pointUsage.toTotals()
+                points.append(
+                    UsagePoint(
+                        service: .codex,
+                        model: model,
+                        date: eventDate,
+                        tokens: tokens,
+                        estimatedCostUSD: TokenPricing.estimate(service: .codex, model: model, tokens: tokens)
+                    )
+                )
             }
 
             if let primary = payload.rateLimits?.primary {

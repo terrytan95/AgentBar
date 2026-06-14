@@ -10,16 +10,18 @@ enum SmokeReporter {
         let points = codex.points + claude.points
         let summary = UsageStatistics.summarize(points: points, range: .all)
         let lowestRemaining = accounts.compactMap(\.mostConstrainedRemainingPercent).min()
+        let menuStore = UsageStore(settings: settings)
+        menuStore.applyTestData(snapshots: [.codex: codex, .claudeCode: claude], accounts: accounts, points: points)
 
         var lines: [String] = []
         lines.append("AgentBar smoke report")
         lines.append("Generated: \(ISO8601DateFormatter().string(from: Date()))")
-        lines.append("Menu bar title: \(DisplayFormatters.percentString(lowestRemaining))")
+        lines.append("Menu bar title: \(menuStore.menuBarTitle)")
         lines.append("Popover account rows: \(accounts.count)")
         lines.append("Active account: \(accounts.first(where: \.isActive)?.displayName ?? "N/A")")
         lines.append("HUD remaining percent: \(DisplayFormatters.percentString(lowestRemaining))")
         lines.append("Statistics total tokens: \(DisplayFormatters.tokenString(summary.totalTokens))")
-        lines.append("Statistics total cost: \(DisplayFormatters.costString(summary.estimatedCostUSD))")
+        lines.append("Statistics total cost: \(summary.estimatedCostUSD.map { DisplayFormatters.costString($0) } ?? "No cost data")")
         lines.append("Settings language: \(settings.language.title)")
         lines.append("Settings refresh interval: \(Int(settings.refreshInterval))s")
         lines.append("Settings launch at login: \(settings.launchAtLogin)")

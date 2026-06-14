@@ -35,6 +35,7 @@ struct SettingsView: View {
 
             Form {
                 Picker(L.text("menu_item", store.language), selection: $settings.menuBarDisplayMode) {
+                    Text(L.text("active_account_windows", store.language)).tag(MenuBarDisplayMode.activeAccountWindows)
                     Text(L.text("lowest_remaining", store.language)).tag(MenuBarDisplayMode.lowestRemaining)
                     Text(L.text("total_tokens", store.language)).tag(MenuBarDisplayMode.totalTokens)
                     Text(L.text("codex_only", store.language)).tag(MenuBarDisplayMode.codexRemaining)

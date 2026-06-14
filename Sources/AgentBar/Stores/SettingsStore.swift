@@ -2,6 +2,7 @@ import Foundation
 import ServiceManagement
 
 enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
+    case activeAccountWindows
     case lowestRemaining
     case totalTokens
     case codexRemaining
@@ -48,7 +49,11 @@ final class SettingsStore: ObservableObject {
         let savedInterval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = savedInterval > 0 ? savedInterval : 60
         launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
-        menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .lowestRemaining
+        if !defaults.bool(forKey: Keys.didMigrateActiveAccountMenuBarDefault) {
+            defaults.set(MenuBarDisplayMode.activeAccountWindows.rawValue, forKey: Keys.menuBarDisplayMode)
+            defaults.set(true, forKey: Keys.didMigrateActiveAccountMenuBarDefault)
+        }
+        menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .activeAccountWindows
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
     }
@@ -74,5 +79,6 @@ final class SettingsStore: ObservableObject {
         static let menuBarDisplayMode = "menuBarDisplayMode"
         static let showCodexInMenuBar = "showCodexInMenuBar"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
+        static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
     }
 }

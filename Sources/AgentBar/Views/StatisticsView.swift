@@ -151,13 +151,7 @@ struct StatisticsView: View {
 
     @ViewBuilder
     private var dashboardContent: some View {
-        if #available(macOS 26.0, *) {
-            GlassEffectContainer(spacing: 14) {
-                dashboardContentStack
-            }
-        } else {
-            dashboardContentStack
-        }
+        dashboardContentStack
     }
 
     private var dashboardContentStack: some View {
@@ -191,16 +185,17 @@ struct StatisticsView: View {
             }
 
             HStack(alignment: .top, spacing: 14) {
-                Panel(title: L.text("by_service", store.language)) {
-                    serviceMixRows
+                VStack(spacing: 14) {
+                    Panel(title: L.text("by_service", store.language)) {
+                        serviceMixRows
+                    }
+                    Panel(title: L.text("by_model", store.language)) {
+                        modelRows
+                    }
                 }
                 Panel(title: L.text("current_limits", store.language)) {
                     currentLimitsRows
                 }
-            }
-
-            Panel(title: L.text("by_model", store.language)) {
-                modelRows
             }
         }
     }
@@ -219,6 +214,7 @@ struct StatisticsView: View {
             SettingsGroup(title: L.text("menu_bar", store.language), subtitle: L.text("menu_bar_settings_subtitle", store.language)) {
                 SettingsRow(title: L.text("display_value", store.language), subtitle: L.text("display_value_subtitle", store.language)) {
                     Picker("", selection: $settings.menuBarDisplayMode) {
+                        Text(L.text("active_account_windows", store.language)).tag(MenuBarDisplayMode.activeAccountWindows)
                         Text(L.text("lowest_remaining", store.language)).tag(MenuBarDisplayMode.lowestRemaining)
                         Text(L.text("total_tokens", store.language)).tag(MenuBarDisplayMode.totalTokens)
                         Text(L.text("codex_only", store.language)).tag(MenuBarDisplayMode.codexRemaining)
@@ -405,7 +401,7 @@ struct StatisticsView: View {
                         Text("\(L.text("input_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.input))")
                         Text("\(L.text("output_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.output))")
                             .frame(width: 96, alignment: .trailing)
-                        Text(DisplayFormatters.costString(row.cost))
+                        Text(costText(row.cost))
                             .font(.system(size: 13, weight: .bold))
                             .frame(width: 88, alignment: .trailing)
                     }
@@ -887,11 +883,8 @@ private extension View {
 
     @ViewBuilder
     func glassPanel(cornerRadius: CGFloat, interactive: Bool) -> some View {
-        if #available(macOS 26.0, *) {
-            let glass = interactive ? Glass.regular.interactive() : Glass.regular
-            self.glassEffect(glass, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        } else {
-            self.background(
+        self
+            .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(.regularMaterial)
                     .overlay(
@@ -899,7 +892,7 @@ private extension View {
                             .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                     )
             )
-        }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 

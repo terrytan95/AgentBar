@@ -811,14 +811,13 @@ private struct AccountLimitGroupView: View {
             }
 
             HStack(spacing: 12) {
-                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, theme: theme)
-                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, theme: theme)
+                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language, theme: theme)
+                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
             }
 
-            HStack {
-                Text(account.plan?.uppercased() ?? account.status.label)
-                Spacer()
-                Text(DisplayFormatters.tokenString(account.tokens.total))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account.lastActivityLine(language: language))
+                Text(account.accountTypeLine(language: language))
             }
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.secondary)

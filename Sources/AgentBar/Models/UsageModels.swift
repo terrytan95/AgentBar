@@ -58,6 +58,13 @@ struct UsageWindow: Codable, Equatable, Identifiable, Sendable {
     var remainingPercent: Double {
         max(0, 100 - usedPercent)
     }
+
+    func resetLine(language: AppLanguage) -> String {
+        guard let resetsAt else { return L.text("reset_time_unknown", language) }
+        let timestamp = DisplayFormatters.shortDateTimeString(for: resetsAt, language: language)
+        let relative = DisplayFormatters.relativeString(for: resetsAt)
+        return "\(L.text("reset", language)): \(timestamp) (\(relative))"
+    }
 }
 
 struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
@@ -80,6 +87,24 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]
             .compactMap { $0 }
             .min()
+    }
+
+    func accountTypeLine(language: AppLanguage) -> String {
+        "\(L.text("account_type", language)): \(accountTypeValue)"
+    }
+
+    func lastActivityLine(language: AppLanguage) -> String {
+        guard let lastUpdated else { return "\(L.text("last_activity", language)): --" }
+        let timestamp = DisplayFormatters.shortDateTimeString(for: lastUpdated, language: language)
+        let relative = DisplayFormatters.relativeString(for: lastUpdated)
+        return "\(L.text("last_activity", language)): \(timestamp) (\(relative))"
+    }
+
+    var accountTypeValue: String {
+        if let plan, !plan.isEmpty {
+            return plan.uppercased()
+        }
+        return status.label.uppercased()
     }
 }
 

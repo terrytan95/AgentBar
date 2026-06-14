@@ -6,6 +6,7 @@ enum AccountActionError: LocalizedError {
     case missingRegistry
     case invalidRegistry
     case missingAccount
+    case missingAccountSnapshot
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +14,7 @@ enum AccountActionError: LocalizedError {
         case .missingRegistry: "Codex account registry was not found."
         case .invalidRegistry: "Codex account registry could not be parsed."
         case .missingAccount: "The selected account was not found in the Codex registry."
+        case .missingAccountSnapshot: "The selected Codex account auth snapshot was not found."
         }
     }
 }
@@ -23,8 +25,13 @@ struct CodexAccountSwitcher {
 
     func switchActiveAccount(accountID: String) throws {
         let registryURL = homeDirectory.appending(path: ".codex/accounts/registry.json")
+        let accountSnapshotURL = accountSnapshotURL(for: accountID)
+        let activeAuthURL = homeDirectory.appending(path: ".codex/auth.json")
         guard fileManager.fileExists(atPath: registryURL.path) else {
             throw AccountActionError.missingRegistry
+        }
+        guard fileManager.fileExists(atPath: accountSnapshotURL.path) else {
+            throw AccountActionError.missingAccountSnapshot
         }
         let data = try Data(contentsOf: registryURL)
         guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -36,9 +43,43 @@ struct CodexAccountSwitcher {
             throw AccountActionError.missingAccount
         }
 
+        let previous = json["active_account_key"] as? String
+        if previous != accountID {
+            json["previous_active_account_key"] = previous
+        }
         json["active_account_key"] = accountID
+        json["active_account_activated_at_ms"] = Int(Date().timeIntervalSince1970 * 1000)
+
+        let selectedAuth = try Data(contentsOf: accountSnapshotURL)
+        let activeAuthPermissions = try? fileManager.attributesOfItem(atPath: activeAuthURL.path)[.posixPermissions]
+        try selectedAuth.write(to: activeAuthURL, options: [.atomic])
+        if let activeAuthPermissions {
+            try? fileManager.setAttributes([.posixPermissions: activeAuthPermissions], ofItemAtPath: activeAuthURL.path)
+        }
+
         let output = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try output.write(to: registryURL, options: [.atomic])
+    }
+
+    private func accountSnapshotURL(for accountID: String) -> URL {
+        let fileKey = accountID.needsCodexAccountFilenameEncoding ? accountID.codexAccountFileKey : accountID
+        return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
+    }
+}
+
+private extension String {
+    var needsCodexAccountFilenameEncoding: Bool {
+        guard !isEmpty, self != ".", self != ".." else { return true }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+        return unicodeScalars.contains { !allowed.contains($0) }
+    }
+
+    var codexAccountFileKey: String {
+        Data(utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 }
 

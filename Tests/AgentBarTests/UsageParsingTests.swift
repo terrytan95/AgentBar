@@ -217,23 +217,43 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(tooltip.contains("Total: 3.5000 mil Tokens"))
     }
 
-    func testCodexAccountSwitcherOnlyUpdatesActiveAccountKey() throws {
+    func testAccountMetadataShowsResetActivityAndAccountType() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let account = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 1, weeklyUsed: 8, now: now)
+
+        XCTAssertTrue(account.accountTypeLine(language: .english).contains("Account type: TEAM"))
+        XCTAssertTrue(account.lastActivityLine(language: .english).contains("Last activity:"))
+        XCTAssertTrue(account.fiveHourWindow?.resetLine(language: .english).contains("Reset:") == true)
+    }
+
+    func testCodexAccountSwitcherCopiesSnapshotToActiveAuthAndTracksPrevious() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let accountDir = temp.appending(path: ".codex/accounts")
         try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
         let registry = accountDir.appending(path: "registry.json")
+        let targetAccountID = "user-alpha::acct-b"
         try """
-        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"a@example.com"},{"account_key":"acct-b","email":"b@example.com"}]}
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"a@example.com"},{"account_key":"\(targetAccountID)","email":"b@example.com"}]}
         """.data(using: .utf8)!.write(to: registry)
+        let activeAuth = temp.appending(path: ".codex/auth.json")
+        try "old active auth".data(using: .utf8)!.write(to: activeAuth)
+        let encodedFileKey = Data(targetAccountID.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        try "selected account auth".data(using: .utf8)!.write(to: accountDir.appending(path: "\(encodedFileKey).auth.json"))
         defer { try? FileManager.default.removeItem(at: temp) }
 
-        try CodexAccountSwitcher(homeDirectory: temp).switchActiveAccount(accountID: "acct-b")
+        try CodexAccountSwitcher(homeDirectory: temp).switchActiveAccount(accountID: targetAccountID)
         let data = try Data(contentsOf: registry)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
-        XCTAssertEqual(json["active_account_key"] as? String, "acct-b")
+        XCTAssertEqual(json["active_account_key"] as? String, targetAccountID)
+        XCTAssertEqual(json["previous_active_account_key"] as? String, "acct-a")
         XCTAssertEqual(json["schema_version"] as? Int, 3)
         XCTAssertEqual((json["accounts"] as? [[String: Any]])?.count, 2)
+        XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "selected account auth")
     }
 
     private func testAccount(id: String, name: String, fiveHourUsed: Double, weeklyUsed: Double, now: Date) -> UsageAccount {

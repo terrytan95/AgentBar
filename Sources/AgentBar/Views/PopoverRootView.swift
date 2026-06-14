@@ -11,22 +11,23 @@ struct PopoverRootView: View {
             header
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 12) {
                     accountSection
                     summarySection
                     dataSourceSection
                 }
-                .padding(16)
+                .padding(14)
             }
             Divider()
             footer
         }
         .background(.regularMaterial)
-        .preferredColorScheme(store.settings.useDarkAppearance ? .dark : nil)
+        .preferredColorScheme(AppAppearance.colorScheme(useDarkAppearance: store.settings.useDarkAppearance))
+        .animation(nil, value: store.settings.useDarkAppearance)
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("AgentBar")
                     .font(.headline)
@@ -54,11 +55,11 @@ struct PopoverRootView: View {
             .buttonStyle(.borderless)
             .help(L.text("refresh", store.language))
         }
-        .padding(16)
+        .padding(14)
     }
 
     private var accountSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(L.text("overview", store.language))
                 .font(.subheadline.weight(.semibold))
             if store.isLoadingAccountInformation && store.accounts.isEmpty {
@@ -78,7 +79,7 @@ struct PopoverRootView: View {
     }
 
     private var summarySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(L.text("statistics", store.language))
                 .font(.subheadline.weight(.semibold))
             HStack {
@@ -132,7 +133,7 @@ struct PopoverRootView: View {
                 }
             }
         }
-        .padding(12)
+        .padding(9)
     }
 }
 
@@ -166,7 +167,7 @@ struct AccountRowView: View {
     var onSwitch: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.displayName)
@@ -221,7 +222,7 @@ struct AccountRowView: View {
                 .disabled(isSwitching)
             }
         }
-        .padding(10)
+        .padding(9)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 

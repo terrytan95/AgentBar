@@ -28,4 +28,13 @@ final class PopoverLayoutTests: XCTestCase {
 
         XCTAssertEqual(manyAccounts, PopoverLayout.maximumHeight)
     }
+
+    func testPopoverUsesCompactMenuBarSizing() {
+        XCTAssertLessThanOrEqual(PopoverLayout.width, 390)
+        XCTAssertLessThanOrEqual(PopoverLayout.maximumHeight, 740)
+    }
+
+    func testSettingsControlsCanReachTrailingSectionEdge() {
+        XCTAssertEqual(SettingsControlLayout.trailingInset, 0)
+    }
 }

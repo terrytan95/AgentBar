@@ -60,7 +60,7 @@ final class StatusItemController: NSObject {
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
         if popover?.isShown == true {
-            popover?.performClose(sender)
+            closePopover(sender)
             return
         }
 
@@ -79,6 +79,7 @@ final class StatusItemController: NSObject {
 
         let popover = NSPopover()
         popover.behavior = .transient
+        popover.delegate = self
         popover.contentSize = NSSize(
             width: PopoverLayout.width,
             height: PopoverLayout.height(
@@ -88,6 +89,20 @@ final class StatusItemController: NSObject {
         )
         popover.contentViewController = NSHostingController(rootView: content)
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+        sender.highlight(true)
         self.popover = popover
+    }
+
+    private func closePopover(_ sender: Any?) {
+        popover?.performClose(sender)
+        item?.button?.highlight(false)
+        popover = nil
+    }
+}
+
+extension StatusItemController: NSPopoverDelegate {
+    func popoverDidClose(_ notification: Notification) {
+        item?.button?.highlight(false)
+        popover = nil
     }
 }

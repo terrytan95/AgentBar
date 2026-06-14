@@ -16,13 +16,15 @@ struct AgentBarApp: App {
         WindowGroup("AgentBar", id: "statistics") {
             StatisticsView(store: store)
                 .frame(minWidth: 1180, minHeight: 760)
-                .preferredColorScheme(settings.useDarkAppearance ? .dark : nil)
+                .preferredColorScheme(AppAppearance.colorScheme(useDarkAppearance: settings.useDarkAppearance))
+                .animation(nil, value: settings.useDarkAppearance)
         }
         .defaultSize(width: 1480, height: 940)
 
         Settings {
             SettingsView(store: store)
-                .preferredColorScheme(settings.useDarkAppearance ? .dark : nil)
+                .preferredColorScheme(AppAppearance.colorScheme(useDarkAppearance: settings.useDarkAppearance))
+                .animation(nil, value: settings.useDarkAppearance)
         }
         .commandsRemoved()
     }

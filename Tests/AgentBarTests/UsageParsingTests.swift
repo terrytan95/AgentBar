@@ -64,6 +64,22 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestWeekly?.usedPercent, 4)
     }
 
+    @MainActor
+    func testDarkThemeSettingPersistsAndToneColorCopyIsLocalized() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+
+        XCTAssertFalse(settings.useDarkAppearance)
+        settings.useDarkAppearance = true
+
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertTrue(reloaded.useDarkAppearance)
+        XCTAssertEqual(L.text("tone_color", .english), "Tone color")
+        XCTAssertEqual(L.text("dark_theme", .chinese), "深色主题")
+    }
+
     func testCodexReadPrefersLatestSessionRateLimitsForActiveAccount() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }

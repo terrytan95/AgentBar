@@ -64,6 +64,77 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestWeekly?.usedPercent, 4)
     }
 
+    func testCodexReadPrefersLatestSessionRateLimitsForActiveAccount() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "active",
+          "accounts": [
+            {
+              "account_key": "active",
+              "email": "active@example.com",
+              "plan": "team",
+              "last_usage": {
+                "primary": {"used_percent": 90, "window_minutes": 300, "resets_at": 1781400000},
+                "secondary": {"used_percent": 80, "window_minutes": 10080, "resets_at": 1781900000}
+              }
+            },
+            {
+              "account_key": "inactive",
+              "email": "inactive@example.com",
+              "plan": "team",
+              "last_usage": {
+                "primary": {"used_percent": 40, "window_minutes": 300, "resets_at": 1781400000},
+                "secondary": {"used_percent": 30, "window_minutes": 10080, "resets_at": 1781900000}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"type":"event_msg","timestamp":"2026-06-14T06:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":34,"window_minutes":10080,"resets_at":1781910000},"plan_type":"team"}}}
+        """.data(using: .utf8)!.write(to: sessionDir.appending(path: "current.jsonl"))
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let active = try XCTUnwrap(snapshot.accounts.first { $0.id == "active" })
+        let inactive = try XCTUnwrap(snapshot.accounts.first { $0.id == "inactive" })
+
+        XCTAssertEqual(active.fiveHourWindow?.usedPercent, 12)
+        XCTAssertEqual(active.weeklyWindow?.usedPercent, 34)
+        XCTAssertEqual(inactive.fiveHourWindow?.usedPercent, 40)
+        XCTAssertEqual(inactive.weeklyWindow?.usedPercent, 30)
+    }
+
+    func testCodexReadUsesNewestRateLimitEventAcrossSessionFiles() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {"schema_version":3,"active_account_key":"active","accounts":[{"account_key":"active","email":"active@example.com","plan":"team"}]}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"type":"event_msg","timestamp":"2026-06-14T05:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":70,"window_minutes":300,"resets_at":1781400000},"secondary":{"used_percent":60,"window_minutes":10080,"resets_at":1781900000},"plan_type":"team"}}}
+        """.data(using: .utf8)!.write(to: sessionDir.appending(path: "z-older.jsonl"))
+        try """
+        {"type":"event_msg","timestamp":"2026-06-14T06:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":9,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":11,"window_minutes":10080,"resets_at":1781910000},"plan_type":"team"}}}
+        """.data(using: .utf8)!.write(to: sessionDir.appending(path: "a-newer.jsonl"))
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let active = try XCTUnwrap(snapshot.accounts.first)
+
+        XCTAssertEqual(active.fiveHourWindow?.usedPercent, 9)
+        XCTAssertEqual(active.weeklyWindow?.usedPercent, 11)
+    }
+
     func testOpenAIModelPricingCalculatesPointCost() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"model":"gpt-5.1","last_token_usage":{"input_tokens":1000000,"cached_input_tokens":100000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}

@@ -231,4 +231,5 @@ struct CodexSessionMetrics: Equatable, Sendable {
     var points: [UsagePoint]
     var latestFiveHour: UsageWindow?
     var latestWeekly: UsageWindow?
+    var latestRateLimitAt: Date?
 }

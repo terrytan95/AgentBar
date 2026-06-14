@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct StatisticsView: View {
@@ -6,6 +7,7 @@ struct StatisticsView: View {
     @State private var serviceFilter: DashboardServiceFilter = .all
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab = .usage
+    @State private var currentLimitsHeight: CGFloat = 360
 
     init(store: UsageStore) {
         self.store = store
@@ -208,10 +210,20 @@ struct StatisticsView: View {
                         modelRows
                     }
                 }
-                Panel(title: L.text("current_limits", store.language)) {
+                .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
+
+                ResizablePanel(
+                    title: L.text("current_limits", store.language),
+                    height: $currentLimitsHeight,
+                    minHeight: 240,
+                    maxHeight: 720,
+                    theme: settings.themeColor
+                ) {
                     currentLimitsRows
                 }
+                .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
             }
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
@@ -418,7 +430,6 @@ struct StatisticsView: View {
                     }
                 }
             }
-            .frame(maxHeight: 360)
         }
     }
 
@@ -603,10 +614,69 @@ private struct Panel<Content: View>: View {
     }
 }
 
+private struct ResizablePanel<Content: View>: View {
+    var title: String
+    @Binding var height: CGFloat
+    var minHeight: CGFloat
+    var maxHeight: CGFloat
+    var theme: AppThemeColor
+    @ViewBuilder var content: () -> Content
+    @GestureState private var dragOffset: CGFloat = 0
+
+    private var effectiveHeight: CGFloat {
+        clamped(height + dragOffset)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+            content()
+                .frame(height: effectiveHeight)
+                .clipped()
+            resizeHandle
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .dashboardPanel()
+    }
+
+    private var resizeHandle: some View {
+        HStack {
+            Spacer()
+            Capsule()
+                .fill(theme.primary.opacity(0.28))
+                .frame(width: 46, height: 5)
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 1)
+                        .updating($dragOffset) { value, state, _ in
+                            state = value.translation.height
+                        }
+                        .onEnded { value in
+                            height = clamped(height + value.translation.height)
+                        }
+                )
+                .accessibilityLabel("Resize Current limits")
+            Spacer()
+        }
+        .padding(.top, 1)
+    }
+
+    private func clamped(_ value: CGFloat) -> CGFloat {
+        min(max(value, minHeight), maxHeight)
+    }
+}
+
 private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
     var theme: AppThemeColor
+    @State private var hoveredBarID: Date?
 
     var body: some View {
         GeometryReader { proxy in
@@ -615,60 +685,106 @@ private struct DashboardStackedBars: View {
                     .frame(width: proxy.size.width, height: proxy.size.height)
             } else {
                 let maxValue = max(1, bars.map { $0.codexTokens + $0.claudeTokens }.max() ?? 1)
-                VStack(spacing: 4) {
-                    HStack(alignment: .bottom, spacing: 8) {
-                        VStack(alignment: .trailing) {
-                            Text(DisplayFormatters.compactTokenString(maxValue, language: language))
+                let plotHeight = max(0, proxy.size.height - 36)
+                ZStack(alignment: .top) {
+                    VStack(spacing: 4) {
+                        HStack(alignment: .bottom, spacing: 8) {
+                            VStack(alignment: .trailing) {
+                                Text(DisplayFormatters.compactTokenString(maxValue, language: language))
+                                Spacer()
+                                Text(DisplayFormatters.compactTokenString(maxValue / 2, language: language))
+                                Spacer()
+                                Text("0")
+                            }
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: max(1, proxy.size.height - 24))
+
+                            GeometryReader { plotProxy in
+                                ZStack(alignment: .bottom) {
+                                    VStack {
+                                        Divider()
+                                        Spacer()
+                                        Divider()
+                                        Spacer()
+                                        Divider()
+                                    }
+                                    .opacity(0.45)
+
+                                    HStack(alignment: .bottom, spacing: 15) {
+                                        ForEach(bars) { bar in
+                                            ZStack(alignment: .bottom) {
+                                                VStack(spacing: 0) {
+                                                    Rectangle()
+                                                        .fill(theme.secondary)
+                                                        .frame(height: plotHeight * CGFloat(bar.claudeTokens) / CGFloat(maxValue))
+                                                    Rectangle()
+                                                        .fill(theme.tertiary)
+                                                        .frame(height: plotHeight * CGFloat(bar.codexTokens) / CGFloat(maxValue))
+                                                }
+                                                .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                                                .frame(maxWidth: 28)
+                                            }
+                                            .frame(width: 32, height: plotHeight, alignment: .bottom)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                }
+                                .frame(width: plotProxy.size.width, height: plotHeight, alignment: .bottom)
+                                .overlay {
+                                    PlotHoverTrackingView { location, size in
+                                        if let location {
+                                            hoveredBarID = barID(at: location.x, plotWidth: size.width)
+                                        } else {
+                                            hoveredBarID = nil
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(height: plotHeight)
+                        }
+                        HStack {
+                            Text(axisDate(bars.first?.day))
                             Spacer()
-                            Text(DisplayFormatters.compactTokenString(maxValue / 2, language: language))
+                            Text(axisDate(bars[bars.count / 2].day))
                             Spacer()
-                            Text("0")
+                            Text(axisDate(bars.last?.day))
                         }
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.secondary)
-                        .frame(width: 44, height: max(1, proxy.size.height - 24))
-
-                        ZStack(alignment: .bottom) {
-                            VStack {
-                                Divider()
-                                Spacer()
-                                Divider()
-                                Spacer()
-                                Divider()
-                            }
-                            .opacity(0.45)
-
-                            HStack(alignment: .bottom, spacing: 15) {
-                                ForEach(bars) { bar in
-                                    VStack(spacing: 0) {
-                                        Rectangle()
-                                            .fill(theme.secondary)
-                                            .frame(height: max(0, proxy.size.height - 36) * CGFloat(bar.claudeTokens) / CGFloat(maxValue))
-                                        Rectangle()
-                                            .fill(theme.tertiary)
-                                            .frame(height: max(0, proxy.size.height - 36) * CGFloat(bar.codexTokens) / CGFloat(maxValue))
-                                    }
-                                    .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-                                    .frame(maxWidth: 28)
-                                    .help(bar.tooltipText(language: language))
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        }
+                        .padding(.leading, 52)
                     }
-                    HStack {
-                        Text(axisDate(bars.first?.day))
-                        Spacer()
-                        Text(axisDate(bars[bars.count / 2].day))
-                        Spacer()
-                        Text(axisDate(bars.last?.day))
+
+                    if let hoveredBar {
+                        ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
+                            .padding(.top, 4)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                            .allowsHitTesting(false)
                     }
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 52)
                 }
+                .animation(.easeOut(duration: 0.12), value: hoveredBarID)
             }
         }
+    }
+
+    private var hoveredBar: DailyUsageBar? {
+        guard let hoveredBarID else { return nil }
+        return bars.first { $0.id == hoveredBarID }
+    }
+
+    private func barID(at x: CGFloat, plotWidth: CGFloat) -> Date? {
+        let barWidth: CGFloat = 32
+        let spacing: CGFloat = 15
+        let totalWidth = CGFloat(bars.count) * barWidth + CGFloat(max(0, bars.count - 1)) * spacing
+        let leading = max(0, (plotWidth - totalWidth) / 2)
+        let relativeX = x - leading
+        guard relativeX >= 0, relativeX <= totalWidth else { return nil }
+        let stride = barWidth + spacing
+        let index = Int(relativeX / stride)
+        guard bars.indices.contains(index) else { return nil }
+        let barStart = CGFloat(index) * stride
+        guard relativeX >= barStart, relativeX <= barStart + barWidth else { return nil }
+        return bars[index].id
     }
 
     private func axisDate(_ date: Date?) -> String {
@@ -677,6 +793,113 @@ private struct DashboardStackedBars: View {
         formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
         formatter.setLocalizedDateFormatFromTemplate("MMM d")
         return formatter.string(from: date)
+    }
+}
+
+private struct ChartHoverCallout: View {
+    var bar: DailyUsageBar
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(dateText)
+                .font(.system(size: 11, weight: .bold))
+            metricRow("Codex", value: bar.codexTokens, color: theme.tertiary)
+            metricRow("Claude", value: bar.claudeTokens, color: theme.secondary)
+            Divider()
+            HStack {
+                Text(L.text("total", language))
+                Spacer()
+                Text("\(DisplayFormatters.compactTokenString(bar.codexTokens + bar.claudeTokens, language: language)) \(L.text("tokens", language))")
+                    .monospacedDigit()
+            }
+        }
+        .font(.system(size: 10, weight: .medium))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(width: 210)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
+    }
+
+    private func metricRow(_ title: String, value: Int, color: Color) -> some View {
+        HStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(color)
+                .frame(width: 7, height: 7)
+            Text(title)
+            Spacer()
+            Text("\(DisplayFormatters.compactTokenString(value, language: language)) \(L.text("tokens", language))")
+                .monospacedDigit()
+        }
+    }
+
+    private var dateText: String {
+        let formatter = DateFormatter()
+        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.setLocalizedDateFormatFromTemplate("yMMMd")
+        return formatter.string(from: bar.day)
+    }
+}
+
+private struct PlotHoverTrackingView: NSViewRepresentable {
+    var onHover: (CGPoint?, CGSize) -> Void
+
+    func makeNSView(context: Context) -> HoverTrackingNSView {
+        let view = HoverTrackingNSView()
+        view.onHover = onHover
+        return view
+    }
+
+    func updateNSView(_ nsView: HoverTrackingNSView, context: Context) {
+        nsView.onHover = onHover
+    }
+
+    final class HoverTrackingNSView: NSView {
+        var onHover: ((CGPoint?, CGSize) -> Void)?
+        private var trackingArea: NSTrackingArea?
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = false
+        }
+
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            wantsLayer = false
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let trackingArea {
+                removeTrackingArea(trackingArea)
+            }
+            let area = NSTrackingArea(
+                rect: bounds,
+                options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(area)
+            trackingArea = area
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            onHover?(convert(event.locationInWindow, from: nil), bounds.size)
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            onHover?(convert(event.locationInWindow, from: nil), bounds.size)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            onHover?(nil, bounds.size)
+        }
     }
 }
 

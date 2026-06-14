@@ -12,7 +12,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "AgentBar",
-            path: "Sources/AgentBar"
+            path: "Sources/AgentBar",
+            resources: [
+                .copy("Resources/AgentBarLogo.png"),
+                .copy("Resources/AgentBarIcon.icns")
+            ]
         ),
         .testTarget(
             name: "AgentBarTests",

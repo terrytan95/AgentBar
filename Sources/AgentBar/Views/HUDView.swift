@@ -6,8 +6,15 @@ struct HUDView: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Label("AgentBar", systemImage: "chart.line.uptrend.xyaxis")
-                .font(.headline)
+            HStack(spacing: 8) {
+                Image(nsImage: AppLogo.image())
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 30, height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                Text("AgentBar")
+                    .font(.headline)
+            }
             Divider()
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(DisplayFormatters.percentString(store.lowestRemaining)) \(L.text("remaining", store.language))")

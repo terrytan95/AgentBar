@@ -7,7 +7,12 @@ struct SmokeVerificationView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("AgentBar smoke verification", systemImage: "checkmark.seal")
+                Image(nsImage: AppLogo.image())
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 34, height: 34)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                Text("AgentBar smoke verification")
                     .font(.title3.weight(.semibold))
                 Spacer()
                 Text("Menu bar: \(store.menuBarTitle)")

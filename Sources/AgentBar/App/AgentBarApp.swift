@@ -17,7 +17,13 @@ struct AgentBarApp: App {
             PopoverRootView(store: store)
                 .frame(width: 430, height: 640)
         } label: {
-            Label(store.menuBarTitle, systemImage: "chart.line.uptrend.xyaxis")
+            HStack(spacing: 4) {
+                Image(nsImage: AppLogo.templateImage())
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+                Text(store.menuBarTitle)
+            }
         }
         .menuBarExtraStyle(.window)
 

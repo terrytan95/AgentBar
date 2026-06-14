@@ -1,0 +1,81 @@
+import Foundation
+
+@MainActor
+final class UsageStore: ObservableObject {
+    @Published private(set) var snapshots: [UsageService: UsageSnapshot] = [:]
+    @Published private(set) var accounts: [UsageAccount] = []
+    @Published private(set) var points: [UsagePoint] = []
+    @Published private(set) var isRefreshing = false
+    @Published private(set) var lastError: String?
+    @Published var selectedRange: UsageRange = .today
+    @Published var customStart = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+    @Published var customEnd = Date()
+
+    let settings: SettingsStore
+    private var timer: Timer?
+
+    init(settings: SettingsStore = SettingsStore()) {
+        self.settings = settings
+        refresh()
+        configureTimer()
+    }
+
+    var language: AppLanguage { settings.language }
+
+    var menuBarTitle: String {
+        switch settings.menuBarDisplayMode {
+        case .lowestRemaining:
+            return DisplayFormatters.percentString(lowestRemaining)
+        case .totalTokens:
+            return DisplayFormatters.tokenString(summary.totalTokens)
+        case .codexRemaining:
+            return DisplayFormatters.percentString(codexRemaining)
+        }
+    }
+
+    var lowestRemaining: Double? {
+        visibleAccounts.compactMap(\.mostConstrainedRemainingPercent).min()
+    }
+
+    var codexRemaining: Double? {
+        visibleAccounts.filter { $0.service == .codex }.compactMap(\.mostConstrainedRemainingPercent).min()
+    }
+
+    var visibleAccounts: [UsageAccount] {
+        accounts.filter { account in
+            switch account.service {
+            case .codex: settings.showCodexInMenuBar
+            case .claudeCode: settings.showClaudeInMenuBar
+            }
+        }
+    }
+
+    var summary: UsageSummary {
+        UsageStatistics.summarize(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
+    }
+
+    var securityNotes: [String] {
+        snapshots.values.flatMap(\.securityNotes)
+    }
+
+    func refresh() {
+        isRefreshing = true
+        lastError = nil
+
+        let codex = CodexUsageReader().read()
+        let claude = ClaudeUsageReader().read()
+        snapshots = [.codex: codex, .claudeCode: claude]
+        accounts = codex.accounts + claude.accounts
+        points = codex.points + claude.points
+        isRefreshing = false
+    }
+
+    func configureTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: max(15, settings.refreshInterval), repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refresh()
+            }
+        }
+    }
+}

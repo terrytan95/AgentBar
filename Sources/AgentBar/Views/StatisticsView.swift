@@ -307,7 +307,7 @@ struct StatisticsView: View {
                 }
             }
         }
-        .frame(maxWidth: 860, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var summary: UsageSummary {
@@ -1089,6 +1089,7 @@ private struct SettingsRow<Content: View>: View {
             }
             Spacer()
             control()
+                .frame(minWidth: 260, alignment: .trailing)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

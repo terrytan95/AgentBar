@@ -36,16 +36,24 @@ struct CodexUsageReader {
         if !accounts.isEmpty {
             accounts = accounts.map { account in
                 var account = account
-                if account.fiveHourWindow == nil {
+                if account.isActive, let latestFiveHour = metrics.latestFiveHour {
+                    account.fiveHourWindow = latestFiveHour
+                } else if account.fiveHourWindow == nil {
                     account.fiveHourWindow = metrics.latestFiveHour
                 }
-                if account.weeklyWindow == nil {
+                if account.isActive, let latestWeekly = metrics.latestWeekly {
+                    account.weeklyWindow = latestWeekly
+                } else if account.weeklyWindow == nil {
                     account.weeklyWindow = metrics.latestWeekly
                 }
                 if account.tokens.total == 0 {
                     account.tokens = metrics.tokenTotals
                 }
-                account.lastUpdated = account.lastUpdated ?? now
+                if account.isActive {
+                    account.lastUpdated = metrics.latestRateLimitAt ?? account.lastUpdated ?? now
+                } else {
+                    account.lastUpdated = account.lastUpdated ?? now
+                }
                 return account
             }
         }
@@ -103,7 +111,7 @@ struct CodexUsageReader {
 
     static func parseSessionJsonl(data: Data) throws -> CodexSessionMetrics {
         guard let body = String(data: data, encoding: .utf8) else {
-            return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil)
+            return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
         }
 
         var eventCount = 0
@@ -111,6 +119,7 @@ struct CodexUsageReader {
         var points: [UsagePoint] = []
         var fiveHour: UsageWindow?
         var weekly: UsageWindow?
+        var latestRateLimitAt: Date?
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
@@ -138,15 +147,19 @@ struct CodexUsageReader {
                 )
             }
 
-            if let primary = payload.rateLimits?.primary {
-                fiveHour = UsageWindow(kind: .fiveHour, usedPercent: primary.usedPercent, windowMinutes: primary.windowMinutes, resetsAt: epochDate(primary.resetsAt))
-            }
-            if let secondary = payload.rateLimits?.secondary {
-                weekly = UsageWindow(kind: .weekly, usedPercent: secondary.usedPercent, windowMinutes: secondary.windowMinutes, resetsAt: epochDate(secondary.resetsAt))
+            if payload.rateLimits != nil,
+               latestRateLimitAt == nil || eventDate >= (latestRateLimitAt ?? .distantPast) {
+                if let primary = payload.rateLimits?.primary {
+                    fiveHour = UsageWindow(kind: .fiveHour, usedPercent: primary.usedPercent, windowMinutes: primary.windowMinutes, resetsAt: epochDate(primary.resetsAt))
+                }
+                if let secondary = payload.rateLimits?.secondary {
+                    weekly = UsageWindow(kind: .weekly, usedPercent: secondary.usedPercent, windowMinutes: secondary.windowMinutes, resetsAt: epochDate(secondary.resetsAt))
+                }
+                latestRateLimitAt = eventDate
             }
         }
 
-        return CodexSessionMetrics(eventCount: eventCount, tokenTotals: latestTotal, points: points, latestFiveHour: fiveHour, latestWeekly: weekly)
+        return CodexSessionMetrics(eventCount: eventCount, tokenTotals: latestTotal, points: points, latestFiveHour: fiveHour, latestWeekly: weekly, latestRateLimitAt: latestRateLimitAt)
     }
 
     private func readSessionMetrics(root: URL) -> CodexSessionMetrics {
@@ -155,10 +168,10 @@ struct CodexUsageReader {
             includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else {
-            return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil)
+            return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
         }
 
-        var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil)
+        var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
 
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
             guard let data = try? Data(contentsOf: fileURL),
@@ -170,8 +183,12 @@ struct CodexUsageReader {
                 aggregate.tokenTotals = aggregate.tokenTotals + metrics.tokenTotals
             }
             aggregate.points.append(contentsOf: metrics.points)
-            aggregate.latestFiveHour = metrics.latestFiveHour ?? aggregate.latestFiveHour
-            aggregate.latestWeekly = metrics.latestWeekly ?? aggregate.latestWeekly
+            if let latestRateLimitAt = metrics.latestRateLimitAt,
+               aggregate.latestRateLimitAt == nil || latestRateLimitAt >= (aggregate.latestRateLimitAt ?? .distantPast) {
+                aggregate.latestFiveHour = metrics.latestFiveHour
+                aggregate.latestWeekly = metrics.latestWeekly
+                aggregate.latestRateLimitAt = latestRateLimitAt
+            }
         }
 
         return aggregate

@@ -6,12 +6,13 @@ struct StatisticsView: View {
     @ObservedObject private var settings: SettingsStore
     @State private var serviceFilter: DashboardServiceFilter = .all
     @State private var viewMode: DashboardViewMode = .overview
-    @State private var topTab: DashboardTopTab = .usage
+    @State private var topTab: DashboardTopTab
     @State private var currentLimitsHeight: CGFloat = 360
 
-    init(store: UsageStore) {
+    init(store: UsageStore, initialTab: DashboardTopTab = .usage) {
         self.store = store
         self.settings = store.settings
+        _topTab = State(initialValue: initialTab)
     }
 
     var body: some View {
@@ -46,6 +47,12 @@ struct StatisticsView: View {
         }
         .tint(settings.themeColor.primary)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onReceive(NotificationCenter.default.publisher(for: DashboardNavigation.tabRequestNotification)) { notification in
+            guard let rawValue = notification.userInfo?["tab"] as? String,
+                  let tab = DashboardTopTab(rawValue: rawValue)
+            else { return }
+            setTopTab(tab)
+        }
     }
 
     private var sidebar: some View {
@@ -78,6 +85,14 @@ struct StatisticsView: View {
         .padding(.top, 58)
         .frame(maxHeight: .infinity, alignment: .top)
         .glassPanel(cornerRadius: 0, interactive: false)
+    }
+
+    private func setTopTab(_ tab: DashboardTopTab) {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            topTab = tab
+        }
     }
 
     private func sidebarGroup<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -119,7 +134,8 @@ struct StatisticsView: View {
             }
             .foregroundStyle(active ? .white : (enabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.72)))
             .padding(.horizontal, 10)
-            .frame(height: 30)
+            .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .background(active ? settings.themeColor.primary : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -153,14 +169,7 @@ struct StatisticsView: View {
                     .frame(height: 30)
                     .glassPanel(cornerRadius: 12, interactive: true)
 
-                    Button {
-                        store.refresh(force: true)
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .buttonStyle(.borderless)
-                    .help(L.text("refresh", store.language))
+                    dashboardRefreshButton
                 }
                 .padding(.horizontal, 22)
                 .padding(.bottom, 8)
@@ -168,6 +177,36 @@ struct StatisticsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .background(.thinMaterial)
+    }
+
+    private var dashboardRefreshButton: some View {
+        Button {
+            store.refresh(force: true, showManualFeedback: true)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(L.text("refresh", store.language))
+                    .font(.system(size: 12, weight: .semibold))
+                ZStack {
+                    if store.isManualRefreshFeedbackVisible {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(width: 12, height: 12)
+            }
+            .foregroundStyle(settings.themeColor.primary)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(L.text("refresh", store.language)))
+        }
+        .buttonStyle(.plain)
+        .glassPanel(cornerRadius: 10, interactive: true)
+        .help(L.text("refresh", store.language))
     }
 
     @ViewBuilder
@@ -519,7 +558,7 @@ struct StatisticsView: View {
     }
 }
 
-private enum DashboardTopTab: Hashable {
+enum DashboardTopTab: String, Hashable {
     case usage
     case settings
 }

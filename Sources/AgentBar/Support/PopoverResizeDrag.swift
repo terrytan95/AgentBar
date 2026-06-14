@@ -1,6 +1,8 @@
 import Foundation
 
 struct PopoverResizeDrag: Equatable, Sendable {
+    static let minimumIntermediateDelta = 2.0
+
     var bounds: PanelResizeBounds
 
     func height(startHeight: Double, startScreenY: Double, currentScreenY: Double) -> Double {
@@ -14,7 +16,7 @@ struct PopoverResizeDrag: Equatable, Sendable {
         previousHeight: Double?,
         nextHeight: Double,
         isFinal: Bool,
-        minimumDelta: Double = 0.5
+        minimumDelta: Double = minimumIntermediateDelta
     ) -> Bool {
         guard !isFinal, let previousHeight else { return true }
         return abs(previousHeight - nextHeight) >= minimumDelta

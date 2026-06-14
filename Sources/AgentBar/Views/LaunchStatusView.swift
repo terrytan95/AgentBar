@@ -3,21 +3,35 @@ import SwiftUI
 
 @MainActor
 enum MainWindowPresenter {
-    static func showMainWindow() {
+    static func showMainWindow(initialTab: DashboardTopTab = .usage) {
         if let window = NSApp.windows.first(where: { $0.title == "AgentBar" && $0.isVisible }) {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            DashboardNavigation.request(initialTab)
             return
         }
-        LaunchStatusWindowController.shared.show()
+        LaunchStatusWindowController.shared.show(initialTab: initialTab)
     }
 }
 
 struct LaunchStatusView: View {
     @StateObject private var store = UsageStore()
+    var initialTab: DashboardTopTab = .usage
 
     var body: some View {
-        StatisticsView(store: store)
+        StatisticsView(store: store, initialTab: initialTab)
+    }
+}
+
+enum DashboardNavigation {
+    static let tabRequestNotification = Notification.Name("AgentBarDashboardTabRequest")
+
+    static func request(_ tab: DashboardTopTab) {
+        NotificationCenter.default.post(
+            name: tabRequestNotification,
+            object: nil,
+            userInfo: ["tab": tab.rawValue]
+        )
     }
 }
 
@@ -33,11 +47,12 @@ final class LaunchStatusWindowController {
 
     private var window: NSWindow?
 
-    func show() {
+    func show(initialTab: DashboardTopTab = .usage) {
         if let window {
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
+            DashboardNavigation.request(initialTab)
             return
         }
 
@@ -49,7 +64,7 @@ final class LaunchStatusWindowController {
         )
         window.title = "AgentBar"
         window.center()
-        window.contentView = NSHostingView(rootView: LaunchStatusView())
+        window.contentView = NSHostingView(rootView: LaunchStatusView(initialTab: initialTab))
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()

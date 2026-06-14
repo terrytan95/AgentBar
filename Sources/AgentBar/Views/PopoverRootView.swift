@@ -43,11 +43,22 @@ struct ResizablePopoverRootView: View {
         .overlay(alignment: .bottom) {
             resizeBorder
         }
+        .onAppear {
+            refreshPopoverLayout()
+        }
         .onChange(of: settings.popoverHeight) { _, newHeight in
             onHeightChange(CGFloat(newHeight))
         }
         .transaction { transaction in
             transaction.animation = nil
+        }
+    }
+
+    private func refreshPopoverLayout() {
+        let height = CGFloat(settings.popoverHeight)
+        onHeightChange(height)
+        DispatchQueue.main.async {
+            onHeightChange(height)
         }
     }
 
@@ -88,7 +99,7 @@ struct PopoverRootView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollView(.vertical, showsIndicators: false) {
+            PopoverScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     accountSection
                     summarySection
@@ -96,9 +107,8 @@ struct PopoverRootView: View {
                 }
                 .padding(.vertical, PopoverLayout.horizontalInset)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(HiddenScrollIndicators())
             }
-            .scrollIndicators(.hidden)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             footer
         }

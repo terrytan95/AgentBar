@@ -65,7 +65,8 @@ struct CodexUsageReader {
             accounts: accounts,
             points: points,
             securityNotes: notes,
-            refreshedAt: now
+            refreshedAt: now,
+            pricingFingerprint: Pricing.fingerprint
         )
     }
 
@@ -105,7 +106,8 @@ struct CodexUsageReader {
             accounts: accounts,
             points: [],
             securityNotes: ["Parsed account metadata only; credential auth files are excluded."],
-            refreshedAt: now
+            refreshedAt: now,
+            pricingFingerprint: Pricing.fingerprint
         )
     }
 
@@ -142,7 +144,7 @@ struct CodexUsageReader {
                         model: model,
                         date: eventDate,
                         tokens: tokens,
-                        estimatedCostUSD: TokenPricing.estimate(service: .codex, model: model, tokens: tokens)
+                        estimatedCostUSD: Pricing.cost(model: model, tokens: tokens)
                     )
                 )
             }

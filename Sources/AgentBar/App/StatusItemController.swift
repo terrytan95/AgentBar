@@ -63,6 +63,11 @@ final class StatusItemController: NSObject {
             closePopover(sender)
             return
         }
+        let height = PopoverLayout.height(
+            accountCount: store.accounts.count,
+            sourceCount: store.uiDataSourceSnapshots.count,
+            preferredHeight: CGFloat(settings.popoverHeight)
+        )
 
         let content = PopoverRootView(
             store: store,
@@ -71,10 +76,7 @@ final class StatusItemController: NSObject {
         )
         .frame(
             width: PopoverLayout.width,
-            height: PopoverLayout.height(
-                accountCount: store.accounts.count,
-                sourceCount: store.uiDataSourceSnapshots.count
-            )
+            height: height
         )
 
         let popover = NSPopover()
@@ -82,10 +84,7 @@ final class StatusItemController: NSObject {
         popover.delegate = self
         popover.contentSize = NSSize(
             width: PopoverLayout.width,
-            height: PopoverLayout.height(
-                accountCount: store.accounts.count,
-                sourceCount: store.uiDataSourceSnapshots.count
-            )
+            height: height
         )
         popover.contentViewController = NSHostingController(rootView: content)
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)

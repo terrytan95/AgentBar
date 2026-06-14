@@ -24,7 +24,8 @@ struct ClaudeUsageReader {
                 accounts: [],
                 points: [],
                 securityNotes: ["Claude Code requires explicit local CLI data or Anthropic Admin API authorization for live usage and costs."],
-                refreshedAt: now
+                refreshedAt: now,
+                pricingFingerprint: Pricing.fingerprint
             )
         }
 
@@ -39,7 +40,8 @@ struct ClaudeUsageReader {
             accounts: [],
             points: [],
             securityNotes: ["\(source) Official usage/cost APIs require user-provided Anthropic authorization."],
-            refreshedAt: now
+            refreshedAt: now,
+            pricingFingerprint: Pricing.fingerprint
         )
     }
 }

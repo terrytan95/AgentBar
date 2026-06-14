@@ -51,9 +51,13 @@ enum DisplayFormatters {
         return tokenString(value)
     }
 
-    static func costString(_ value: Double?) -> String {
+    static func costString(_ value: Decimal?) -> String {
         guard let value else { return "N/A" }
-        return currency.string(from: NSNumber(value: value)) ?? String(format: "$%.4f", value)
+        return currency.string(from: value as NSDecimalNumber) ?? "$\(value)"
+    }
+
+    static func costString(_ value: Decimal) -> String {
+        costString(Optional(value))
     }
 
     static func percentString(_ value: Double?) -> String {

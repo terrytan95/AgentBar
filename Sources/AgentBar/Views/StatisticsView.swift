@@ -40,6 +40,9 @@ struct StatisticsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.regularMaterial)
+            .transaction { transaction in
+                transaction.animation = nil
+            }
         }
         .tint(settings.themeColor.primary)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -265,6 +268,20 @@ struct StatisticsView: View {
                     .labelsHidden()
                     .settingsControl(width: SettingsControlLayout.widePickerWidth)
                 }
+                SettingsRow(title: L.text("popover_height", store.language), subtitle: L.text("popover_height_subtitle", store.language)) {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Slider(
+                            value: $settings.popoverHeight,
+                            in: Double(PopoverLayout.minimumHeight)...Double(PopoverLayout.maximumHeight),
+                            step: 20
+                        )
+                        Text("\(Int(settings.popoverHeight)) px")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    .frame(width: 180, alignment: .trailing)
+                }
             }
 
             SettingsGroup(title: L.text("refresh", store.language), subtitle: L.text("refresh_settings_subtitle", store.language)) {
@@ -355,7 +372,7 @@ struct StatisticsView: View {
     private func serviceCostText(_ service: UsageService) -> String {
         let costs = filteredPoints.filter { $0.service == service }.compactMap(\.estimatedCostUSD)
         guard !costs.isEmpty else { return L.text("no_cost_data", store.language) }
-        return DisplayFormatters.costString(costs.reduce(0, +))
+        return DisplayFormatters.costString(costs.reduce(Decimal(0), +))
     }
 
     private func serviceShareText(_ service: UsageService) -> String {
@@ -364,7 +381,7 @@ struct StatisticsView: View {
         return "\(Int((Double(value) / Double(total) * 100).rounded()))% \(L.text("share", store.language))"
     }
 
-    private func costText(_ value: Double?) -> String {
+    private func costText(_ value: Decimal?) -> String {
         guard let value else { return L.text("no_cost_data", store.language) }
         return DisplayFormatters.costString(value)
     }
@@ -480,7 +497,7 @@ struct StatisticsView: View {
                 name: model,
                 input: tokens.input,
                 output: tokens.output,
-                cost: costValues.isEmpty ? nil : costValues.reduce(0, +),
+                cost: costValues.isEmpty ? nil : costValues.reduce(Decimal(0), +),
                 isHeader: false,
                 dividerAfter: false
             )
@@ -535,7 +552,11 @@ private struct DashboardTopTabBar: View {
 
     private func tabButton(_ tab: DashboardTopTab, title: String) -> some View {
         Button {
-            selection = tab
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                selection = tab
+            }
         } label: {
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
@@ -727,6 +748,10 @@ private struct DashboardStackedBars: View {
     var language: AppLanguage
     var theme: AppThemeColor
     @State private var hoveredBarID: Date?
+    @State private var hoverLocation: CGPoint?
+    @State private var hoverPlotSize: CGSize = .zero
+
+    private let calloutSize = CGSize(width: 210, height: 94)
 
     var body: some View {
         GeometryReader { proxy in
@@ -785,8 +810,11 @@ private struct DashboardStackedBars: View {
                                     PlotHoverTrackingView { location, size in
                                         if let location {
                                             hoveredBarID = barID(at: location.x, plotWidth: size.width)
+                                            hoverLocation = location
+                                            hoverPlotSize = size
                                         } else {
                                             hoveredBarID = nil
+                                            hoverLocation = nil
                                         }
                                     }
                                 }
@@ -805,14 +833,17 @@ private struct DashboardStackedBars: View {
                         .padding(.leading, 52)
                     }
 
-                    if let hoveredBar {
+                    if let hoveredBar, let hoverLocation {
+                        let tooltipPosition = ChartTooltipPlacement.position(cursor: hoverLocation, calloutSize: calloutSize, plotSize: hoverPlotSize)
                         ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
+                            .frame(width: calloutSize.width, height: calloutSize.height)
+                            .position(x: tooltipPosition.x + 52, y: tooltipPosition.y + 4)
                             .padding(.top, 4)
                             .transition(.opacity.combined(with: .scale(scale: 0.98)))
                             .allowsHitTesting(false)
                     }
                 }
-                .animation(.easeOut(duration: 0.12), value: hoveredBarID)
+                .animation(nil, value: hoveredBarID)
             }
         }
     }
@@ -1144,7 +1175,7 @@ private struct SettingsRow<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 14)
+        .padding(.leading, SettingsControlLayout.leadingInset)
         .padding(.trailing, SettingsControlLayout.trailingInset)
         .padding(.vertical, 12)
     }
@@ -1203,7 +1234,7 @@ private struct ModelBreakdownRow: Identifiable {
     var name: String
     var input: Int
     var output: Int
-    var cost: Double?
+    var cost: Decimal?
     var isHeader: Bool
     var dividerAfter: Bool
 }

@@ -79,7 +79,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var fiveHourWindow: UsageWindow?
     var weeklyWindow: UsageWindow?
     var tokens: TokenTotals
-    var estimatedCostUSD: Double?
+    var estimatedCostUSD: Decimal?
     var lastUpdated: Date?
     var isActive: Bool
 
@@ -148,9 +148,10 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     var points: [UsagePoint]
     var securityNotes: [String]
     var refreshedAt: Date
+    var pricingFingerprint: String
 
     static func empty(service: UsageService, status: DataSourceStatus, note: String) -> UsageSnapshot {
-        UsageSnapshot(service: service, status: status, accounts: [], points: [], securityNotes: [note], refreshedAt: Date())
+        UsageSnapshot(service: service, status: status, accounts: [], points: [], securityNotes: [note], refreshedAt: Date(), pricingFingerprint: Pricing.fingerprint)
     }
 }
 
@@ -160,7 +161,7 @@ struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var model: String
     var date: Date
     var tokens: TokenTotals
-    var estimatedCostUSD: Double?
+    var estimatedCostUSD: Decimal?
 }
 
 enum UsageRange: String, CaseIterable, Identifiable, Sendable {
@@ -196,10 +197,11 @@ struct UsageSummary: Equatable, Sendable {
     var inputTokens: Int
     var outputTokens: Int
     var reasoningTokens: Int
-    var estimatedCostUSD: Double?
+    var estimatedCostUSD: Decimal?
     var serviceBreakdown: [UsageService: Int]
     var modelBreakdown: [String: Int]
     var dailyBars: [DailyUsageBar]
+    var pricingFingerprint: String
 }
 
 struct DailyUsageBar: Equatable, Identifiable, Sendable {

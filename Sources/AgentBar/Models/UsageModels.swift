@@ -182,6 +182,22 @@ struct DailyUsageBar: Equatable, Identifiable, Sendable {
     var day: Date
     var codexTokens: Int
     var claudeTokens: Int
+
+    func tooltipText(language: AppLanguage) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.setLocalizedDateFormatFromTemplate("yMMMd")
+
+        let tokensLabel = L.text("tokens", language)
+        let total = codexTokens + claudeTokens
+        return [
+            formatter.string(from: day),
+            "Codex: \(DisplayFormatters.compactTokenString(codexTokens, language: language)) \(tokensLabel)",
+            "Claude: \(DisplayFormatters.compactTokenString(claudeTokens, language: language)) \(tokensLabel)",
+            "Total: \(DisplayFormatters.compactTokenString(total, language: language)) \(tokensLabel)"
+        ].joined(separator: "\n")
+    }
 }
 
 struct CodexSessionMetrics: Equatable, Sendable {

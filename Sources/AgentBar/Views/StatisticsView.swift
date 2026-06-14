@@ -650,6 +650,7 @@ private struct DashboardStackedBars: View {
                                     }
                                     .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
                                     .frame(maxWidth: 28)
+                                    .help(bar.tooltipText(language: language))
                                 }
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)

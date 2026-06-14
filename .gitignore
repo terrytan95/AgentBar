@@ -2,6 +2,7 @@
 dist/
 screenshots/
 verification/
+tmp/
 .DS_Store
 *.xcuserdata/
 DerivedData/

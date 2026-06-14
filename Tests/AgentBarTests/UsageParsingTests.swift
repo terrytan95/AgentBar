@@ -64,6 +64,76 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestWeekly?.usedPercent, 4)
     }
 
+    func testOpenAIModelPricingCalculatesPointCost() throws {
+        let jsonl = """
+        {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"model":"gpt-5.1","last_token_usage":{"input_tokens":1000000,"cached_input_tokens":100000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}
+        """.data(using: .utf8)!
+
+        let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl)
+
+        XCTAssertEqual(metrics.points.count, 1)
+        XCTAssertEqual(metrics.points[0].estimatedCostUSD ?? 0, 2.1375, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testMenuBarDefaultsToActiveAccountQuotaWindows() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        let store = UsageStore(settings: settings)
+        let now = Date()
+        store.applyTestData(accounts: [
+            UsageAccount(
+                id: "inactive",
+                service: .codex,
+                displayName: "inactive@example.com",
+                username: "inactive@example.com",
+                maskedEmail: nil,
+                plan: "team",
+                sourceDescription: "test",
+                status: .live,
+                fiveHourWindow: UsageWindow(kind: .fiveHour, usedPercent: 90, windowMinutes: 300, resetsAt: now),
+                weeklyWindow: UsageWindow(kind: .weekly, usedPercent: 40, windowMinutes: 10080, resetsAt: now),
+                tokens: .zero,
+                estimatedCostUSD: nil,
+                lastUpdated: now,
+                isActive: false
+            ),
+            UsageAccount(
+                id: "active",
+                service: .codex,
+                displayName: "active@example.com",
+                username: "active@example.com",
+                maskedEmail: nil,
+                plan: "team",
+                sourceDescription: "test",
+                status: .live,
+                fiveHourWindow: UsageWindow(kind: .fiveHour, usedPercent: 31, windowMinutes: 300, resetsAt: now),
+                weeklyWindow: UsageWindow(kind: .weekly, usedPercent: 8, windowMinutes: 10080, resetsAt: now),
+                tokens: .zero,
+                estimatedCostUSD: nil,
+                lastUpdated: now,
+                isActive: true
+            )
+        ])
+
+        XCTAssertEqual(settings.menuBarDisplayMode, .activeAccountWindows)
+        XCTAssertEqual(store.menuBarTitle, "5H 69%  WK 92%")
+    }
+
+    @MainActor
+    func testMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(MenuBarDisplayMode.lowestRemaining.rawValue, forKey: "menuBarDisplayMode")
+
+        let settings = SettingsStore(defaults: defaults)
+
+        XCTAssertEqual(settings.menuBarDisplayMode, .activeAccountWindows)
+    }
+
     func testStatisticsBucketsAggregateExpectedRanges() {
         let calendar = Calendar(identifier: .gregorian)
         let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!

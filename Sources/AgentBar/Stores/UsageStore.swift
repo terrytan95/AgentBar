@@ -33,6 +33,8 @@ final class UsageStore: ObservableObject {
 
     var menuBarTitle: String {
         switch settings.menuBarDisplayMode {
+        case .activeAccountWindows:
+            return activeAccountWindowTitle
         case .lowestRemaining:
             return DisplayFormatters.percentString(lowestRemaining)
         case .totalTokens:
@@ -40,6 +42,15 @@ final class UsageStore: ObservableObject {
         case .codexRemaining:
             return DisplayFormatters.percentString(codexRemaining)
         }
+    }
+
+    private var activeAccountWindowTitle: String {
+        guard let account = activeAccount else {
+            return DisplayFormatters.percentString(lowestRemaining)
+        }
+        let fiveHour = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
+        let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
+        return "5H \(fiveHour)  WK \(weekly)"
     }
 
     var lowestRemaining: Double? {
@@ -108,5 +119,18 @@ final class UsageStore: ObservableObject {
                 self?.refresh()
             }
         }
+    }
+
+    func applyTestData(
+        snapshots: [UsageService: UsageSnapshot] = [:],
+        accounts: [UsageAccount] = [],
+        points: [UsagePoint] = []
+    ) {
+        self.snapshots = snapshots
+        self.accounts = accounts
+        self.points = points
+        hasLoadedAccountInformation = true
+        isRefreshing = false
+        refreshInFlight = false
     }
 }

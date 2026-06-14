@@ -81,11 +81,13 @@ struct PopoverRootView: View {
                 .font(.subheadline.weight(.semibold))
             HStack {
                 KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), tint: .blue)
-                KPIPill(title: L.text("cost", store.language), value: DisplayFormatters.costString(store.summary.estimatedCostUSD), tint: .green)
+                KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), tint: .green)
             }
-            MiniStackedBars(bars: Array(store.summary.dailyBars.suffix(10)))
-                .frame(height: 72)
         }
+    }
+
+    private func costText(_ value: Double?) -> String {
+        value.map { DisplayFormatters.costString($0) } ?? L.text("no_cost_data", store.language)
     }
 
     private var dataSourceSection: some View {

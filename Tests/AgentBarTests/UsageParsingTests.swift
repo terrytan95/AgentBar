@@ -179,8 +179,22 @@ final class UsageParsingTests: XCTestCase {
     }
 
     func testEnglishCompactTokenFormattingUsesEnglishUnits() {
-        XCTAssertEqual(DisplayFormatters.compactTokenString(63_229_600, language: .english), "63.2296 million")
-        XCTAssertEqual(DisplayFormatters.compactTokenString(6_322_960_000, language: .english), "6.3230 billion")
+        XCTAssertEqual(DisplayFormatters.compactTokenString(63_229_600, language: .english), "63.2296 mil")
+        XCTAssertEqual(DisplayFormatters.compactTokenString(6_322_960_000, language: .english), "6.3230 bil")
+    }
+
+    func testDailyUsageBarTooltipIncludesDateAndUsageDetails() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let day = calendar.date(from: DateComponents(year: 2026, month: 6, day: 13))!
+        let bar = DailyUsageBar(day: day, codexTokens: 1_500_000, claudeTokens: 2_000_000)
+
+        let tooltip = bar.tooltipText(language: .english)
+
+        XCTAssertTrue(tooltip.contains("Jun 13, 2026"))
+        XCTAssertTrue(tooltip.contains("Codex: 1.5000 mil Tokens"))
+        XCTAssertTrue(tooltip.contains("Claude: 2.0000 mil Tokens"))
+        XCTAssertTrue(tooltip.contains("Total: 3.5000 mil Tokens"))
     }
 
     func testCodexAccountSwitcherOnlyUpdatesActiveAccountKey() throws {

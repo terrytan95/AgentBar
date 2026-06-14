@@ -40,10 +40,10 @@ enum DisplayFormatters {
     private static func englishCompactTokenString(_ value: Int) -> String {
         let absolute = abs(value)
         if absolute >= 1_000_000_000 {
-            return String(format: "%.4f billion", Double(value) / 1_000_000_000)
+            return String(format: "%.4f bil", Double(value) / 1_000_000_000)
         }
         if absolute >= 1_000_000 {
-            return String(format: "%.4f million", Double(value) / 1_000_000)
+            return String(format: "%.4f mil", Double(value) / 1_000_000)
         }
         if absolute >= 1_000 {
             return String(format: "%.1fK", Double(value) / 1_000)

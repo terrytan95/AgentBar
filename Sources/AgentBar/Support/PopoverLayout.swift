@@ -1,6 +1,7 @@
 import CoreGraphics
 
 enum PopoverLayout {
+    static let horizontalInset: CGFloat = 14
     static let width: CGFloat = 380
     static let minimumHeight: CGFloat = 420
     static let defaultHeight: CGFloat = 720

@@ -94,7 +94,7 @@ struct PopoverRootView: View {
                     summarySection
                     dataSourceSection
                 }
-                .padding(14)
+                .padding(.vertical, PopoverLayout.horizontalInset)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(HiddenScrollIndicators())
             }
@@ -102,6 +102,7 @@ struct PopoverRootView: View {
             Divider()
             footer
         }
+        .padding(.horizontal, PopoverLayout.horizontalInset)
         .background(.regularMaterial)
         .preferredColorScheme(AppAppearance.colorScheme(useDarkAppearance: store.settings.useDarkAppearance))
         .animation(nil, value: store.settings.useDarkAppearance)
@@ -136,7 +137,7 @@ struct PopoverRootView: View {
             .buttonStyle(.borderless)
             .help(L.text("refresh", store.language))
         }
-        .padding(14)
+        .padding(.vertical, PopoverLayout.horizontalInset)
     }
 
     private var accountSection: some View {
@@ -215,7 +216,7 @@ struct PopoverRootView: View {
                 }
             }
         }
-        .padding(9)
+        .padding(.vertical, 9)
     }
 }
 

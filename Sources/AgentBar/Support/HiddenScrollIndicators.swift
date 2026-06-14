@@ -23,9 +23,13 @@ final class HiddenScrollIndicatorsView: NSView {
             scrollView.hasVerticalScroller = false
             scrollView.hasHorizontalScroller = false
             scrollView.autohidesScrollers = true
+            scrollView.scrollerStyle = .overlay
+            scrollView.automaticallyAdjustsContentInsets = false
             scrollView.scrollerInsets = NSEdgeInsetsZero
             scrollView.contentInsets = NSEdgeInsetsZero
             scrollView.contentView.contentInsets = NSEdgeInsetsZero
+            scrollView.verticalScroller?.isHidden = true
+            scrollView.horizontalScroller?.isHidden = true
             scrollView.tile()
             scrollView.layoutSubtreeIfNeeded()
         }

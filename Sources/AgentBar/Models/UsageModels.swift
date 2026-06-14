@@ -1,13 +1,13 @@
 import Foundation
 
-enum UsageService: String, Codable, CaseIterable, Hashable, Identifiable {
+enum UsageService: String, Codable, CaseIterable, Hashable, Identifiable, Sendable {
     case codex = "Codex"
     case claudeCode = "Claude Code"
 
     var id: String { rawValue }
 }
 
-enum DataSourceStatus: String, Codable, Equatable {
+enum DataSourceStatus: String, Codable, Equatable, Sendable {
     case live
     case unavailable
     case needsAuthorization
@@ -23,7 +23,7 @@ enum DataSourceStatus: String, Codable, Equatable {
     }
 }
 
-struct TokenTotals: Codable, Equatable {
+struct TokenTotals: Codable, Equatable, Sendable {
     var input: Int
     var cachedInput: Int
     var output: Int
@@ -43,8 +43,8 @@ struct TokenTotals: Codable, Equatable {
     }
 }
 
-struct UsageWindow: Codable, Equatable, Identifiable {
-    enum Kind: String, Codable {
+struct UsageWindow: Codable, Equatable, Identifiable, Sendable {
+    enum Kind: String, Codable, Sendable {
         case fiveHour
         case weekly
     }
@@ -60,7 +60,7 @@ struct UsageWindow: Codable, Equatable, Identifiable {
     }
 }
 
-struct UsageAccount: Codable, Equatable, Identifiable {
+struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var service: UsageService
     var displayName: String
@@ -81,7 +81,7 @@ struct UsageAccount: Codable, Equatable, Identifiable {
     }
 }
 
-struct UsageSnapshot: Codable, Equatable {
+struct UsageSnapshot: Codable, Equatable, Sendable {
     var service: UsageService
     var status: DataSourceStatus
     var accounts: [UsageAccount]
@@ -94,7 +94,7 @@ struct UsageSnapshot: Codable, Equatable {
     }
 }
 
-struct UsagePoint: Codable, Equatable, Identifiable {
+struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var id = UUID()
     var service: UsageService
     var model: String
@@ -103,7 +103,7 @@ struct UsagePoint: Codable, Equatable, Identifiable {
     var estimatedCostUSD: Double?
 }
 
-enum UsageRange: String, CaseIterable, Identifiable {
+enum UsageRange: String, CaseIterable, Identifiable, Sendable {
     case today
     case yesterday
     case thisWeek
@@ -131,7 +131,7 @@ enum UsageRange: String, CaseIterable, Identifiable {
     }
 }
 
-struct UsageSummary: Equatable {
+struct UsageSummary: Equatable, Sendable {
     var totalTokens: Int
     var inputTokens: Int
     var outputTokens: Int
@@ -142,14 +142,14 @@ struct UsageSummary: Equatable {
     var dailyBars: [DailyUsageBar]
 }
 
-struct DailyUsageBar: Equatable, Identifiable {
+struct DailyUsageBar: Equatable, Identifiable, Sendable {
     var id: Date { day }
     var day: Date
     var codexTokens: Int
     var claudeTokens: Int
 }
 
-struct CodexSessionMetrics: Equatable {
+struct CodexSessionMetrics: Equatable, Sendable {
     var eventCount: Int
     var tokenTotals: TokenTotals
     var points: [UsagePoint]

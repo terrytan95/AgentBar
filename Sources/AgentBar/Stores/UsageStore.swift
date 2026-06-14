@@ -13,11 +13,15 @@ final class UsageStore: ObservableObject {
 
     let settings: SettingsStore
     private var timer: Timer?
+    private var refreshInFlight = false
 
     init(settings: SettingsStore = SettingsStore()) {
         self.settings = settings
-        refresh()
         configureTimer()
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            refresh()
+        }
     }
 
     var language: AppLanguage { settings.language }
@@ -59,15 +63,24 @@ final class UsageStore: ObservableObject {
     }
 
     func refresh() {
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
         isRefreshing = true
         lastError = nil
 
-        let codex = CodexUsageReader().read()
-        let claude = ClaudeUsageReader().read()
-        snapshots = [.codex: codex, .claudeCode: claude]
-        accounts = codex.accounts + claude.accounts
-        points = codex.points + claude.points
-        isRefreshing = false
+        DispatchQueue.global(qos: .utility).async {
+            let codex = CodexUsageReader().read()
+            let claude = ClaudeUsageReader().read()
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.snapshots = [.codex: codex, .claudeCode: claude]
+                self.accounts = codex.accounts + claude.accounts
+                self.points = codex.points + claude.points
+                self.isRefreshing = false
+                self.refreshInFlight = false
+            }
+        }
     }
 
     func configureTimer() {

@@ -41,6 +41,8 @@ struct AgentBarApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+
         if let reportURL = smokeReportURL() {
             Task { @MainActor in
                 SmokeReporter.writeReport(to: reportURL)
@@ -53,7 +55,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 SmokeVerificationWindowController.shared.show()
             }
+            return
         }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            NSLog("AgentBar showing launch status window")
+            LaunchStatusWindowController.shared.show()
+        }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        DispatchQueue.main.async {
+            NSLog("AgentBar handling reopen")
+            LaunchStatusWindowController.shared.show()
+        }
+        return true
     }
 
     private func smokeReportURL() -> URL? {

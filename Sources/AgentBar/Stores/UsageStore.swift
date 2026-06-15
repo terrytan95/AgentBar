@@ -17,10 +17,12 @@ final class UsageStore: ObservableObject {
     let settings: SettingsStore
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
+    private let manualCodexAppRestarter: @Sendable () -> Void
     private var timer: Timer?
     private var refreshInFlight = false
     private var refreshQueued = false
     private var manualRefreshQueued = false
+    private var manualCodexRotationOverrideAccountID: String?
 
     init(
         settings: SettingsStore = SettingsStore(),
@@ -29,11 +31,15 @@ final class UsageStore: ObservableObject {
         },
         automaticCodexRestarter: @escaping @Sendable () -> CodexAppRestartResult = {
             CodexAppRestarter().restartIfNoWorkIsRunning()
+        },
+        manualCodexAppRestarter: @escaping @Sendable () -> Void = {
+            AccountLoginLauncher.forceRestartCodexApp()
         }
     ) {
         self.settings = settings
         self.codexAccountSwitcher = codexAccountSwitcher
         self.automaticCodexRestarter = automaticCodexRestarter
+        self.manualCodexAppRestarter = manualCodexAppRestarter
         configureTimer()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -172,16 +178,37 @@ final class UsageStore: ObservableObject {
     }
 
     func switchActiveAccount(_ account: UsageAccount) {
-        switchCodexAccount(account, restartMode: .manualIntegrationRestart)
+        switchCodexAccount(account, restartMode: .manualForceCodexAppRestart)
     }
 
     func evaluateAutomaticCodexRotation(now: Date = Date()) {
         guard settings.autoCodexAccountRotationEnabled, switchingAccountID == nil else { return }
+        if shouldHonorManualCodexSelection() {
+            return
+        }
         let policy = CodexAccountRotationPolicy(
             thresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent
         )
         guard let account = policy.selectedAccount(from: accounts, now: now) else { return }
         switchCodexAccount(account, restartMode: .safeForceCodexAppRestart)
+    }
+
+    private func shouldHonorManualCodexSelection() -> Bool {
+        guard let overrideAccountID = manualCodexRotationOverrideAccountID else { return false }
+        guard let activeCodexAccount = accounts.first(where: { $0.service == .codex && $0.isActive }) else {
+            manualCodexRotationOverrideAccountID = nil
+            return false
+        }
+        guard activeCodexAccount.id == overrideAccountID else {
+            manualCodexRotationOverrideAccountID = nil
+            return false
+        }
+        if let remaining = activeCodexAccount.fiveHourWindow?.remainingPercent,
+           remaining > settings.codexRotationThresholdRemainingPercent {
+            manualCodexRotationOverrideAccountID = nil
+            return false
+        }
+        return true
     }
 
     private func switchCodexAccount(_ account: UsageAccount, restartMode: CodexSwitchRestartMode) {
@@ -190,10 +217,14 @@ final class UsageStore: ObservableObject {
             lastError = AccountActionError.unsupportedService.localizedDescription
             return
         }
+        if restartMode == .manualForceCodexAppRestart {
+            manualCodexRotationOverrideAccountID = account.id
+        }
         switchingAccountID = account.id
         lastError = nil
         let switcher = codexAccountSwitcher
         let restarter = automaticCodexRestarter
+        let manualRestarter = manualCodexAppRestarter
 
         DispatchQueue.global(qos: .utility).async {
             let result = Result {
@@ -201,8 +232,8 @@ final class UsageStore: ObservableObject {
             }
             if case .success = result {
                 switch restartMode {
-                case .manualIntegrationRestart:
-                    AccountLoginLauncher.restartIntegration(for: account.service)
+                case .manualForceCodexAppRestart:
+                    manualRestarter()
                 case .safeForceCodexAppRestart:
                     _ = restarter()
                 }
@@ -211,6 +242,9 @@ final class UsageStore: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 self?.switchingAccountID = nil
                 if case let .failure(error) = result {
+                    if self?.manualCodexRotationOverrideAccountID == account.id {
+                        self?.manualCodexRotationOverrideAccountID = nil
+                    }
                     self?.lastError = error.localizedDescription.redactedForCredentialWords
                 }
                 self?.refresh(force: true)
@@ -239,7 +273,7 @@ final class UsageStore: ObservableObject {
     }
 
     private enum CodexSwitchRestartMode {
-        case manualIntegrationRestart
+        case manualForceCodexAppRestart
         case safeForceCodexAppRestart
     }
 }

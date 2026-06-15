@@ -51,6 +51,7 @@ struct CodexAccountSwitcher {
         json["active_account_activated_at_ms"] = Int(Date().timeIntervalSince1970 * 1000)
 
         let selectedAuth = try Data(contentsOf: accountSnapshotURL)
+        let previousAuth = try? Data(contentsOf: activeAuthURL)
         let activeAuthPermissions = try? fileManager.attributesOfItem(atPath: activeAuthURL.path)[.posixPermissions]
         try selectedAuth.write(to: activeAuthURL, options: [.atomic])
         if let activeAuthPermissions {
@@ -58,12 +59,28 @@ struct CodexAccountSwitcher {
         }
 
         let output = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try output.write(to: registryURL, options: [.atomic])
+        do {
+            try output.write(to: registryURL, options: [.atomic])
+        } catch {
+            restoreAuth(previousAuth, to: activeAuthURL, permissions: activeAuthPermissions)
+            throw error
+        }
     }
 
     private func accountSnapshotURL(for accountID: String) -> URL {
         let fileKey = accountID.needsCodexAccountFilenameEncoding ? accountID.codexAccountFileKey : accountID
         return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
+    }
+
+    private func restoreAuth(_ previousAuth: Data?, to activeAuthURL: URL, permissions: Any?) {
+        if let previousAuth {
+            try? previousAuth.write(to: activeAuthURL, options: [.atomic])
+            if let permissions {
+                try? fileManager.setAttributes([.posixPermissions: permissions], ofItemAtPath: activeAuthURL.path)
+            }
+        } else if fileManager.fileExists(atPath: activeAuthURL.path) {
+            try? fileManager.removeItem(at: activeAuthURL)
+        }
     }
 }
 

@@ -296,6 +296,61 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(active.weeklyWindow?.usedPercent, 44)
     }
 
+    func testSessionRateLimitsWithoutParsableTimestampDoNotOverrideActiveAccountWindows() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "active",
+          "active_account_activated_at_ms": 1781400000000,
+          "accounts": [
+            {
+              "account_key": "active",
+              "email": "active@example.com",
+              "last_usage": {
+                "primary": {"used_percent": 25, "window_minutes": 300, "resets_at": 1781410000},
+                "secondary": {"used_percent": 35, "window_minutes": 10080, "resets_at": 1781910000}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"type":"event_msg","payload":{"rate_limits":{"primary":{"used_percent":99,"window_minutes":300,"resets_at":1781420000},"secondary":{"used_percent":98,"window_minutes":10080,"resets_at":1781920000}}}}
+        {"type":"event_msg","timestamp":"not-a-date","payload":{"rate_limits":{"primary":{"used_percent":97,"window_minutes":300,"resets_at":1781420000},"secondary":{"used_percent":96,"window_minutes":10080,"resets_at":1781920000}}}}
+        """.data(using: .utf8)!.write(to: sessionDir.appending(path: "forged.jsonl"))
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let active = try XCTUnwrap(snapshot.accounts.first)
+
+        XCTAssertEqual(active.fiveHourWindow?.usedPercent, 25)
+        XCTAssertEqual(active.weeklyWindow?.usedPercent, 35)
+    }
+
+    func testOversizedSessionFilesAreSkipped() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {"schema_version":3,"active_account_key":"active","accounts":[{"account_key":"active","email":"active@example.com"}]}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try Data(count: CodexUsageReader.maximumSessionFileBytes + 1)
+            .write(to: sessionDir.appending(path: "oversized.jsonl"))
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+
+        XCTAssertEqual(snapshot.points.count, 0)
+        XCTAssertEqual(snapshot.accounts.first?.tokens.total, 0)
+    }
+
     func testOpenAIModelPricingCalculatesPointCost() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"model":"gpt-5.1","last_token_usage":{"input_tokens":1000000,"cached_input_tokens":100000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}
@@ -508,6 +563,27 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(json["schema_version"] as? Int, 3)
         XCTAssertEqual((json["accounts"] as? [[String: Any]])?.count, 2)
         XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "selected account auth")
+    }
+
+    func testCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registry = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"a@example.com"},{"account_key":"acct-b","email":"b@example.com"}]}
+        """.data(using: .utf8)!.write(to: registry)
+        let activeAuth = temp.appending(path: ".codex/auth.json")
+        try "old active auth".data(using: .utf8)!.write(to: activeAuth)
+        try "selected account auth".data(using: .utf8)!.write(to: accountDir.appending(path: "acct-b.auth.json"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: accountDir.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: accountDir.path)
+            try? FileManager.default.removeItem(at: temp)
+        }
+
+        XCTAssertThrowsError(try CodexAccountSwitcher(homeDirectory: temp).switchActiveAccount(accountID: "acct-b"))
+        XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "old active auth")
     }
 
     private func testAccount(id: String, name: String, fiveHourUsed: Double, weeklyUsed: Double, now: Date) -> UsageAccount {

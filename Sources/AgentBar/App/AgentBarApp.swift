@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         StatusItemController.shared.show()
+        AppUpdateStore.shared.startAutomaticChecks()
 
         if CommandLine.arguments.contains("--smoke-ui") {
             Task { @MainActor in

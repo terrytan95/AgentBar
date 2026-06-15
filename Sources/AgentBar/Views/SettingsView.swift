@@ -3,10 +3,12 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject private var settings: SettingsStore
+    @ObservedObject private var updates: AppUpdateStore
 
-    init(store: UsageStore) {
+    init(store: UsageStore, updates: AppUpdateStore = .shared) {
         self.store = store
         self.settings = store.settings
+        self.updates = updates
     }
 
     var body: some View {
@@ -33,6 +35,32 @@ struct SettingsView: View {
                 Picker(L.text("tone_color", store.language), selection: $settings.themeColor) {
                     ForEach(AppThemeColor.allCases) { theme in
                         Text(theme.title).tag(theme)
+                    }
+                }
+                Section(L.text("software_update", store.language)) {
+                    HStack {
+                        Text(L.text("current_version", store.language))
+                        Spacer()
+                        Text(updates.currentVersion)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Button(L.text("check_for_updates", store.language)) {
+                            Task { await updates.checkForUpdates() }
+                        }
+                        .disabled(!updates.canCheckForUpdates)
+                        if updates.status.isBusy {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    Text(updateStatusText)
+                        .font(.caption)
+                        .foregroundStyle(updateStatusColor)
+                    if updates.canInstallDownloadedUpdate {
+                        Button(L.text("install_and_restart", store.language)) {
+                            updates.installDownloadedUpdate()
+                        }
                     }
                 }
             }
@@ -77,7 +105,33 @@ struct SettingsView: View {
         .onChange(of: settings.refreshInterval) {
             store.configureTimer()
         }
-        .frame(width: 520, height: 390)
+        .frame(width: 540, height: 470)
+    }
+
+    private var updateStatusText: String {
+        switch updates.status {
+        case .idle:
+            L.text("updates_daily_check", store.language)
+        case .checking:
+            L.text("checking_for_updates", store.language)
+        case .upToDate:
+            L.text("app_up_to_date", store.language)
+        case .downloading(let version):
+            String(format: L.text("downloading_update", store.language), version)
+        case .downloaded(let version):
+            String(format: L.text("update_ready_to_install", store.language), version)
+        case .installing(let version):
+            String(format: L.text("installing_update", store.language), version)
+        case .failed(let message):
+            String(format: L.text("update_check_failed", store.language), message)
+        }
+    }
+
+    private var updateStatusColor: Color {
+        if case .failed = updates.status {
+            return .red
+        }
+        return .secondary
     }
 }
 

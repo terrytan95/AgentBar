@@ -24,7 +24,7 @@ struct SmokeVerificationView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 VStack(spacing: 12) {
                     SettingsView(store: store)
-                        .frame(width: 520, height: 320)
+                        .frame(width: 540, height: 470)
                 }
             }
             StatisticsView(store: store)
@@ -32,7 +32,7 @@ struct SmokeVerificationView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .padding(16)
-        .frame(width: 990, height: 1040)
+        .frame(width: 1010, height: 1180)
         .background(.regularMaterial)
     }
 }
@@ -51,7 +51,7 @@ final class SmokeVerificationWindowController {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 120, y: 60, width: 990, height: 1040),
+            contentRect: NSRect(x: 120, y: 60, width: 1010, height: 1180),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false

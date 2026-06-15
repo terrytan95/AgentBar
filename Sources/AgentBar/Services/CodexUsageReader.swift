@@ -7,6 +7,7 @@ enum UsageReadError: Error {
 struct CodexUsageReader {
     var homeDirectory: URL
     var fileManager: FileManager = .default
+    private static let sessionMetricsCache = CodexSessionMetricsCache()
 
     init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.homeDirectory = homeDirectory
@@ -124,10 +125,6 @@ struct CodexUsageReader {
     }
 
     static func parseSessionJsonl(data: Data) throws -> CodexSessionMetrics {
-        guard let body = String(data: data, encoding: .utf8) else {
-            return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
-        }
-
         var eventCount = 0
         var latestTotal = TokenTotals.zero
         var points: [UsagePoint] = []
@@ -135,15 +132,14 @@ struct CodexUsageReader {
         var weekly: UsageWindow?
         var latestRateLimitAt: Date?
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let dateParser = CodexTimestampParser()
 
-        for line in body.split(separator: "\n") {
-            guard let lineData = line.data(using: .utf8),
-                  let event = try? decoder.decode(CodexSessionEvent.self, from: lineData)
+        for line in data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true) {
+            guard let event = try? decoder.decode(CodexSessionEvent.self, from: Data(line))
             else { continue }
 
             guard let payload = event.payload else { continue }
-            let eventDate = event.parsedDate ?? Date()
+            let eventDate = event.parsedDate(using: dateParser) ?? Date()
             if let cumulativeUsage = payload.info?.totalTokenUsage ?? payload.info?.lastTokenUsage {
                 latestTotal = cumulativeUsage.toTotals()
                 eventCount += 1
@@ -186,26 +182,32 @@ struct CodexUsageReader {
         }
 
         var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
+        var livePaths = Set<String>()
 
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
-            guard let data = try? Data(contentsOf: fileURL),
-                  let metrics = try? Self.parseSessionJsonl(data: data)
-            else { continue }
+            guard let signature = CodexSessionFileSignature(fileURL: fileURL) else { continue }
+            let path = fileURL.path
+            livePaths.insert(path)
+            let metrics: CodexSessionMetrics
+            if let cachedMetrics = Self.sessionMetricsCache.metrics(for: path, signature: signature) {
+                metrics = cachedMetrics
+            } else {
+                guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
+                      let parsedMetrics = try? Self.parseSessionJsonl(data: data)
+                else { continue }
+                metrics = parsedMetrics
+                Self.sessionMetricsCache.store(metrics, for: path, signature: signature)
+            }
 
-            aggregate.eventCount += metrics.eventCount
-            if metrics.tokenTotals.total > 0 {
-                aggregate.tokenTotals = aggregate.tokenTotals + metrics.tokenTotals
-            }
-            aggregate.points.append(contentsOf: metrics.points)
-            if let latestRateLimitAt = metrics.latestRateLimitAt,
-               aggregate.latestRateLimitAt == nil || latestRateLimitAt >= (aggregate.latestRateLimitAt ?? .distantPast) {
-                aggregate.latestFiveHour = metrics.latestFiveHour
-                aggregate.latestWeekly = metrics.latestWeekly
-                aggregate.latestRateLimitAt = latestRateLimitAt
-            }
+            aggregate.merge(metrics)
         }
+        Self.sessionMetricsCache.retain(paths: livePaths)
 
         return aggregate
+    }
+
+    static func resetSessionMetricsCacheForTesting() {
+        sessionMetricsCache.removeAll()
     }
 
     private static func canUseSessionRateLimits(
@@ -280,11 +282,90 @@ private struct CodexSessionEvent: Decodable {
     var timestamp: String?
     var payload: CodexSessionPayload?
 
-    var parsedDate: Date? {
+    func parsedDate(using parser: CodexTimestampParser) -> Date? {
         guard let timestamp else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.date(from: timestamp)
+        return parser.date(from: timestamp)
+    }
+}
+
+private struct CodexTimestampParser {
+    private let fractionalFormatter: ISO8601DateFormatter
+    private let wholeSecondFormatter: ISO8601DateFormatter
+
+    init() {
+        fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        wholeSecondFormatter = ISO8601DateFormatter()
+        wholeSecondFormatter.formatOptions = [.withInternetDateTime]
+    }
+
+    func date(from timestamp: String) -> Date? {
+        fractionalFormatter.date(from: timestamp) ?? wholeSecondFormatter.date(from: timestamp)
+    }
+}
+
+private struct CodexSessionFileSignature: Equatable {
+    var size: Int
+    var modifiedAt: Date?
+
+    init?(fileURL: URL) {
+        guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]),
+              values.isRegularFile == true,
+              let size = values.fileSize
+        else { return nil }
+        self.size = size
+        self.modifiedAt = values.contentModificationDate
+    }
+}
+
+private final class CodexSessionMetricsCache: @unchecked Sendable {
+    private struct Entry {
+        var signature: CodexSessionFileSignature
+        var metrics: CodexSessionMetrics
+    }
+
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+
+    func metrics(for path: String, signature: CodexSessionFileSignature) -> CodexSessionMetrics? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let entry = entries[path], entry.signature == signature else { return nil }
+        return entry.metrics
+    }
+
+    func store(_ metrics: CodexSessionMetrics, for path: String, signature: CodexSessionFileSignature) {
+        lock.lock()
+        entries[path] = Entry(signature: signature, metrics: metrics)
+        lock.unlock()
+    }
+
+    func retain(paths: Set<String>) {
+        lock.lock()
+        entries = entries.filter { paths.contains($0.key) }
+        lock.unlock()
+    }
+
+    func removeAll() {
+        lock.lock()
+        entries.removeAll()
+        lock.unlock()
+    }
+}
+
+private extension CodexSessionMetrics {
+    mutating func merge(_ metrics: CodexSessionMetrics) {
+        eventCount += metrics.eventCount
+        if metrics.tokenTotals.total > 0 {
+            tokenTotals = tokenTotals + metrics.tokenTotals
+        }
+        points.append(contentsOf: metrics.points)
+        if let latestRateLimitAt = metrics.latestRateLimitAt,
+           self.latestRateLimitAt == nil || latestRateLimitAt >= (self.latestRateLimitAt ?? .distantPast) {
+            latestFiveHour = metrics.latestFiveHour
+            latestWeekly = metrics.latestWeekly
+            self.latestRateLimitAt = latestRateLimitAt
+        }
     }
 }
 

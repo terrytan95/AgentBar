@@ -116,7 +116,18 @@ enum L {
         "codex_rotation_threshold_subtitle": "Remaining 5-hour quota that triggers automatic switching.",
         "use_account": "Use account",
         "switching_account": "Switching account",
-        "daily_usage_for": "Daily usage"
+        "daily_usage_for": "Daily usage",
+        "software_update": "Software update",
+        "current_version": "Current version",
+        "check_for_updates": "Check for updates",
+        "install_and_restart": "Install and restart",
+        "updates_daily_check": "AgentBar checks for updates automatically once per day.",
+        "checking_for_updates": "Checking GitHub releases...",
+        "app_up_to_date": "AgentBar is up to date.",
+        "downloading_update": "Downloading %@...",
+        "update_ready_to_install": "%@ is downloaded and ready to install.",
+        "installing_update": "Installing %@ and restarting...",
+        "update_check_failed": "Update failed: %@"
     ]
 
     private static let chinese: [String: String] = [
@@ -211,6 +222,17 @@ enum L {
         "codex_rotation_threshold_subtitle": "触发自动切换的 5 小时剩余额度。",
         "use_account": "使用此账号",
         "switching_account": "正在切换账号",
-        "daily_usage_for": "每日用量"
+        "daily_usage_for": "每日用量",
+        "software_update": "软件更新",
+        "current_version": "当前版本",
+        "check_for_updates": "检查更新",
+        "install_and_restart": "安装并重启",
+        "updates_daily_check": "AgentBar 每天会自动检查一次更新。",
+        "checking_for_updates": "正在检查 GitHub Releases...",
+        "app_up_to_date": "AgentBar 已是最新版本。",
+        "downloading_update": "正在下载 %@...",
+        "update_ready_to_install": "%@ 已下载，可以安装。",
+        "installing_update": "正在安装 %@ 并重启...",
+        "update_check_failed": "更新失败：%@"
     ]
 }

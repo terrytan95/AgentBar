@@ -46,13 +46,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         StatusItemController.shared.show()
         AppUpdateStore.shared.startAutomaticChecks()
 
-        if CommandLine.arguments.contains("--smoke-ui") {
-            Task { @MainActor in
-                SmokeVerificationWindowController.shared.show()
-            }
-            return
-        }
-
         NSLog("AgentBar launched with menu bar status item")
     }
 

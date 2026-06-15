@@ -35,7 +35,7 @@ The app bundle is staged at `dist/AgentBar.app`.
 
 ```bash
 ./script/build_and_run.sh --package
-ditto -c -k --norsrc --noextattr --keepParent dist/AgentBar.app dist/AgentBar-v1.0.0.zip
+ditto -c -k --norsrc --noextattr --keepParent dist/AgentBar.app dist/AgentBar-v1.0.1.zip
 ```
 
 The local bundle is ad-hoc signed for development and local use. It is not notarized.
@@ -44,6 +44,6 @@ The local bundle is ad-hoc signed for development and local use. It is not notar
 
 GitHub releases attach a zipped `.app` bundle:
 
-- `AgentBar-v1.0.0.zip`
+- `AgentBar-v1.0.1.zip`
 
 After unzipping, move `AgentBar.app` to `/Applications` or run it from the extracted folder.

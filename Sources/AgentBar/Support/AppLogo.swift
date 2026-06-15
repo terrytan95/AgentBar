@@ -9,10 +9,6 @@ enum AppLogo {
            let image = NSImage(contentsOf: url) {
             return image
         }
-        if let url = Bundle.module.url(forResource: "AgentBarLogo", withExtension: "png"),
-           let image = NSImage(contentsOf: url) {
-            return image
-        }
         return NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: "AgentBar") ?? NSImage()
     }
 
@@ -21,10 +17,6 @@ enum AppLogo {
             return image
         }
         if let url = Bundle.main.url(forResource: "AgentBarMenuIcon", withExtension: "png"),
-           let image = NSImage(contentsOf: url) {
-            return image
-        }
-        if let url = Bundle.module.url(forResource: "AgentBarMenuIcon", withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             return image
         }

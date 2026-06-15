@@ -5,8 +5,8 @@ MODE="${1:-run}"
 APP_NAME="AgentBar"
 BUNDLE_ID="com.terrytan.AgentBar"
 MIN_SYSTEM_VERSION="14.0"
-APP_VERSION="1.0.0"
-APP_BUILD="100"
+APP_VERSION="1.0.1"
+APP_BUILD="101"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -26,13 +26,17 @@ if [ "$MODE" = "--package" ] || [ "$MODE" = "package" ]; then
   BUILD_CONFIGURATION="release"
 fi
 
-swift build -c "$BUILD_CONFIGURATION"
-BUILD_BINARY="$(swift build -c "$BUILD_CONFIGURATION" --show-bin-path)/$APP_NAME"
+SWIFT_BUILD_ARGS=(-c "$BUILD_CONFIGURATION")
+swift build "${SWIFT_BUILD_ARGS[@]}"
+BUILD_BINARY="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)/$APP_NAME"
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+if [ "$BUILD_CONFIGURATION" = "release" ] && command -v strip >/dev/null 2>&1; then
+  strip -S -x "$APP_BINARY" >/dev/null 2>&1 || true
+fi
 if [ -d "$ROOT_DIR/Sources/AgentBar/Resources" ]; then
   cp -R "$ROOT_DIR/Sources/AgentBar/Resources/." "$APP_RESOURCES/"
 fi

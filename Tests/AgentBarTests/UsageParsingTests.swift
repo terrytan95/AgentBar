@@ -189,6 +189,70 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(active.weeklyWindow?.usedPercent, 11)
     }
 
+    func testCodexSessionMetricsCacheInvalidatesWhenFileChanges() throws {
+        CodexUsageReader.resetSessionMetricsCacheForTesting()
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer {
+            try? FileManager.default.removeItem(at: temp)
+            CodexUsageReader.resetSessionMetricsCacheForTesting()
+        }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        let sessionFile = sessionDir.appending(path: "current.jsonl")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {"schema_version":3,"active_account_key":"active","accounts":[{"account_key":"active","email":"active@example.com","plan":"team"}]}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"type":"event_msg","timestamp":"2026-06-14T06:00:00Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":10,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":20,"window_minutes":10080,"resets_at":1781910000}}}}
+        """.data(using: .utf8)!.write(to: sessionFile)
+
+        var snapshot = CodexUsageReader(homeDirectory: temp).read()
+        XCTAssertEqual(snapshot.accounts.first?.fiveHourWindow?.usedPercent, 10)
+        XCTAssertEqual(snapshot.points.reduce(0) { $0 + $1.tokens.total }, 2)
+
+        try """
+        {"type":"event_msg","timestamp":"2026-06-14T06:00:00Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":10,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":20,"window_minutes":10080,"resets_at":1781910000}}}}
+        {"type":"event_msg","timestamp":"2026-06-14T07:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":3,"cached_input_tokens":0,"output_tokens":4,"reasoning_output_tokens":0,"total_tokens":7}},"rate_limits":{"primary":{"used_percent":35,"window_minutes":300,"resets_at":1781420000},"secondary":{"used_percent":45,"window_minutes":10080,"resets_at":1781920000}}}}
+        """.data(using: .utf8)!.write(to: sessionFile)
+
+        snapshot = CodexUsageReader(homeDirectory: temp).read()
+
+        XCTAssertEqual(snapshot.accounts.first?.fiveHourWindow?.usedPercent, 35)
+        XCTAssertEqual(snapshot.accounts.first?.weeklyWindow?.usedPercent, 45)
+        XCTAssertEqual(snapshot.points.reduce(0) { $0 + $1.tokens.total }, 9)
+    }
+
+    func testCodexSessionMetricsCacheDropsDeletedFiles() throws {
+        CodexUsageReader.resetSessionMetricsCacheForTesting()
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer {
+            try? FileManager.default.removeItem(at: temp)
+            CodexUsageReader.resetSessionMetricsCacheForTesting()
+        }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        let sessionFile = sessionDir.appending(path: "deleted.jsonl")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {"schema_version":3,"active_account_key":"active","accounts":[{"account_key":"active","email":"active@example.com","plan":"team"}]}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"type":"event_msg","timestamp":"2026-06-14T06:00:00Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":10,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":20,"window_minutes":10080,"resets_at":1781910000}}}}
+        """.data(using: .utf8)!.write(to: sessionFile)
+
+        var snapshot = CodexUsageReader(homeDirectory: temp).read()
+        XCTAssertEqual(snapshot.points.count, 1)
+
+        try FileManager.default.removeItem(at: sessionFile)
+        snapshot = CodexUsageReader(homeDirectory: temp).read()
+
+        XCTAssertTrue(snapshot.points.isEmpty)
+        XCTAssertNil(snapshot.accounts.first?.fiveHourWindow)
+    }
+
     func testCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }

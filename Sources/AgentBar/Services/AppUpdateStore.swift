@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import Foundation
+import Security
 
 @MainActor
 final class AppUpdateStore: ObservableObject {
@@ -129,16 +130,18 @@ final class AppUpdateStore: ObservableObject {
     private func download(_ release: AppUpdateRelease) async throws {
         status = .downloading(release.version)
         let updateDirectory = try freshUpdateDirectory(for: release.version)
-        let zipURL = updateDirectory.appending(path: release.asset.name)
+        try AppUpdateSecurity.validateDownloadURL(release.asset.downloadURL)
+        let zipURL = updateDirectory.appending(path: try AppUpdateSecurity.safeAssetFileName(release.asset.name))
         let extractDirectory = updateDirectory.appending(path: "expanded", directoryHint: .isDirectory)
 
         let (temporaryURL, response) = try await session.download(from: release.asset.downloadURL)
         try validateHTTPResponse(response)
         try fileManager.moveItem(at: temporaryURL, to: zipURL)
-        try verifyDigestIfAvailable(release.asset.digest, fileURL: zipURL)
+        try AppUpdateSecurity.verifyRequiredSHA256Digest(release.asset.digest, fileURL: zipURL)
         try fileManager.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
         try unzip(zipURL, to: extractDirectory)
         let appURL = try findAppBundle(in: extractDirectory)
+        try AppUpdateSecurity.validateDownloadedAppBundle(appURL, expectedRoot: extractDirectory, fileManager: fileManager)
 
         let downloadedUpdate = DownloadedAppUpdate(release: release, appURL: appURL)
         self.downloadedUpdate = downloadedUpdate
@@ -174,8 +177,12 @@ final class AppUpdateStore: ObservableObject {
         guard let version = defaults.string(forKey: Keys.pendingReleaseVersion),
               let path = defaults.string(forKey: Keys.pendingAppPath)
         else { return }
-        let appURL = URL(fileURLWithPath: path)
-        guard fileManager.fileExists(atPath: appURL.path) else {
+        guard let updatesRoot = try? updatesRootDirectory(),
+              let appURL = try? AppUpdateSecurity.validatedRestoredPendingAppURL(
+                path: path,
+                updatesRoot: updatesRoot,
+                fileManager: fileManager
+              ) else {
             clearPendingDownload()
             return
         }
@@ -200,16 +207,6 @@ final class AppUpdateStore: ObservableObject {
               200..<300 ~= httpResponse.statusCode
         else {
             throw AppUpdateError.networkFailure
-        }
-    }
-
-    private func verifyDigestIfAvailable(_ digest: String?, fileURL: URL) throws {
-        guard let digest, digest.hasPrefix("sha256:") else { return }
-        let expected = String(digest.dropFirst("sha256:".count)).lowercased()
-        let data = try Data(contentsOf: fileURL)
-        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        guard actual == expected else {
-            throw AppUpdateError.digestMismatch
         }
     }
 
@@ -355,11 +352,17 @@ enum VersionComparator {
 
 enum AppUpdateInstaller {
     static func installAndRestart(from appURL: URL) throws {
-        let scriptURL = FileManager.default.temporaryDirectory
-            .appending(path: "agentbar-install-\(UUID().uuidString).sh")
+        let command = installCommand(from: appURL)
+        let appleScript = "do shell script \(command.appleScriptQuoted) with administrator privileges"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", appleScript]
+        try process.run()
+    }
+
+    static func installCommand(from appURL: URL) -> String {
         let destination = URL(fileURLWithPath: "/Applications/AgentBar.app")
-        let script = """
-        #!/bin/sh
+        return """
         set -e
         sleep 1
         /bin/rm -rf \(destination.path.shellQuoted)
@@ -367,31 +370,130 @@ enum AppUpdateInstaller {
         /usr/bin/xattr -dr com.apple.quarantine \(destination.path.shellQuoted) >/dev/null 2>&1 || true
         /usr/bin/open -n \(destination.path.shellQuoted)
         """
-        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-
-        let command = "/bin/sh \(scriptURL.path.shellQuoted)"
-        let appleScript = "do shell script \(command.appleScriptQuoted) with administrator privileges"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", appleScript]
-        try process.run()
     }
 }
 
 enum AppUpdateError: LocalizedError {
     case networkFailure
     case missingDownloadAsset
+    case missingDigest
+    case invalidDigest
     case digestMismatch
     case unzipFailed
     case missingAppBundle
+    case unsafeDownloadAsset
+    case insecureDownloadURL
+    case invalidAppBundle
+    case invalidCodeSignature
 
     var errorDescription: String? {
         switch self {
         case .networkFailure: "GitHub returned an unexpected response."
         case .missingDownloadAsset: "The latest release does not include an AgentBar zip asset."
+        case .missingDigest: "The update asset is missing a required checksum."
+        case .invalidDigest: "The update asset checksum is not a valid SHA-256 digest."
         case .digestMismatch: "The downloaded update did not match GitHub's asset checksum."
         case .unzipFailed: "The downloaded update could not be expanded."
         case .missingAppBundle: "The downloaded update did not contain AgentBar.app."
+        case .unsafeDownloadAsset: "The update asset name is not safe to download."
+        case .insecureDownloadURL: "The update asset must be downloaded over HTTPS."
+        case .invalidAppBundle: "The downloaded update is not a valid AgentBar app bundle."
+        case .invalidCodeSignature: "The downloaded update does not have a valid code signature."
+        }
+    }
+}
+
+enum AppUpdateSecurity {
+    static let bundleIdentifier = "com.terrytan.AgentBar"
+
+    static func validateDownloadURL(_ url: URL) throws {
+        guard url.scheme?.localizedCaseInsensitiveCompare("https") == .orderedSame else {
+            throw AppUpdateError.insecureDownloadURL
+        }
+    }
+
+    static func safeAssetFileName(_ name: String) throws -> String {
+        let fileName = URL(fileURLWithPath: name).lastPathComponent
+        guard !fileName.isEmpty,
+              fileName == name,
+              fileName != ".",
+              fileName != "..",
+              fileName.hasSuffix(".zip"),
+              fileName.localizedCaseInsensitiveContains("AgentBar")
+        else {
+            throw AppUpdateError.unsafeDownloadAsset
+        }
+        return fileName
+    }
+
+    static func verifyRequiredSHA256Digest(_ digest: String?, fileURL: URL) throws {
+        guard let digest, digest.hasPrefix("sha256:") else {
+            throw AppUpdateError.missingDigest
+        }
+        let expected = String(digest.dropFirst("sha256:".count)).lowercased()
+        guard expected.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil else {
+            throw AppUpdateError.invalidDigest
+        }
+        let data = try Data(contentsOf: fileURL)
+        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard actual == expected else {
+            throw AppUpdateError.digestMismatch
+        }
+    }
+
+    static func validatedRestoredPendingAppURL(
+        path: String,
+        updatesRoot: URL,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let appURL = URL(fileURLWithPath: path)
+        try validateDownloadedAppBundle(appURL, expectedRoot: updatesRoot, fileManager: fileManager)
+        return appURL
+    }
+
+    static func validateDownloadedAppBundle(
+        _ appURL: URL,
+        expectedRoot: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        guard appURL.lastPathComponent == "AgentBar.app",
+              isDescendant(appURL, of: expectedRoot),
+              fileManager.fileExists(atPath: appURL.path)
+        else {
+            throw AppUpdateError.invalidAppBundle
+        }
+        let values = try appURL.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey])
+        guard values.isSymbolicLink != true, values.isDirectory == true else {
+            throw AppUpdateError.invalidAppBundle
+        }
+        guard let bundle = Bundle(url: appURL),
+              bundle.bundleIdentifier == bundleIdentifier,
+              let executableURL = bundle.executableURL,
+              fileManager.fileExists(atPath: executableURL.path)
+        else {
+            throw AppUpdateError.invalidAppBundle
+        }
+        try validateCodeSignature(appURL)
+    }
+
+    private static func isDescendant(_ url: URL, of root: URL) -> Bool {
+        let childPath = url.standardizedFileURL.path
+        var rootPath = root.standardizedFileURL.path
+        if !rootPath.hasSuffix("/") {
+            rootPath += "/"
+        }
+        return childPath.hasPrefix(rootPath)
+    }
+
+    private static func validateCodeSignature(_ appURL: URL) throws {
+        var staticCode: SecStaticCode?
+        let createStatus = SecStaticCodeCreateWithPath(appURL as CFURL, [], &staticCode)
+        guard createStatus == errSecSuccess, let staticCode else {
+            throw AppUpdateError.invalidCodeSignature
+        }
+        let checkStatus = SecStaticCodeCheckValidity(staticCode, SecCSFlags(), nil)
+        guard checkStatus == errSecSuccess else {
+            throw AppUpdateError.invalidCodeSignature
         }
     }
 }

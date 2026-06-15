@@ -7,6 +7,8 @@ enum UsageReadError: Error {
 struct CodexUsageReader {
     var homeDirectory: URL
     var fileManager: FileManager = .default
+    static let maximumSessionFileBytes = 10 * 1024 * 1024
+    static let maximumSessionFiles = 1_000
     private static let sessionMetricsCache = CodexSessionMetricsCache()
 
     init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
@@ -139,7 +141,8 @@ struct CodexUsageReader {
             else { continue }
 
             guard let payload = event.payload else { continue }
-            let eventDate = event.parsedDate(using: dateParser) ?? Date()
+            let parsedEventDate = event.parsedDate(using: dateParser)
+            let eventDate = parsedEventDate ?? .distantPast
             if let cumulativeUsage = payload.info?.totalTokenUsage ?? payload.info?.lastTokenUsage {
                 latestTotal = cumulativeUsage.toTotals()
                 eventCount += 1
@@ -157,15 +160,16 @@ struct CodexUsageReader {
                 )
             }
 
-            if payload.rateLimits != nil,
-               latestRateLimitAt == nil || eventDate >= (latestRateLimitAt ?? .distantPast) {
+            if let parsedEventDate,
+               payload.rateLimits != nil,
+               latestRateLimitAt == nil || parsedEventDate >= (latestRateLimitAt ?? .distantPast) {
                 if let primary = payload.rateLimits?.primary {
                     fiveHour = UsageWindow(kind: .fiveHour, usedPercent: primary.usedPercent, windowMinutes: primary.windowMinutes, resetsAt: epochDate(primary.resetsAt))
                 }
                 if let secondary = payload.rateLimits?.secondary {
                     weekly = UsageWindow(kind: .weekly, usedPercent: secondary.usedPercent, windowMinutes: secondary.windowMinutes, resetsAt: epochDate(secondary.resetsAt))
                 }
-                latestRateLimitAt = eventDate
+                latestRateLimitAt = parsedEventDate
             }
         }
 
@@ -183,9 +187,13 @@ struct CodexUsageReader {
 
         var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
         var livePaths = Set<String>()
+        var reviewedFileCount = 0
 
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
             guard let signature = CodexSessionFileSignature(fileURL: fileURL) else { continue }
+            guard signature.size <= Self.maximumSessionFileBytes else { continue }
+            guard reviewedFileCount < Self.maximumSessionFiles else { break }
+            reviewedFileCount += 1
             let path = fileURL.path
             livePaths.insert(path)
             let metrics: CodexSessionMetrics

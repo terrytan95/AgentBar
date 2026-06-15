@@ -243,6 +243,53 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertNil(store.switchingAccountID)
     }
 
+    @MainActor
+    func testManualSwitchForceRestartsAndSuppressesImmediateAutoRotationOverride() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.autoCodexAccountRotationEnabled = true
+        let switchExpectation = expectation(description: "manual switch completed")
+        let recorder = AccountRotationRecorder()
+        let store = UsageStore(
+            settings: settings,
+            codexAccountSwitcher: { accountID in
+                recorder.recordSwitch(accountID)
+            },
+            automaticCodexRestarter: {
+                XCTFail("Manual account selection should not use the automatic guarded restarter.")
+                return .restarted
+            },
+            manualCodexAppRestarter: {
+                recorder.recordRestart(.restarted)
+                switchExpectation.fulfill()
+            }
+        )
+        let active = account(id: "active", used: 95, resetsAt: now.addingTimeInterval(600), lastUpdated: now, isActive: true)
+        let manual = account(id: "manual", used: 100, resetsAt: now.addingTimeInterval(300), lastUpdated: now, isActive: false)
+        let automaticCandidate = account(id: "automatic-candidate", used: 5, resetsAt: now.addingTimeInterval(1_800), lastUpdated: now.addingTimeInterval(-20_000))
+        store.applyTestData(accounts: [active, manual, automaticCandidate])
+
+        store.switchActiveAccount(manual)
+        wait(for: [switchExpectation], timeout: 2)
+
+        XCTAssertEqual(recorder.switchedAccountID, "manual")
+        XCTAssertEqual(recorder.restartResult, .restarted)
+
+        recorder.reset()
+        store.applyTestData(accounts: [
+            account(id: "manual", used: 100, resetsAt: now.addingTimeInterval(300), lastUpdated: now, isActive: true),
+            active,
+            automaticCandidate
+        ])
+
+        store.evaluateAutomaticCodexRotation(now: now)
+
+        XCTAssertNil(recorder.switchedAccountID)
+        XCTAssertNil(recorder.restartResult)
+    }
+
     private final class AccountRotationRecorder: @unchecked Sendable {
         private let lock = NSLock()
         private var recordedSwitchAccountID: String?
@@ -269,6 +316,13 @@ final class AccountRotationTests: XCTestCase {
         func recordRestart(_ result: CodexAppRestartResult) {
             lock.lock()
             recordedRestartResult = result
+            lock.unlock()
+        }
+
+        func reset() {
+            lock.lock()
+            recordedSwitchAccountID = nil
+            recordedRestartResult = nil
             lock.unlock()
         }
     }

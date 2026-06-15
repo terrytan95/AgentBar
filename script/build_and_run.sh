@@ -5,8 +5,8 @@ MODE="${1:-run}"
 APP_NAME="AgentBar"
 BUNDLE_ID="com.terrytan.AgentBar"
 MIN_SYSTEM_VERSION="14.0"
-APP_VERSION="1.0.4"
-APP_BUILD="104"
+APP_VERSION="1.0.5"
+APP_BUILD="105"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -95,12 +95,6 @@ case "$MODE" in
     ;;
   --verify|verify)
     open_app
-    sleep 2
-    pgrep -x "$APP_NAME" >/dev/null
-    echo "$APP_BUNDLE"
-    ;;
-  --smoke-ui|smoke-ui)
-    /usr/bin/open -n "$APP_BUNDLE" --args --smoke-ui
     sleep 2
     pgrep -x "$APP_NAME" >/dev/null
     echo "$APP_BUNDLE"

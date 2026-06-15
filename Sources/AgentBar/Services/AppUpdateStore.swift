@@ -262,6 +262,32 @@ enum AppUpdateStatus: Equatable {
             false
         }
     }
+
+    var isFailure: Bool {
+        if case .failed = self {
+            return true
+        }
+        return false
+    }
+
+    func localizedMessage(language: AppLanguage) -> String {
+        switch self {
+        case .idle:
+            L.text("updates_daily_check", language)
+        case .checking:
+            L.text("checking_for_updates", language)
+        case .upToDate:
+            L.text("app_up_to_date", language)
+        case .downloading(let version):
+            String(format: L.text("downloading_update", language), version)
+        case .downloaded(let version):
+            String(format: L.text("update_ready_to_install", language), version)
+        case .installing(let version):
+            String(format: L.text("installing_update", language), version)
+        case .failed(let message):
+            String(format: L.text("update_check_failed", language), message)
+        }
+    }
 }
 
 enum AppUpdateTrigger {

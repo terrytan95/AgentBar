@@ -127,7 +127,8 @@ enum L {
         "downloading_update": "Downloading %@...",
         "update_ready_to_install": "%@ is downloaded and ready to install.",
         "installing_update": "Installing %@ and restarting...",
-        "update_check_failed": "Update failed: %@"
+        "update_check_failed": "Update failed: %@",
+        "update_install_subtitle": "Install the downloaded update into /Applications."
     ]
 
     private static let chinese: [String: String] = [
@@ -233,6 +234,7 @@ enum L {
         "downloading_update": "正在下载 %@...",
         "update_ready_to_install": "%@ 已下载，可以安装。",
         "installing_update": "正在安装 %@ 并重启...",
-        "update_check_failed": "更新失败：%@"
+        "update_check_failed": "更新失败：%@",
+        "update_install_subtitle": "将已下载的更新安装到 /Applications。"
     ]
 }

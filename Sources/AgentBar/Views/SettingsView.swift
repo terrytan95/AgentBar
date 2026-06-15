@@ -54,7 +54,7 @@ struct SettingsView: View {
                                 .controlSize(.small)
                         }
                     }
-                    Text(updateStatusText)
+                    Text(updates.status.localizedMessage(language: store.language))
                         .font(.caption)
                         .foregroundStyle(updateStatusColor)
                     if updates.canInstallDownloadedUpdate {
@@ -108,27 +108,8 @@ struct SettingsView: View {
         .frame(width: 540, height: 470)
     }
 
-    private var updateStatusText: String {
-        switch updates.status {
-        case .idle:
-            L.text("updates_daily_check", store.language)
-        case .checking:
-            L.text("checking_for_updates", store.language)
-        case .upToDate:
-            L.text("app_up_to_date", store.language)
-        case .downloading(let version):
-            String(format: L.text("downloading_update", store.language), version)
-        case .downloaded(let version):
-            String(format: L.text("update_ready_to_install", store.language), version)
-        case .installing(let version):
-            String(format: L.text("installing_update", store.language), version)
-        case .failed(let message):
-            String(format: L.text("update_check_failed", store.language), message)
-        }
-    }
-
     private var updateStatusColor: Color {
-        if case .failed = updates.status {
+        if updates.status.isFailure {
             return .red
         }
         return .secondary

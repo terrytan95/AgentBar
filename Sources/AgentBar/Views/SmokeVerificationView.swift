@@ -27,7 +27,7 @@ struct SmokeVerificationView: View {
                         .frame(width: 540, height: 470)
                 }
             }
-            StatisticsView(store: store)
+            StatisticsView(store: store, initialTab: .settings)
                 .frame(height: 390)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }

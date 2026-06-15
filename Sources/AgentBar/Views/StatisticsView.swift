@@ -4,14 +4,20 @@ import SwiftUI
 struct StatisticsView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject private var settings: SettingsStore
+    @ObservedObject private var updates: AppUpdateStore
     @State private var serviceFilter: DashboardServiceFilter = .all
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
     @State private var currentLimitsHeight: CGFloat = 360
 
-    init(store: UsageStore, initialTab: DashboardTopTab = .usage) {
+    init(
+        store: UsageStore,
+        initialTab: DashboardTopTab = .usage,
+        updates: AppUpdateStore = .shared
+    ) {
         self.store = store
         self.settings = store.settings
+        self.updates = updates
         _topTab = State(initialValue: initialTab)
     }
 
@@ -362,6 +368,33 @@ struct StatisticsView: View {
                     }
                     .labelsHidden()
                     .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                }
+            }
+
+            SettingsGroup(title: L.text("software_update", store.language), subtitle: L.text("updates_daily_check", store.language)) {
+                SettingsRow(title: L.text("current_version", store.language), subtitle: updates.currentVersion) {
+                    EmptyView()
+                }
+                SettingsRow(title: L.text("check_for_updates", store.language), subtitle: updates.status.localizedMessage(language: store.language)) {
+                    HStack(spacing: 10) {
+                        Button(L.text("check_for_updates", store.language)) {
+                            Task { await updates.checkForUpdates() }
+                        }
+                        .disabled(!updates.canCheckForUpdates)
+                        if updates.status.isBusy {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                }
+                if updates.canInstallDownloadedUpdate {
+                    SettingsRow(title: L.text("install_and_restart", store.language), subtitle: L.text("update_install_subtitle", store.language)) {
+                        Button(L.text("install_and_restart", store.language)) {
+                            updates.installDownloadedUpdate()
+                        }
+                        .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                    }
                 }
             }
         }

@@ -236,6 +236,8 @@ struct StatisticsView: View {
             }
             .frame(height: hasClaudeData ? 152 : 70)
 
+            QuotaPressurePanel(pressure: quotaPressure, language: store.language, theme: settings.themeColor)
+
             Panel(title: "\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))") {
                 DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
                     .frame(height: 206)
@@ -575,6 +577,15 @@ struct StatisticsView: View {
 
     private var currentLimitSummary: CurrentLimitSummary {
         UsageInsights.currentLimitSummary(accounts: currentLimitAccounts)
+    }
+
+    private var quotaPressure: QuotaPressureInsight {
+        UsageInsights.quotaPressure(
+            accounts: store.accounts,
+            points: filteredPoints,
+            rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
+            autoRotationEnabled: settings.autoCodexAccountRotationEnabled
+        )
     }
 
     private var currentLimitAccounts: [UsageAccount] {
@@ -1245,6 +1256,115 @@ private struct CurrentLimitSummaryStrip: View {
         case ("lowest_5h", _): "Lowest 5H"
         case ("lowest_weekly", _): "Lowest weekly"
         case ("accounts", _): "Accounts"
+        default: key
+        }
+    }
+}
+
+private struct QuotaPressurePanel: View {
+    var pressure: QuotaPressureInsight
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: iconName)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(severityColor)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(localized("quota_pressure"))
+                        .font(.system(size: 13, weight: .bold))
+                    Text(severityTitle)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(severityColor, in: Capsule())
+                }
+                Text(detailLine)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            if let recommendedAccount = pressure.recommendedAccount {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(localized("best_account"))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                    Text(recommendedAccount.displayName)
+                        .font(.system(size: 12, weight: .bold))
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(severityColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(severityColor.opacity(0.22), lineWidth: 0.5)
+        )
+    }
+
+    private var iconName: String {
+        switch pressure.severity {
+        case .critical: "exclamationmark.triangle.fill"
+        case .warning: "gauge.with.dots.needle.67percent"
+        case .ok: "checkmark.circle.fill"
+        }
+    }
+
+    private var severityColor: Color {
+        switch pressure.severity {
+        case .critical: .red
+        case .warning: .orange
+        case .ok: theme.primary
+        }
+    }
+
+    private var severityTitle: String {
+        switch (pressure.severity, language) {
+        case (.critical, .chinese): "高风险"
+        case (.warning, .chinese): "注意"
+        case (.ok, .chinese): "正常"
+        case (.critical, _): "High risk"
+        case (.warning, _): "Watch"
+        case (.ok, _): "Healthy"
+        }
+    }
+
+    private var detailLine: String {
+        let active = pressure.activeAccount?.displayName ?? "--"
+        let projected = pressure.projectedFiveHourExhaustion.map { DisplayFormatters.relativeString(for: $0) }
+        let rotation = pressure.shouldTriggerRotation ? localized("rotation_ready") : localized("rotation_standby")
+        if let projected {
+            return "\(active) · \(localized("five_hour_exhausts")) \(projected) · \(rotation)"
+        }
+        return "\(active) · \(localized("five_hour_healthy")) · \(rotation)"
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("quota_pressure", .chinese): "额度压力"
+        case ("best_account", .chinese): "推荐账号"
+        case ("five_hour_exhausts", .chinese): "预计 5 小时额度耗尽于"
+        case ("five_hour_healthy", .chinese): "5 小时额度暂无风险"
+        case ("rotation_ready", .chinese): "自动轮换会触发"
+        case ("rotation_standby", .chinese): "自动轮换待命"
+        case ("quota_pressure", _): "Quota pressure"
+        case ("best_account", _): "Best account"
+        case ("five_hour_exhausts", _): "5H may exhaust"
+        case ("five_hour_healthy", _): "5H quota is healthy"
+        case ("rotation_ready", _): "rotation will trigger"
+        case ("rotation_standby", _): "rotation on standby"
         default: key
         }
     }

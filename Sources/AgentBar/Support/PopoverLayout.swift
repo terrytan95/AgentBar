@@ -9,7 +9,7 @@ enum PopoverLayout {
     static let screenFrameClearance: CGFloat = 48
 
     private static let baseHeight: CGFloat = 280
-    private static let accountRowHeight: CGFloat = 84
+    private static let accountRowHeight: CGFloat = 72
     private static let sourceRowHeight: CGFloat = 22
 
     static func maximumHeight(forScreenHeight screenHeight: CGFloat?) -> CGFloat {

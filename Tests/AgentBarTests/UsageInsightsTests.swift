@@ -109,6 +109,65 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(health.rows.map(\.service), [.claudeCode, .codex])
     }
 
+    func testPopoverRecommendationSuggestsBestAccountWhenActiveQuotaIsCritical() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let active = account(id: "active", name: "active@example.com", fiveHourUsed: 98, weeklyUsed: 30, now: now, active: true)
+        let better = account(id: "better", name: "better@example.com", fiveHourUsed: 14, weeklyUsed: 20, now: now, active: false)
+        let pressure = UsageInsights.quotaPressure(
+            accounts: [active, better],
+            points: [point(total: 4_000, minutesAgo: 15, now: now)],
+            rotationThresholdRemainingPercent: 10,
+            autoRotationEnabled: true,
+            now: now
+        )
+
+        let recommendation = PopoverActionRecommendation.make(
+            pressure: pressure,
+            dataSourceHealth: DataSourceHealthSummary(rows: [], liveCount: 1, issueCount: 0),
+            language: .english
+        )
+
+        XCTAssertEqual(recommendation.severity, .critical)
+        XCTAssertEqual(recommendation.action, .switchAccount("better"))
+        XCTAssertEqual(recommendation.actionTitle, "Use better@example.com")
+        XCTAssertTrue(recommendation.title.contains("Switch"))
+        XCTAssertTrue(recommendation.detail.contains("active@example.com"))
+    }
+
+    func testPopoverRecommendationAsksForRefreshWhenSourcesHaveIssuesAndNoActiveAccountExists() {
+        let health = DataSourceHealthSummary(
+            rows: [
+                DataSourceHealthSummary.Row(
+                    service: .codex,
+                    status: .needsAuthorization,
+                    note: "Auth missing",
+                    refreshedAt: Date(timeIntervalSince1970: 1_781_388_300)
+                )
+            ],
+            liveCount: 0,
+            issueCount: 1
+        )
+        let pressure = QuotaPressureInsight(
+            severity: .ok,
+            activeAccount: nil,
+            recommendedAccount: nil,
+            projectedFiveHourExhaustion: nil,
+            projectedWeeklyExhaustion: nil,
+            shouldTriggerRotation: false
+        )
+
+        let recommendation = PopoverActionRecommendation.make(
+            pressure: pressure,
+            dataSourceHealth: health,
+            language: .english
+        )
+
+        XCTAssertEqual(recommendation.severity, .warning)
+        XCTAssertEqual(recommendation.action, .refresh)
+        XCTAssertEqual(recommendation.actionTitle, "Refresh")
+        XCTAssertTrue(recommendation.title.contains("Refresh"))
+    }
+
     private func account(
         id: String,
         name: String,

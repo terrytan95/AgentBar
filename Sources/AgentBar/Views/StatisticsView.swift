@@ -262,6 +262,16 @@ struct StatisticsView: View {
                     Panel(title: L.text("by_model", store.language)) {
                         modelRows
                     }
+                    if hasConfiguredBudgets {
+                        Panel(title: budgetLocalized("budgets")) {
+                            BudgetStatusPanel(
+                                today: store.budgetStatus(for: .today),
+                                weekly: store.budgetStatus(for: .thisWeek),
+                                language: store.language,
+                                theme: settings.themeColor
+                            )
+                        }
+                    }
                 }
                 .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
 
@@ -370,6 +380,25 @@ struct StatisticsView: View {
                     }
                     .labelsHidden()
                     .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                }
+            }
+
+            SettingsGroup(title: budgetLocalized("budgets"), subtitle: budgetLocalized("budget_subtitle")) {
+                SettingsRow(title: budgetLocalized("daily_token_budget"), subtitle: budgetLocalized("daily_token_budget_subtitle")) {
+                    BudgetIntegerField(value: $settings.dailyTokenBudget, language: store.language)
+                        .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                }
+                SettingsRow(title: budgetLocalized("weekly_token_budget"), subtitle: budgetLocalized("weekly_token_budget_subtitle")) {
+                    BudgetIntegerField(value: $settings.weeklyTokenBudget, language: store.language)
+                        .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                }
+                SettingsRow(title: budgetLocalized("daily_cost_budget"), subtitle: budgetLocalized("daily_cost_budget_subtitle")) {
+                    BudgetCostField(value: $settings.dailyCostBudgetUSD, language: store.language)
+                        .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                }
+                SettingsRow(title: budgetLocalized("weekly_cost_budget"), subtitle: budgetLocalized("weekly_cost_budget_subtitle")) {
+                    BudgetCostField(value: $settings.weeklyCostBudgetUSD, language: store.language)
+                        .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
                 }
             }
 
@@ -594,6 +623,39 @@ struct StatisticsView: View {
 
     private var usageAnomalies: [UsageAnomaly] {
         UsageInsights.usageAnomalies(points: filteredPoints)
+    }
+
+    private var hasConfiguredBudgets: Bool {
+        settings.dailyTokenBudget > 0 ||
+            settings.weeklyTokenBudget > 0 ||
+            settings.dailyCostBudgetUSD > 0 ||
+            settings.weeklyCostBudgetUSD > 0
+    }
+
+    private func budgetLocalized(_ key: String) -> String {
+        switch (key, store.language) {
+        case ("budgets", .chinese): "预算"
+        case ("budget_subtitle", .chinese): "为日/周 Token 和费用设置软阈值，超出时菜单栏提示。"
+        case ("daily_token_budget", .chinese): "每日 Token 预算"
+        case ("weekly_token_budget", .chinese): "每周 Token 预算"
+        case ("daily_cost_budget", .chinese): "每日费用预算"
+        case ("weekly_cost_budget", .chinese): "每周费用预算"
+        case ("daily_token_budget_subtitle", .chinese): "0 表示关闭每日 Token 提醒。"
+        case ("weekly_token_budget_subtitle", .chinese): "0 表示关闭每周 Token 提醒。"
+        case ("daily_cost_budget_subtitle", .chinese): "0 表示关闭每日费用提醒。"
+        case ("weekly_cost_budget_subtitle", .chinese): "0 表示关闭每周费用提醒。"
+        case ("budgets", _): "Budgets"
+        case ("budget_subtitle", _): "Set soft daily and weekly token/cost thresholds; AgentBar marks the menu bar when they are high."
+        case ("daily_token_budget", _): "Daily token budget"
+        case ("weekly_token_budget", _): "Weekly token budget"
+        case ("daily_cost_budget", _): "Daily cost budget"
+        case ("weekly_cost_budget", _): "Weekly cost budget"
+        case ("daily_token_budget_subtitle", _): "Set 0 to disable daily token alerts."
+        case ("weekly_token_budget_subtitle", _): "Set 0 to disable weekly token alerts."
+        case ("daily_cost_budget_subtitle", _): "Set 0 to disable daily cost alerts."
+        case ("weekly_cost_budget_subtitle", _): "Set 0 to disable weekly cost alerts."
+        default: key
+        }
     }
 
     private var currentLimitAccounts: [UsageAccount] {
@@ -1444,6 +1506,109 @@ private struct UsageAnomalyPanel: View {
     }
 }
 
+private struct BudgetStatusPanel: View {
+    var today: BudgetStatus
+    var weekly: BudgetStatus
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        VStack(spacing: 8) {
+            BudgetStatusRow(title: localized("today"), status: today, language: language, theme: theme)
+            BudgetStatusRow(title: localized("week"), status: weekly, language: language, theme: theme)
+        }
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("today", .chinese): "今日"
+        case ("week", .chinese): "本周"
+        case ("today", _): "Today"
+        case ("week", _): "Week"
+        default: key
+        }
+    }
+}
+
+private struct BudgetStatusRow: View {
+    var title: String
+    var status: BudgetStatus
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                Spacer()
+                Text(severityTitle)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(severityColor)
+            }
+
+            HStack(spacing: 10) {
+                budgetMeter(label: L.text("tokens", language), fraction: status.tokenUsageFraction)
+                budgetMeter(label: L.text("cost", language), fraction: status.costUsageFraction)
+            }
+        }
+        .padding(10)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func budgetMeter(label: String, fraction: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                Spacer()
+                Text(percentText(fraction))
+                    .monospacedDigit()
+            }
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.secondary)
+            ProgressView(value: min(1, max(0, fraction ?? 0)))
+                .tint(color(for: fraction))
+        }
+    }
+
+    private var severityTitle: String {
+        switch (worstSeverity, language) {
+        case (.critical, .chinese): "超出预算"
+        case (.warning, .chinese): "接近预算"
+        case (.ok, .chinese): "正常"
+        case (.critical, _): "Over budget"
+        case (.warning, _): "Near budget"
+        case (.ok, _): "On track"
+        }
+    }
+
+    private var worstSeverity: InsightSeverity {
+        if status.tokenSeverity == .critical || status.costSeverity == .critical { return .critical }
+        if status.tokenSeverity == .warning || status.costSeverity == .warning { return .warning }
+        return .ok
+    }
+
+    private var severityColor: Color {
+        switch worstSeverity {
+        case .critical: .red
+        case .warning: .orange
+        case .ok: theme.primary
+        }
+    }
+
+    private func color(for fraction: Double?) -> Color {
+        guard let fraction else { return .secondary }
+        if fraction >= 1 { return .red }
+        if fraction >= 0.8 { return .orange }
+        return theme.primary
+    }
+
+    private func percentText(_ fraction: Double?) -> String {
+        guard let fraction else { return "--" }
+        return "\(Int((fraction * 100).rounded()))%"
+    }
+}
+
 private struct SummaryChip: View {
     var title: String
     var value: String
@@ -1575,6 +1740,40 @@ private struct SettingsRow<Content: View>: View {
         .padding(.leading, SettingsControlLayout.leadingInset)
         .padding(.trailing, SettingsControlLayout.trailingInset)
         .padding(.vertical, 12)
+    }
+}
+
+private struct BudgetIntegerField: View {
+    @Binding var value: Int
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("0", value: $value, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 90)
+            Text(L.text("tokens", language))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct BudgetCostField: View {
+    @Binding var value: Double
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("$")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            TextField("0", value: $value, format: .number.precision(.fractionLength(2)))
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 86)
+        }
     }
 }
 

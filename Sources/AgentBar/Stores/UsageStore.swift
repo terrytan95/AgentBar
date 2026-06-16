@@ -69,16 +69,17 @@ final class UsageStore: ObservableObject {
     }
 
     var menuBarTitle: String {
-        switch settings.menuBarDisplayMode {
+        let title = switch settings.menuBarDisplayMode {
         case .activeAccountWindows:
-            return activeAccountWindowTitle
+            activeAccountWindowTitle
         case .lowestRemaining:
-            return DisplayFormatters.percentString(lowestRemaining)
+            DisplayFormatters.percentString(lowestRemaining)
         case .totalTokens:
-            return DisplayFormatters.tokenString(summary.totalTokens)
+            DisplayFormatters.tokenString(summary.totalTokens)
         case .codexRemaining:
-            return DisplayFormatters.percentString(codexRemaining)
+            DisplayFormatters.percentString(codexRemaining)
         }
+        return budgetWarningPrefix + title
     }
 
     var popoverHeaderQuotaTitle: String {
@@ -124,6 +125,12 @@ final class UsageStore: ObservableObject {
         UsageStatistics.summarize(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
     }
 
+    var hasBudgetWarning: Bool {
+        [budgetStatus(for: .today), budgetStatus(for: .thisWeek)].contains { status in
+            status.tokenSeverity != .ok || status.costSeverity != .ok
+        }
+    }
+
     var securityNotes: [String] {
         snapshots.values.flatMap(\.securityNotes)
     }
@@ -134,6 +141,26 @@ final class UsageStore: ObservableObject {
                 snapshot.status == .live || !snapshot.accounts.isEmpty
             }
             .sorted(by: { $0.service.rawValue < $1.service.rawValue })
+    }
+
+    func budgetStatus(for range: UsageRange) -> BudgetStatus {
+        let rangeSummary = UsageStatistics.summarize(points: points, range: range)
+        switch range {
+        case .today:
+            return UsageInsights.budgetStatus(
+                summary: rangeSummary,
+                dailyTokenBudget: settings.dailyTokenBudget,
+                dailyCostBudgetUSD: settings.dailyCostBudgetUSD > 0 ? Decimal(settings.dailyCostBudgetUSD) : nil
+            )
+        case .thisWeek:
+            return UsageInsights.budgetStatus(
+                summary: rangeSummary,
+                dailyTokenBudget: settings.weeklyTokenBudget,
+                dailyCostBudgetUSD: settings.weeklyCostBudgetUSD > 0 ? Decimal(settings.weeklyCostBudgetUSD) : nil
+            )
+        default:
+            return UsageInsights.budgetStatus(summary: rangeSummary, dailyTokenBudget: 0, dailyCostBudgetUSD: nil)
+        }
     }
 
     func refresh(force: Bool = false, showManualFeedback: Bool = false) {
@@ -231,6 +258,10 @@ final class UsageStore: ObservableObject {
             return false
         }
         return true
+    }
+
+    private var budgetWarningPrefix: String {
+        hasBudgetWarning ? "! " : ""
     }
 
     private func switchCodexAccount(_ account: UsageAccount, restartMode: CodexSwitchRestartMode) {

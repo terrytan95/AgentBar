@@ -94,6 +94,28 @@ struct SettingsView: View {
                 .disabled(!settings.autoCodexAccountRotationEnabled)
                 Toggle("Codex", isOn: $settings.showCodexInMenuBar)
                 Toggle("Claude Code", isOn: $settings.showClaudeInMenuBar)
+                Section(budgetLocalized("budgets")) {
+                    HStack {
+                        Text(budgetLocalized("daily_token_budget"))
+                        Spacer()
+                        SettingsBudgetIntegerField(value: $settings.dailyTokenBudget, language: store.language)
+                    }
+                    HStack {
+                        Text(budgetLocalized("weekly_token_budget"))
+                        Spacer()
+                        SettingsBudgetIntegerField(value: $settings.weeklyTokenBudget, language: store.language)
+                    }
+                    HStack {
+                        Text(budgetLocalized("daily_cost_budget"))
+                        Spacer()
+                        SettingsBudgetCostField(value: $settings.dailyCostBudgetUSD)
+                    }
+                    HStack {
+                        Text(budgetLocalized("weekly_cost_budget"))
+                        Spacer()
+                        SettingsBudgetCostField(value: $settings.weeklyCostBudgetUSD)
+                    }
+                }
                 Button(L.text("login_codex", store.language)) {
                     store.openLogin(for: .codex)
                 }
@@ -115,6 +137,22 @@ struct SettingsView: View {
             return .red
         }
         return .secondary
+    }
+
+    private func budgetLocalized(_ key: String) -> String {
+        switch (key, store.language) {
+        case ("budgets", .chinese): "预算"
+        case ("daily_token_budget", .chinese): "每日 Token 预算"
+        case ("weekly_token_budget", .chinese): "每周 Token 预算"
+        case ("daily_cost_budget", .chinese): "每日费用预算"
+        case ("weekly_cost_budget", .chinese): "每周费用预算"
+        case ("budgets", _): "Budgets"
+        case ("daily_token_budget", _): "Daily token budget"
+        case ("weekly_token_budget", _): "Weekly token budget"
+        case ("daily_cost_budget", _): "Daily cost budget"
+        case ("weekly_cost_budget", _): "Weekly cost budget"
+        default: key
+        }
     }
 }
 
@@ -148,5 +186,38 @@ struct CodexRotationThresholdControl: View {
         .disabled(!isEnabled)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L.text("codex_rotation_threshold", language))
+    }
+}
+
+private struct SettingsBudgetIntegerField: View {
+    @Binding var value: Int
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("0", value: $value, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 90)
+            Text(L.text("tokens", language))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct SettingsBudgetCostField: View {
+    @Binding var value: Double
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("$")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("0", value: $value, format: .number.precision(.fractionLength(2)))
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 86)
+        }
     }
 }

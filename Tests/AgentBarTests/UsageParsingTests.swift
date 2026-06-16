@@ -587,6 +587,40 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(settings.menuBarDisplayMode, .activeAccountWindows)
     }
 
+    @MainActor
+    func testBudgetSettingsPersistAndWarnInMenuBarTitle() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.dailyTokenBudget = 1_000
+        settings.weeklyTokenBudget = 7_000
+        settings.dailyCostBudgetUSD = 2.5
+        settings.weeklyCostBudgetUSD = 12.5
+
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertEqual(reloaded.dailyTokenBudget, 1_000)
+        XCTAssertEqual(reloaded.weeklyTokenBudget, 7_000)
+        XCTAssertEqual(reloaded.dailyCostBudgetUSD, 2.5)
+        XCTAssertEqual(reloaded.weeklyCostBudgetUSD, 12.5)
+
+        let store = UsageStore(settings: reloaded, codexUsageSynchronizer: { .success })
+        store.applyTestData(
+            accounts: [testAccount(id: "active", name: "active@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: Date())],
+            points: [
+                UsagePoint(
+                    service: .codex,
+                    model: "codex-local",
+                    date: Date(),
+                    tokens: TokenTotals(input: 600, cachedInput: 0, output: 400, reasoningOutput: 0, total: 1_000),
+                    estimatedCostUSD: Decimal(string: "2.75")
+                )
+            ]
+        )
+
+        XCTAssertTrue(store.menuBarTitle.hasPrefix("! "))
+    }
+
     func testStatisticsBucketsAggregateExpectedRanges() {
         let calendar = Calendar(identifier: .gregorian)
         let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!

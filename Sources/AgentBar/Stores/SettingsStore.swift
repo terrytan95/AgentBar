@@ -84,6 +84,50 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var dailyTokenBudget: Int {
+        didSet {
+            let clamped = Self.clampedBudgetCount(dailyTokenBudget)
+            if clamped != dailyTokenBudget {
+                dailyTokenBudget = clamped
+                return
+            }
+            defaults.set(clamped, forKey: Keys.dailyTokenBudget)
+        }
+    }
+
+    @Published var weeklyTokenBudget: Int {
+        didSet {
+            let clamped = Self.clampedBudgetCount(weeklyTokenBudget)
+            if clamped != weeklyTokenBudget {
+                weeklyTokenBudget = clamped
+                return
+            }
+            defaults.set(clamped, forKey: Keys.weeklyTokenBudget)
+        }
+    }
+
+    @Published var dailyCostBudgetUSD: Double {
+        didSet {
+            let clamped = Self.clampedBudgetCost(dailyCostBudgetUSD)
+            if clamped != dailyCostBudgetUSD {
+                dailyCostBudgetUSD = clamped
+                return
+            }
+            defaults.set(clamped, forKey: Keys.dailyCostBudgetUSD)
+        }
+    }
+
+    @Published var weeklyCostBudgetUSD: Double {
+        didSet {
+            let clamped = Self.clampedBudgetCost(weeklyCostBudgetUSD)
+            if clamped != weeklyCostBudgetUSD {
+                weeklyCostBudgetUSD = clamped
+                return
+            }
+            defaults.set(clamped, forKey: Keys.weeklyCostBudgetUSD)
+        }
+    }
+
     var popoverHeight: Double {
         get { storedPopoverHeight }
         set {
@@ -123,6 +167,10 @@ final class SettingsStore: ObservableObject {
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
         let savedRotationThreshold = defaults.double(forKey: Keys.codexRotationThresholdRemainingPercent)
         codexRotationThresholdRemainingPercent = Self.clampedRotationThreshold(savedRotationThreshold > 0 ? savedRotationThreshold : 10)
+        dailyTokenBudget = Self.clampedBudgetCount(defaults.integer(forKey: Keys.dailyTokenBudget))
+        weeklyTokenBudget = Self.clampedBudgetCount(defaults.integer(forKey: Keys.weeklyTokenBudget))
+        dailyCostBudgetUSD = Self.clampedBudgetCost(defaults.double(forKey: Keys.dailyCostBudgetUSD))
+        weeklyCostBudgetUSD = Self.clampedBudgetCost(defaults.double(forKey: Keys.weeklyCostBudgetUSD))
         let savedPopoverHeight = defaults.double(forKey: Keys.popoverHeight)
         storedPopoverHeight = Self.clampedPopoverHeight(
             savedPopoverHeight > 0 ? savedPopoverHeight : Double(PopoverLayout.defaultHeight),
@@ -146,6 +194,14 @@ final class SettingsStore: ObservableObject {
 
     static func clampedRotationThreshold(_ threshold: Double) -> Double {
         min(100, max(1, threshold))
+    }
+
+    static func clampedBudgetCount(_ value: Int) -> Int {
+        max(0, value)
+    }
+
+    static func clampedBudgetCost(_ value: Double) -> Double {
+        max(0, value)
     }
 
     private func applyLoginItemPreference() {
@@ -175,6 +231,10 @@ final class SettingsStore: ObservableObject {
         static let accountSortMode = "accountSortMode"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
         static let codexRotationThresholdRemainingPercent = "codexRotationThresholdRemainingPercent"
+        static let dailyTokenBudget = "dailyTokenBudget"
+        static let weeklyTokenBudget = "weeklyTokenBudget"
+        static let dailyCostBudgetUSD = "dailyCostBudgetUSD"
+        static let weeklyCostBudgetUSD = "weeklyCostBudgetUSD"
         static let popoverHeight = "popoverHeight"
     }
 }

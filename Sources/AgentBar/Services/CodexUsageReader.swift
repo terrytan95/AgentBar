@@ -22,7 +22,7 @@ struct CodexUsageReader {
         var points: [UsagePoint] = []
         var activeAccountActivatedAt: Date?
         var notes = [
-            "Read-only local Codex registry and usage JSONL; credential auth files are not opened."
+            "AgentBar reads the local Codex registry and usage JSONL; auth snapshots are read only for usage API refresh."
         ]
 
         if let data = try? Data(contentsOf: registryURL),
@@ -46,24 +46,20 @@ struct CodexUsageReader {
                     activeAccountActivatedAt: activeAccountActivatedAt,
                     latestRateLimitAt: metrics.latestRateLimitAt
                 )
-                if account.isActive, canUseSessionRateLimitsForActiveAccount, let latestFiveHour = metrics.latestFiveHour {
+                if account.fiveHourWindow == nil,
+                   (canUseSessionRateLimitsForActiveAccount || !account.isActive),
+                   let latestFiveHour = metrics.latestFiveHour {
                     account.fiveHourWindow = latestFiveHour
-                } else if !account.isActive, account.fiveHourWindow == nil {
-                    account.fiveHourWindow = metrics.latestFiveHour
                 }
-                if account.isActive, canUseSessionRateLimitsForActiveAccount, let latestWeekly = metrics.latestWeekly {
+                if account.weeklyWindow == nil,
+                   (canUseSessionRateLimitsForActiveAccount || !account.isActive),
+                   let latestWeekly = metrics.latestWeekly {
                     account.weeklyWindow = latestWeekly
-                } else if !account.isActive, account.weeklyWindow == nil {
-                    account.weeklyWindow = metrics.latestWeekly
                 }
                 if account.tokens.total == 0 {
                     account.tokens = metrics.tokenTotals
                 }
-                if account.isActive {
-                    account.lastUpdated = metrics.latestRateLimitAt ?? account.lastUpdated ?? now
-                } else {
-                    account.lastUpdated = account.lastUpdated ?? now
-                }
+                account.lastUpdated = account.lastUpdated ?? metrics.latestRateLimitAt ?? now
                 return account
             }
         }

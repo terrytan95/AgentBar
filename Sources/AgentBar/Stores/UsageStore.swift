@@ -15,6 +15,9 @@ final class UsageStore: ObservableObject {
     @Published var customEnd = Date()
 
     let settings: SettingsStore
+    private let codexUsageSynchronizer: @Sendable () -> CodexUsageSyncResult
+    private let codexUsageReader: @Sendable () -> UsageSnapshot
+    private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
     private let manualCodexAppRestarter: @Sendable () -> Void
@@ -26,6 +29,15 @@ final class UsageStore: ObservableObject {
 
     init(
         settings: SettingsStore = SettingsStore(),
+        codexUsageSynchronizer: @escaping @Sendable () -> CodexUsageSyncResult = {
+            CodexUsageAPISyncer().refreshUsage()
+        },
+        codexUsageReader: @escaping @Sendable () -> UsageSnapshot = {
+            CodexUsageReader().read()
+        },
+        claudeUsageReader: @escaping @Sendable () -> UsageSnapshot = {
+            ClaudeUsageReader().read()
+        },
         codexAccountSwitcher: @escaping @Sendable (String) throws -> Void = { accountID in
             try CodexAccountSwitcher().switchActiveAccount(accountID: accountID)
         },
@@ -37,6 +49,9 @@ final class UsageStore: ObservableObject {
         }
     ) {
         self.settings = settings
+        self.codexUsageSynchronizer = codexUsageSynchronizer
+        self.codexUsageReader = codexUsageReader
+        self.claudeUsageReader = claudeUsageReader
         self.codexAccountSwitcher = codexAccountSwitcher
         self.automaticCodexRestarter = automaticCodexRestarter
         self.manualCodexAppRestarter = manualCodexAppRestarter
@@ -138,10 +153,17 @@ final class UsageStore: ObservableObject {
         refreshInFlight = true
         isRefreshing = true
         lastError = nil
+        let syncCodexUsage = codexUsageSynchronizer
+        let readCodexUsage = codexUsageReader
+        let readClaudeUsage = claudeUsageReader
 
         DispatchQueue.global(qos: .utility).async {
-            let codex = CodexUsageReader().read()
-            let claude = ClaudeUsageReader().read()
+            let syncResult = syncCodexUsage()
+            var codex = readCodexUsage()
+            if let note = syncResult.note {
+                codex.securityNotes.append(note)
+            }
+            let claude = readClaudeUsage()
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }

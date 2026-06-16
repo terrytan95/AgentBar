@@ -559,14 +559,22 @@ struct StatisticsView: View {
         if accounts.isEmpty {
             EmptyPanelMessage(L.text("no_quota_windows", store.language))
         } else {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(accounts) { account in
-                        AccountLimitGroupView(account: account, language: store.language, theme: settings.themeColor)
+            VStack(alignment: .leading, spacing: 10) {
+                CurrentLimitSummaryStrip(summary: currentLimitSummary, language: store.language, theme: settings.themeColor)
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(accounts) { account in
+                            AccountLimitGroupView(account: account, language: store.language, theme: settings.themeColor)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private var currentLimitSummary: CurrentLimitSummary {
+        UsageInsights.currentLimitSummary(accounts: currentLimitAccounts)
     }
 
     private var currentLimitAccounts: [UsageAccount] {
@@ -1197,13 +1205,87 @@ private struct LoadingAccountPanel: View {
     }
 }
 
+private struct CurrentLimitSummaryStrip: View {
+    var summary: CurrentLimitSummary
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        HStack(spacing: 8) {
+            SummaryChip(
+                title: localized("most_constrained"),
+                value: summary.mostConstrainedAccount?.displayName ?? "--",
+                color: theme.quotaColor(remaining: summary.mostConstrainedAccount?.mostConstrainedRemainingPercent)
+            )
+            SummaryChip(
+                title: localized("lowest_5h"),
+                value: DisplayFormatters.percentString(summary.lowestFiveHourRemaining),
+                color: theme.quotaColor(remaining: summary.lowestFiveHourRemaining)
+            )
+            SummaryChip(
+                title: localized("lowest_weekly"),
+                value: DisplayFormatters.percentString(summary.lowestWeeklyRemaining),
+                color: theme.quotaColor(remaining: summary.lowestWeeklyRemaining)
+            )
+            SummaryChip(
+                title: localized("accounts"),
+                value: "\(summary.accountCount)",
+                color: theme.tertiary
+            )
+        }
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("most_constrained", .chinese): "最紧张"
+        case ("lowest_5h", .chinese): "最低 5 小时"
+        case ("lowest_weekly", .chinese): "最低本周"
+        case ("accounts", .chinese): "账号"
+        case ("most_constrained", _): "Most constrained"
+        case ("lowest_5h", _): "Lowest 5H"
+        case ("lowest_weekly", _): "Lowest weekly"
+        case ("accounts", _): "Accounts"
+        default: key
+        }
+    }
+}
+
+private struct SummaryChip: View {
+    var title: String
+    var value: String
+    var color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .lineLimit(1)
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 6, height: 6)
+                Text(value)
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
 private struct AccountLimitGroupView: View {
     var account: UsageAccount
     var language: AppLanguage
     var theme: AppThemeColor
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -1219,31 +1301,36 @@ private struct AccountLimitGroupView: View {
                                 .background(theme.primary, in: Capsule())
                         }
                     }
-                    Text(account.username ?? account.maskedEmail ?? account.sourceDescription)
+                    Text(accountDetailLine)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer()
-                Text(account.service.rawValue)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(account.service.rawValue)
+                        .font(.system(size: 10, weight: .bold))
+                    Text(account.accountTypeValue)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             HStack(spacing: 12) {
                 UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language, theme: theme)
                 UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
             }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.lastActivityLine(language: language))
-                Text(account.accountTypeLine(language: language))
-            }
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.secondary)
         }
-        .padding(10)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(9)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private var accountDetailLine: String {
+        let identity = account.username ?? account.maskedEmail ?? account.sourceDescription
+        if let lastUpdated = account.lastUpdated {
+            return "\(identity) · \(DisplayFormatters.relativeString(for: lastUpdated))"
+        }
+        return identity
     }
 }
 

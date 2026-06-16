@@ -250,6 +250,10 @@ struct StatisticsView: View {
                 }
             }
 
+            if !usageAnomalies.isEmpty {
+                UsageAnomalyPanel(anomalies: usageAnomalies, language: store.language, theme: settings.themeColor)
+            }
+
             HStack(alignment: .top, spacing: 14) {
                 VStack(spacing: 14) {
                     Panel(title: L.text("by_service", store.language)) {
@@ -586,6 +590,10 @@ struct StatisticsView: View {
             rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
             autoRotationEnabled: settings.autoCodexAccountRotationEnabled
         )
+    }
+
+    private var usageAnomalies: [UsageAnomaly] {
+        UsageInsights.usageAnomalies(points: filteredPoints)
     }
 
     private var currentLimitAccounts: [UsageAccount] {
@@ -1365,6 +1373,72 @@ private struct QuotaPressurePanel: View {
         case ("five_hour_healthy", _): "5H quota is healthy"
         case ("rotation_ready", _): "rotation will trigger"
         case ("rotation_standby", _): "rotation on standby"
+        default: key
+        }
+    }
+}
+
+private struct UsageAnomalyPanel: View {
+    var anomalies: [UsageAnomaly]
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        Panel(title: localized("usage_anomalies")) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(anomalies.prefix(3)) { anomaly in
+                    HStack(spacing: 10) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.orange)
+                            .frame(width: 16)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(title(for: anomaly))
+                                .font(.system(size: 12, weight: .bold))
+                                .lineLimit(1)
+                            Text(detail(for: anomaly))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text(String(format: "%.1fx", anomaly.multiple))
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(theme.primary)
+                            .monospacedDigit()
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func title(for anomaly: UsageAnomaly) -> String {
+        switch (anomaly.kind, language) {
+        case (.dailyTokens, .chinese): "今日 Token 激增"
+        case (.modelTokens, .chinese): "\(anomaly.label) 用量激增"
+        case (.dailyTokens, _): "Daily token spike"
+        case (.modelTokens, _): "\(anomaly.label) spike"
+        }
+    }
+
+    private func detail(for anomaly: UsageAnomaly) -> String {
+        let tokens = DisplayFormatters.compactTokenString(anomaly.tokens, language: language)
+        let baseline = DisplayFormatters.compactTokenString(anomaly.baselineTokens, language: language)
+        switch language {
+        case .chinese:
+            return "\(tokens) \(L.text("tokens", language))，近期基线 \(baseline)"
+        case .english:
+            return "\(tokens) \(L.text("tokens", language)), baseline \(baseline)"
+        }
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("usage_anomalies", .chinese): "用量异常"
+        case ("usage_anomalies", _): "Usage anomalies"
         default: key
         }
     }

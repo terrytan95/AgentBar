@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ResizablePopoverRootView: View {
@@ -5,6 +6,7 @@ struct ResizablePopoverRootView: View {
     var maximumHeight: CGFloat
     var onOpenStatistics: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onQuit: () -> Void
     var onHeightChange: (CGFloat) -> Void
     @ObservedObject private var settings: SettingsStore
 
@@ -13,12 +15,14 @@ struct ResizablePopoverRootView: View {
         maximumHeight: CGFloat,
         onOpenStatistics: (() -> Void)?,
         onOpenSettings: (() -> Void)?,
+        onQuit: @escaping () -> Void = { NSApplication.shared.terminate(nil) },
         onHeightChange: @escaping (CGFloat) -> Void
     ) {
         self.store = store
         self.maximumHeight = maximumHeight
         self.onOpenStatistics = onOpenStatistics
         self.onOpenSettings = onOpenSettings
+        self.onQuit = onQuit
         self.onHeightChange = onHeightChange
         self.settings = store.settings
     }
@@ -36,7 +40,8 @@ struct ResizablePopoverRootView: View {
         PopoverRootView(
             store: store,
             onOpenStatistics: onOpenStatistics,
-            onOpenSettings: onOpenSettings
+            onOpenSettings: onOpenSettings,
+            onQuit: onQuit
         )
         .frame(width: PopoverLayout.width)
         .frame(minHeight: PopoverLayout.minimumHeight, maxHeight: .infinity)
@@ -93,6 +98,7 @@ struct PopoverRootView: View {
     @ObservedObject var store: UsageStore
     var onOpenStatistics: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -224,6 +230,11 @@ struct PopoverRootView: View {
                 SettingsLink {
                     Label(L.text("settings", store.language), systemImage: "gearshape")
                 }
+            }
+            Button {
+                onQuit()
+            } label: {
+                Label(L.text("quit_app", store.language), systemImage: "power")
             }
         }
         .padding(.vertical, 9)

@@ -80,6 +80,7 @@ final class StatusItemController: NSObject {
             maximumHeight: maximumHeight,
             onOpenStatistics: { MainWindowPresenter.showMainWindow() },
             onOpenSettings: { MainWindowPresenter.showMainWindow(initialTab: .settings) },
+            onQuit: { NSApplication.shared.terminate(nil) },
             onHeightChange: { [weak popover] height in
                 popover?.contentSize = NSSize(
                     width: PopoverLayout.width,

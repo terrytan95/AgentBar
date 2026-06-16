@@ -177,6 +177,10 @@ final class AppUpdateStore: ObservableObject {
         guard let version = defaults.string(forKey: Keys.pendingReleaseVersion),
               let path = defaults.string(forKey: Keys.pendingAppPath)
         else { return }
+        guard VersionComparator.isReleaseVersion(version, newerThan: AppVersion.currentComparableVersion) else {
+            clearPendingDownload()
+            return
+        }
         guard let updatesRoot = try? updatesRootDirectory(),
               let appURL = try? AppUpdateSecurity.validatedRestoredPendingAppURL(
                 path: path,

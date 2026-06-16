@@ -204,6 +204,11 @@ struct UsageSummary: Equatable, Sendable {
     var pricingFingerprint: String
 }
 
+struct UsagePeriodChange: Equatable, Sendable {
+    var tokenPercent: Double?
+    var costPercent: Double?
+}
+
 struct DailyUsageBar: Equatable, Identifiable, Sendable {
     var id: Date { day }
     var day: Date

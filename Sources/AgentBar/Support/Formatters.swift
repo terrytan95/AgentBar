@@ -65,6 +65,17 @@ enum DisplayFormatters {
         return "\(Int(value.rounded()))%"
     }
 
+    static func changePercentString(_ value: Double?) -> String {
+        guard let value else { return "--" }
+        if value > 0 {
+            return String(format: "↑ %.1f%%", value)
+        }
+        if value < 0 {
+            return String(format: "↓ %.1f%%", abs(value))
+        }
+        return "0.0%"
+    }
+
     static func relativeString(for date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated

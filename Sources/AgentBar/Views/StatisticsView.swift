@@ -226,8 +226,8 @@ struct StatisticsView: View {
 
             GeometryReader { proxy in
                 LazyVGrid(columns: kpiColumns(for: proxy.size.width), spacing: 12) {
-                    DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language), delta: "↓ 23.6%", accent: .primary, theme: settings.themeColor)
-                    DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary, theme: settings.themeColor)
+                    DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language), delta: DisplayFormatters.changePercentString(periodChange.tokenPercent), accent: .primary, theme: settings.themeColor)
+                    DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: DisplayFormatters.changePercentString(periodChange.costPercent), accent: .primary, theme: settings.themeColor)
                     DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: settings.themeColor.tertiary, accent: settings.themeColor.tertiary, theme: settings.themeColor)
                     if hasClaudeData {
                         DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: settings.themeColor.secondary, accent: settings.themeColor.secondary, theme: settings.themeColor)
@@ -480,6 +480,15 @@ struct StatisticsView: View {
 
     private var summary: UsageSummary {
         UsageStatistics.summarize(
+            points: filteredPoints,
+            range: store.selectedRange,
+            customStart: store.customStart,
+            customEnd: store.customEnd
+        )
+    }
+
+    private var periodChange: UsagePeriodChange {
+        UsageStatistics.periodChange(
             points: filteredPoints,
             range: store.selectedRange,
             customStart: store.customStart,

@@ -14,7 +14,33 @@ enum UsageStatistics {
             guard let interval else { return true }
             return interval.contains(point.date)
         }
+        return summarize(points: filtered, calendar: calendar)
+    }
 
+    static func periodChange(
+        points: [UsagePoint],
+        range: UsageRange,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        customStart: Date? = nil,
+        customEnd: Date? = nil
+    ) -> UsagePeriodChange {
+        guard
+            let currentInterval = dateInterval(for: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd),
+            let previousInterval = previousDateInterval(for: range, currentInterval: currentInterval, calendar: calendar)
+        else {
+            return UsagePeriodChange(tokenPercent: nil, costPercent: nil)
+        }
+
+        let current = summarize(points: points.filter { currentInterval.contains($0.date) }, calendar: calendar)
+        let previous = summarize(points: points.filter { previousInterval.contains($0.date) }, calendar: calendar)
+        return UsagePeriodChange(
+            tokenPercent: percentChange(current: current.totalTokens, previous: previous.totalTokens),
+            costPercent: percentChange(current: current.estimatedCostUSD, previous: previous.estimatedCostUSD)
+        )
+    }
+
+    private static func summarize(points filtered: [UsagePoint], calendar: Calendar) -> UsageSummary {
         let total = filtered.reduce(TokenTotals.zero) { $0 + $1.tokens }
         let costValues = filtered.compactMap(\.estimatedCostUSD)
         let cost = costValues.isEmpty ? nil : costValues.reduce(Decimal(0), +)
@@ -35,6 +61,39 @@ enum UsageStatistics {
             dailyBars: dailyBars,
             pricingFingerprint: Pricing.fingerprint
         )
+    }
+
+    private static func previousDateInterval(for range: UsageRange, currentInterval: DateInterval, calendar: Calendar) -> DateInterval? {
+        switch range {
+        case .all:
+            return nil
+        case .thisWeek:
+            guard let start = calendar.date(byAdding: .weekOfYear, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .thisMonth:
+            guard let start = calendar.date(byAdding: .month, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .thisYear:
+            guard let start = calendar.date(byAdding: .year, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .today, .yesterday, .last7Days, .last30Days, .custom:
+            let duration = currentInterval.duration
+            guard duration > 0 else { return nil }
+            return DateInterval(start: currentInterval.start.addingTimeInterval(-duration), end: currentInterval.start)
+        }
+    }
+
+    private static func percentChange(current: Int, previous: Int) -> Double? {
+        guard previous > 0 else { return nil }
+        return (Double(current - previous) / Double(previous)) * 100
+    }
+
+    private static func percentChange(current: Decimal?, previous: Decimal?) -> Double? {
+        guard let current, let previous else { return nil }
+        let currentValue = NSDecimalNumber(decimal: current).doubleValue
+        let previousValue = NSDecimalNumber(decimal: previous).doubleValue
+        guard previousValue > 0 else { return nil }
+        return ((currentValue - previousValue) / previousValue) * 100
     }
 
     private static func dateInterval(

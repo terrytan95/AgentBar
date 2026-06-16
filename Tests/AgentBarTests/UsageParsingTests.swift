@@ -641,6 +641,46 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(all.serviceBreakdown[.claudeCode], 36)
     }
 
+    func testPeriodChangeComparesSelectedRangeAgainstPreviousPeriod() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
+        let points = [
+            UsagePoint(service: .codex, model: "codex-local", date: now, tokens: TokenTotals(input: 120, cachedInput: 0, output: 30, reasoningOutput: 0, total: 150), estimatedCostUSD: Decimal(string: "3.00")),
+            UsagePoint(service: .codex, model: "codex-local", date: calendar.date(byAdding: .day, value: -1, to: now)!, tokens: TokenTotals(input: 80, cachedInput: 0, output: 20, reasoningOutput: 0, total: 100), estimatedCostUSD: Decimal(string: "2.00")),
+            UsagePoint(service: .codex, model: "codex-local", date: calendar.date(byAdding: .day, value: -2, to: now)!, tokens: TokenTotals(input: 800, cachedInput: 0, output: 200, reasoningOutput: 0, total: 1_000), estimatedCostUSD: Decimal(string: "10.00"))
+        ]
+
+        let change = UsageStatistics.periodChange(points: points, range: .today, now: now, calendar: calendar)
+
+        XCTAssertEqual(try XCTUnwrap(change.tokenPercent), 50, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(change.costPercent), 50, accuracy: 0.001)
+    }
+
+    func testPeriodChangeHasNoPercentWithoutComparableBaseline() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
+        let points = [
+            UsagePoint(service: .codex, model: "codex-local", date: now, tokens: TokenTotals(input: 120, cachedInput: 0, output: 30, reasoningOutput: 0, total: 150), estimatedCostUSD: Decimal(string: "3.00"))
+        ]
+
+        let todayChange = UsageStatistics.periodChange(points: points, range: .today, now: now, calendar: calendar)
+        let allChange = UsageStatistics.periodChange(points: points, range: .all, now: now, calendar: calendar)
+
+        XCTAssertNil(todayChange.tokenPercent)
+        XCTAssertNil(todayChange.costPercent)
+        XCTAssertNil(allChange.tokenPercent)
+        XCTAssertNil(allChange.costPercent)
+    }
+
+    func testChangePercentFormattingShowsDirectionAndMissingBaseline() {
+        XCTAssertEqual(DisplayFormatters.changePercentString(50), "↑ 50.0%")
+        XCTAssertEqual(DisplayFormatters.changePercentString(-25.26), "↓ 25.3%")
+        XCTAssertEqual(DisplayFormatters.changePercentString(0), "0.0%")
+        XCTAssertEqual(DisplayFormatters.changePercentString(nil), "--")
+    }
+
     func testAccountSortingUsesFiveHourThenWeeklyPressure() {
         let now = Date()
         let accounts = [

@@ -172,6 +172,7 @@ struct PopoverRootView: View {
                 }
             }
             .buttonStyle(.borderless)
+            .pointingHandCursor()
             .help(L.text("refresh", store.language))
         }
         .padding(.vertical, PopoverLayout.horizontalInset)
@@ -286,6 +287,7 @@ struct PopoverRootView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
+                .pointingHandCursor()
             }
 
             PopoverToolbarButton(title: L.text("quit_app", store.language), systemImage: "power") {
@@ -361,6 +363,7 @@ struct PopoverRecommendationPanel: View {
                 .controlSize(.small)
                 .tint(tint)
                 .disabled(isWorking)
+                .pointingHandCursor(enabled: !isWorking)
             }
         }
         .padding(9)
@@ -432,6 +435,7 @@ struct AccountRowView: View {
                     .controlSize(.small)
                     .tint(theme.primary)
                     .disabled(isSwitching)
+                    .pointingHandCursor(enabled: !isSwitching)
                 }
             }
 
@@ -556,6 +560,7 @@ struct PopoverToolbarButton: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.regular)
+        .pointingHandCursor()
         .help(title)
     }
 }

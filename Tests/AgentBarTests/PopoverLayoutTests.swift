@@ -1,7 +1,13 @@
+import SwiftUI
 import XCTest
 @testable import AgentBar
 
 final class PopoverLayoutTests: XCTestCase {
+    @MainActor
+    func testPointingHandCursorModifierIsAvailableForInteractiveViews() {
+        _ = Text("Interactive").pointingHandCursor()
+    }
+
     func testResizablePanelHeightTracksAbsolutePointerDelta() {
         let resize = PanelResizeBounds(minHeight: 240, maxHeight: 720)
 

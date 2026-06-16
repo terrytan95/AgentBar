@@ -1,0 +1,374 @@
+import Foundation
+
+enum AuditReportKind: Equatable, Sendable {
+    case daily
+    case weekly
+    case range
+}
+
+struct AuditReport: Equatable, Sendable {
+    var kind: AuditReportKind
+    var title: String
+    var body: String
+}
+
+struct AuditBreakdownRow: Equatable, Identifiable, Sendable {
+    var id: String { title }
+    var title: String
+    var subtitle: String
+    var tokens: Int
+    var share: Double
+    var cost: Decimal?
+}
+
+struct TokenComposition: Equatable, Sendable {
+    var input: Int
+    var cachedInput: Int
+    var output: Int
+    var reasoningOutput: Int
+    var total: Int
+}
+
+struct AuditRangeComparison: Equatable, Sendable {
+    var currentTokens: Int
+    var previousTokens: Int
+    var tokenPercentChange: Double?
+}
+
+struct UsageRecordExportRow: Equatable, Sendable {
+    var date: Date
+    var service: UsageService
+    var model: String
+    var inputTokens: Int
+    var cachedInputTokens: Int
+    var outputTokens: Int
+    var reasoningOutputTokens: Int
+    var totalTokens: Int
+    var estimatedCostUSD: Decimal?
+}
+
+enum UsageExportFormat: String, CaseIterable, Sendable {
+    case csv
+    case json
+
+    var fileExtension: String { rawValue }
+}
+
+enum UsageAuditReporter {
+    static func tokenComposition(points: [UsagePoint]) -> TokenComposition {
+        let totals = points.reduce(TokenTotals.zero) { $0 + $1.tokens }
+        return TokenComposition(
+            input: totals.input,
+            cachedInput: totals.cachedInput,
+            output: totals.output,
+            reasoningOutput: totals.reasoningOutput,
+            total: totals.total
+        )
+    }
+
+    static func serviceRows(points: [UsagePoint]) -> [AuditBreakdownRow] {
+        breakdownRows(points: points, key: { $0.service.rawValue }, subtitle: { serviceName in
+            serviceName == UsageService.codex.rawValue ? "OpenAI" : "Anthropic"
+        })
+    }
+
+    static func modelRows(points: [UsagePoint]) -> [AuditBreakdownRow] {
+        breakdownRows(points: points, key: \.model, subtitle: { _ in "Model" })
+    }
+
+    static func makeReport(
+        points: [UsagePoint],
+        range: UsageRange,
+        budgetStatus: BudgetStatus?,
+        dataSourceHealth: DataSourceHealthSummary,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        customStart: Date? = nil,
+        customEnd: Date? = nil
+    ) -> AuditReport {
+        let filtered = filteredPoints(points: points, range: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd)
+        let composition = tokenComposition(points: filtered)
+        let topService = serviceRows(points: filtered).first
+        let topModel = modelRows(points: filtered).first
+        let comparison = rangeComparison(points: points, range: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd)
+        let anomalies = UsageInsights.usageAnomalies(points: points, now: now, calendar: calendar)
+        let kind = reportKind(for: range)
+        let title = "\(reportTitlePrefix(for: kind)) Usage Report"
+
+        var lines = [
+            "\(title)",
+            "Total: \(DisplayFormatters.tokenString(composition.total)) tokens.",
+            "Top service: \(topService?.title ?? "N/A").",
+            "Top model: \(topModel?.title ?? "N/A")."
+        ]
+
+        if let comparison, let change = comparison.tokenPercentChange {
+            lines.append("Comparable range: \(DisplayFormatters.changePercentString(change)) versus \(DisplayFormatters.tokenString(comparison.previousTokens)) tokens previously.")
+        } else {
+            lines.append("Comparable range: not enough previous usage data.")
+        }
+
+        if let anomaly = anomalies.first {
+            lines.append("Largest spike: \(anomaly.label) spike at \(DisplayFormatters.tokenString(anomaly.tokens)) tokens, \(String(format: "%.1fx", anomaly.multiple)) over baseline.")
+        } else {
+            lines.append("Largest spike: no spike detected.")
+        }
+
+        if let budgetStatus {
+            lines.append("Budget: \(budgetSummary(status: budgetStatus)).")
+        } else {
+            lines.append("Budget: not configured for this range.")
+        }
+
+        lines.append("Data sources: \(dataSourceHealth.liveCount) live, \(dataSourceHealth.issueCount) issue\(dataSourceHealth.issueCount == 1 ? "" : "s").")
+        lines.append("Basis: local parsed session logs and available rate-limit data, not official billing records.")
+
+        return AuditReport(kind: kind, title: title, body: lines.joined(separator: "\n"))
+    }
+
+    static func rangeComparison(
+        points: [UsagePoint],
+        range: UsageRange,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        customStart: Date? = nil,
+        customEnd: Date? = nil
+    ) -> AuditRangeComparison? {
+        guard
+            let current = dateInterval(for: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd),
+            let previous = previousDateInterval(for: range, currentInterval: current, calendar: calendar)
+        else { return nil }
+
+        let currentTokens = points
+            .filter { current.contains($0.date) }
+            .reduce(0) { $0 + $1.tokens.total }
+        let previousTokens = points
+            .filter { previous.contains($0.date) }
+            .reduce(0) { $0 + $1.tokens.total }
+        return AuditRangeComparison(
+            currentTokens: currentTokens,
+            previousTokens: previousTokens,
+            tokenPercentChange: percentChange(current: currentTokens, previous: previousTokens)
+        )
+    }
+
+    static func exportRows(
+        points: [UsagePoint],
+        range: UsageRange,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        customStart: Date? = nil,
+        customEnd: Date? = nil
+    ) -> [UsageRecordExportRow] {
+        filteredPoints(points: points, range: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd)
+            .sorted { $0.date < $1.date }
+            .map { point in
+                UsageRecordExportRow(
+                    date: point.date,
+                    service: point.service,
+                    model: point.model,
+                    inputTokens: point.tokens.input,
+                    cachedInputTokens: point.tokens.cachedInput,
+                    outputTokens: point.tokens.output,
+                    reasoningOutputTokens: point.tokens.reasoningOutput,
+                    totalTokens: point.tokens.total,
+                    estimatedCostUSD: point.estimatedCostUSD
+                )
+            }
+    }
+
+    static func serialize(rows: [UsageRecordExportRow], format: UsageExportFormat) -> String {
+        switch format {
+        case .csv:
+            return serializeCSV(rows: rows)
+        case .json:
+            return serializeJSON(rows: rows)
+        }
+    }
+
+    static func filteredPoints(
+        points: [UsagePoint],
+        range: UsageRange,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        customStart: Date? = nil,
+        customEnd: Date? = nil
+    ) -> [UsagePoint] {
+        guard let interval = dateInterval(for: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd) else {
+            return points
+        }
+        return points.filter { interval.contains($0.date) }
+    }
+
+    private static func breakdownRows(
+        points: [UsagePoint],
+        key: (UsagePoint) -> String,
+        subtitle: (String) -> String
+    ) -> [AuditBreakdownRow] {
+        let total = max(1, points.reduce(0) { $0 + $1.tokens.total })
+        return Dictionary(grouping: points, by: key)
+            .map { title, points in
+                let tokens = points.reduce(TokenTotals.zero) { $0 + $1.tokens }
+                let costs = points.compactMap(\.estimatedCostUSD)
+                return AuditBreakdownRow(
+                    title: title,
+                    subtitle: subtitle(title),
+                    tokens: tokens.total,
+                    share: Double(tokens.total) / Double(total),
+                    cost: costs.isEmpty ? nil : costs.reduce(Decimal(0), +)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.tokens != rhs.tokens { return lhs.tokens > rhs.tokens }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+    }
+
+    private static func serializeCSV(rows: [UsageRecordExportRow]) -> String {
+        let header = "date,service,model,input_tokens,cached_input_tokens,output_tokens,reasoning_output_tokens,total_tokens,estimated_cost_usd"
+        let body = rows.map { row in
+            [
+                iso8601String(from: row.date),
+                row.service.rawValue,
+                row.model,
+                "\(row.inputTokens)",
+                "\(row.cachedInputTokens)",
+                "\(row.outputTokens)",
+                "\(row.reasoningOutputTokens)",
+                "\(row.totalTokens)",
+                decimalString(row.estimatedCostUSD)
+            ].map(csvEscape).joined(separator: ",")
+        }
+        return ([header] + body).joined(separator: "\n")
+    }
+
+    private static func serializeJSON(rows: [UsageRecordExportRow]) -> String {
+        let payload = rows.map { row -> [String: Any] in
+            [
+                "date": iso8601String(from: row.date),
+                "service": row.service.rawValue,
+                "model": row.model,
+                "input_tokens": row.inputTokens,
+                "cached_input_tokens": row.cachedInputTokens,
+                "output_tokens": row.outputTokens,
+                "reasoning_output_tokens": row.reasoningOutputTokens,
+                "total_tokens": row.totalTokens,
+                "estimated_cost_usd": row.estimatedCostUSD.map(decimalString) as Any? ?? NSNull()
+            ]
+        }
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+            let text = String(data: data, encoding: .utf8)
+        else {
+            return "[]"
+        }
+        return text
+    }
+
+    private static func csvEscape(_ value: String) -> String {
+        guard value.contains(",") || value.contains("\"") || value.contains("\n") else {
+            return value
+        }
+        return "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+
+    private static func budgetSummary(status: BudgetStatus) -> String {
+        let severity: InsightSeverity
+        if status.tokenSeverity == .critical || status.costSeverity == .critical {
+            severity = .critical
+        } else if status.tokenSeverity == .warning || status.costSeverity == .warning {
+            severity = .warning
+        } else {
+            severity = .ok
+        }
+        return severity.rawValue
+    }
+
+    private static func reportKind(for range: UsageRange) -> AuditReportKind {
+        switch range {
+        case .today:
+            return .daily
+        case .thisWeek, .last7Days:
+            return .weekly
+        case .yesterday, .thisMonth, .thisYear, .last30Days, .all, .custom:
+            return .range
+        }
+    }
+
+    private static func reportTitlePrefix(for kind: AuditReportKind) -> String {
+        switch kind {
+        case .daily: return "Daily"
+        case .weekly: return "Weekly"
+        case .range: return "Range"
+        }
+    }
+
+    private static func percentChange(current: Int, previous: Int) -> Double? {
+        guard previous > 0 else { return nil }
+        return (Double(current - previous) / Double(previous)) * 100
+    }
+
+    private static func previousDateInterval(for range: UsageRange, currentInterval: DateInterval, calendar: Calendar) -> DateInterval? {
+        switch range {
+        case .all:
+            return nil
+        case .thisWeek:
+            guard let start = calendar.date(byAdding: .weekOfYear, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .thisMonth:
+            guard let start = calendar.date(byAdding: .month, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .thisYear:
+            guard let start = calendar.date(byAdding: .year, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .today, .yesterday, .last7Days, .last30Days, .custom:
+            let duration = currentInterval.duration
+            guard duration > 0 else { return nil }
+            return DateInterval(start: currentInterval.start.addingTimeInterval(-duration), end: currentInterval.start)
+        }
+    }
+
+    private static func dateInterval(
+        for range: UsageRange,
+        now: Date,
+        calendar: Calendar,
+        customStart: Date? = nil,
+        customEnd: Date? = nil
+    ) -> DateInterval? {
+        switch range {
+        case .today:
+            return calendar.dateInterval(of: .day, for: now)
+        case .yesterday:
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: now) else { return nil }
+            return calendar.dateInterval(of: .day, for: yesterday)
+        case .thisWeek:
+            return calendar.dateInterval(of: .weekOfYear, for: now)
+        case .thisMonth:
+            return calendar.dateInterval(of: .month, for: now)
+        case .thisYear:
+            return calendar.dateInterval(of: .year, for: now)
+        case .last7Days:
+            guard let start = calendar.date(byAdding: .day, value: -7, to: now) else { return nil }
+            return DateInterval(start: start, end: now.addingTimeInterval(1))
+        case .last30Days:
+            guard let start = calendar.date(byAdding: .day, value: -30, to: now) else { return nil }
+            return DateInterval(start: start, end: now.addingTimeInterval(1))
+        case .all:
+            return nil
+        case .custom:
+            guard let customStart, let customEnd else { return nil }
+            return DateInterval(start: customStart, end: customEnd)
+        }
+    }
+
+    private static func decimalString(_ value: Decimal?) -> String {
+        guard let value else { return "" }
+        return NSDecimalNumber(decimal: value).stringValue
+    }
+
+    private static func iso8601String(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+}

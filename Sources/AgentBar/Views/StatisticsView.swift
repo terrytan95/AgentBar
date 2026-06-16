@@ -35,15 +35,7 @@ struct StatisticsView: View {
                 topChrome
 
                 if topTab == .usage {
-                    GeometryReader { proxy in
-                        ScrollView(.vertical, showsIndicators: false) {
-                            dashboardContent(viewportHeight: proxy.size.height)
-                                .coordinateSpace(name: Self.dashboardContentCoordinateSpace)
-                                .padding(.top, Self.dashboardContentTopPadding)
-                                .padding(.horizontal, 22)
-                                .padding(.bottom, Self.dashboardContentBottomPadding)
-                        }
-                    }
+                    usageContent
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         settingsContent
@@ -88,6 +80,12 @@ struct StatisticsView: View {
             sidebarGroup(title: L.text("view", store.language)) {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: viewMode == .overview) {
                     viewMode = .overview
+                }
+                sidebarItem("Audit", systemImage: "chart.bar.doc.horizontal", active: viewMode == .audit) {
+                    viewMode = .audit
+                }
+                sidebarItem("Guardian", systemImage: "shield.lefthalf.filled", active: viewMode == .guardian) {
+                    viewMode = .guardian
                 }
             }
 
@@ -165,6 +163,36 @@ struct StatisticsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .background(.thinMaterial)
+    }
+
+    private var usageContent: some View {
+        GeometryReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                Group {
+                    switch viewMode {
+                    case .overview:
+                        dashboardContent(viewportHeight: proxy.size.height)
+                            .coordinateSpace(name: Self.dashboardContentCoordinateSpace)
+                    case .audit:
+                        AuditView(
+                            store: store,
+                            points: filteredPoints,
+                            dataSourceHealth: dataSourceHealth,
+                            theme: settings.themeColor
+                        )
+                    case .guardian:
+                        GuardianView(
+                            store: store,
+                            dataSourceHealth: dataSourceHealth,
+                            theme: settings.themeColor
+                        )
+                    }
+                }
+                .padding(.top, Self.dashboardContentTopPadding)
+                .padding(.horizontal, 22)
+                .padding(.bottom, Self.dashboardContentBottomPadding)
+            }
+        }
     }
 
     private var dashboardRefreshButton: some View {
@@ -768,8 +796,8 @@ private enum DashboardServiceFilter: Hashable {
 
 private enum DashboardViewMode: Hashable {
     case overview
-    case timeline
-    case details
+    case audit
+    case guardian
 }
 
 private struct DashboardTopTabBar: View {

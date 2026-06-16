@@ -50,6 +50,7 @@ struct SettingsView: View {
                                 Task { await updates.checkForUpdates() }
                             }
                             .disabled(!updates.canCheckForUpdates)
+                            .pointingHandCursor(enabled: updates.canCheckForUpdates)
                             if updates.status.isBusy {
                                 ProgressView()
                                     .controlSize(.small)
@@ -63,6 +64,7 @@ struct SettingsView: View {
                         Button(L.text("install_and_restart", store.language)) {
                             updates.installDownloadedUpdate()
                         }
+                        .pointingHandCursor()
                     }
                 }
             }
@@ -119,9 +121,11 @@ struct SettingsView: View {
                 Button(L.text("login_codex", store.language)) {
                     store.openLogin(for: .codex)
                 }
+                .pointingHandCursor()
                 Button(L.text("login_claude", store.language)) {
                     store.openLogin(for: .claudeCode)
                 }
+                .pointingHandCursor()
             }
             .padding(18)
             .tabItem { Label(L.text("menu_item", store.language), systemImage: "menubar.rectangle") }

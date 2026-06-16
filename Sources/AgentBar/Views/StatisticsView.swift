@@ -153,6 +153,7 @@ struct StatisticsView: View {
         .buttonStyle(.plain)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.86)
+        .pointingHandCursor(enabled: enabled)
         .glassPanel(cornerRadius: 8, interactive: enabled)
     }
 
@@ -192,6 +193,7 @@ struct StatisticsView: View {
             .accessibilityLabel(Text(L.text("refresh", store.language)))
         }
         .buttonStyle(.plain)
+        .pointingHandCursor()
         .glassPanel(cornerRadius: 10, interactive: true)
         .help(L.text("refresh", store.language))
     }
@@ -346,9 +348,11 @@ struct StatisticsView: View {
                         Button(L.text("login_codex", store.language)) {
                             store.openLogin(for: .codex)
                         }
+                        .pointingHandCursor()
                         Button(L.text("login_claude", store.language)) {
                             store.openLogin(for: .claudeCode)
                         }
+                        .pointingHandCursor()
                     }
                 }
                 SettingsRow(title: L.text("account_sort", store.language), subtitle: L.text("account_sort_subtitle", store.language)) {
@@ -457,6 +461,7 @@ struct StatisticsView: View {
                                 Task { await updates.checkForUpdates() }
                             }
                             .disabled(!updates.canCheckForUpdates)
+                            .pointingHandCursor(enabled: updates.canCheckForUpdates)
                             if updates.status.isBusy {
                                 ProgressView()
                                     .controlSize(.small)
@@ -470,6 +475,7 @@ struct StatisticsView: View {
                         Button(L.text("install_and_restart", store.language)) {
                             updates.installDownloadedUpdate()
                         }
+                        .pointingHandCursor()
                         .settingsControl(width: SettingsControlLayout.widePickerWidth)
                     }
                 }
@@ -800,6 +806,7 @@ private struct DashboardTopTabBar: View {
                 )
         }
         .buttonStyle(.plain)
+        .pointingHandCursor()
     }
 }
 

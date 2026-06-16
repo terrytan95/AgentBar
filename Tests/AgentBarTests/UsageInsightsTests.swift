@@ -1,0 +1,148 @@
+import XCTest
+@testable import AgentBar
+
+final class UsageInsightsTests: XCTestCase {
+    func testCurrentLimitSummaryFindsMostConstrainedAccountAndWindowMinimums() throws {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let summary = UsageInsights.currentLimitSummary(accounts: [
+            account(id: "active", name: "active@example.com", fiveHourUsed: 92, weeklyUsed: 40, now: now, active: true),
+            account(id: "weekly-low", name: "weekly@example.com", fiveHourUsed: 20, weeklyUsed: 88, now: now, active: false),
+            account(id: "healthy", name: "healthy@example.com", fiveHourUsed: 10, weeklyUsed: 15, now: now, active: false)
+        ])
+
+        XCTAssertEqual(summary.accountCount, 3)
+        XCTAssertEqual(summary.lowestFiveHourRemaining, 8)
+        XCTAssertEqual(summary.lowestWeeklyRemaining, 12)
+        XCTAssertEqual(summary.mostConstrainedAccount?.id, "active")
+    }
+
+    func testQuotaPressureWarnsWhenActiveAccountCanExhaustSoonAndRecommendsBestAlternative() throws {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let reset = now.addingTimeInterval(2 * 60 * 60)
+        let active = account(id: "active", name: "active@example.com", fiveHourUsed: 92, weeklyUsed: 20, now: now, active: true, fiveHourReset: reset)
+        let better = account(id: "better", name: "better@example.com", fiveHourUsed: 18, weeklyUsed: 10, now: now, active: false, fiveHourReset: reset)
+        let worse = account(id: "worse", name: "worse@example.com", fiveHourUsed: 86, weeklyUsed: 15, now: now, active: false, fiveHourReset: reset)
+
+        let pressure = UsageInsights.quotaPressure(
+            accounts: [active, better, worse],
+            points: [
+                point(total: 3_000, minutesAgo: 60, now: now),
+                point(total: 3_200, minutesAgo: 30, now: now),
+                point(total: 3_200, minutesAgo: 5, now: now)
+            ],
+            rotationThresholdRemainingPercent: 10,
+            autoRotationEnabled: true,
+            now: now
+        )
+
+        XCTAssertEqual(pressure.severity, .critical)
+        XCTAssertEqual(pressure.activeAccount?.id, "active")
+        XCTAssertEqual(pressure.recommendedAccount?.id, "better")
+        XCTAssertTrue(pressure.shouldTriggerRotation)
+        XCTAssertNotNil(pressure.projectedFiveHourExhaustion)
+    }
+
+    func testUsageAnomaliesHighlightLargeDailyAndModelSpikes() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let calendar = Calendar(identifier: .gregorian)
+        let baselineDays = (2...7).flatMap { dayOffset in
+            [
+                UsagePoint(
+                    service: .codex,
+                    model: "codex-local",
+                    date: calendar.date(byAdding: .day, value: -dayOffset, to: now)!,
+                    tokens: TokenTotals(input: 500, cachedInput: 0, output: 500, reasoningOutput: 0, total: 1_000),
+                    estimatedCostUSD: nil
+                )
+            ]
+        }
+        let anomalies = UsageInsights.usageAnomalies(
+            points: baselineDays + [
+                UsagePoint(
+                    service: .codex,
+                    model: "codex-local",
+                    date: now,
+                    tokens: TokenTotals(input: 3_000, cachedInput: 0, output: 3_000, reasoningOutput: 0, total: 6_000),
+                    estimatedCostUSD: nil
+                )
+            ],
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertTrue(anomalies.contains { $0.kind == .dailyTokens && $0.multiple >= 3 })
+        XCTAssertTrue(anomalies.contains { $0.kind == .modelTokens && $0.label == "codex-local" })
+    }
+
+    func testBudgetStatusWarnsForDailyTokenAndCostThresholds() {
+        let status = UsageInsights.budgetStatus(
+            summary: UsageSummary(
+                totalTokens: 9_200,
+                inputTokens: 6_000,
+                outputTokens: 3_200,
+                reasoningTokens: 0,
+                estimatedCostUSD: Decimal(string: "18.50"),
+                serviceBreakdown: [.codex: 9_200],
+                modelBreakdown: ["codex-local": 9_200],
+                dailyBars: [],
+                pricingFingerprint: Pricing.fingerprint
+            ),
+            dailyTokenBudget: 10_000,
+            dailyCostBudgetUSD: 20
+        )
+
+        XCTAssertEqual(status.tokenSeverity, .warning)
+        XCTAssertEqual(status.costSeverity, .warning)
+        XCTAssertEqual(status.tokenUsageFraction ?? 0, 0.92, accuracy: 0.001)
+        XCTAssertEqual(status.costUsageFraction ?? 0, 0.925, accuracy: 0.001)
+    }
+
+    func testDataSourceHealthSummarizesLiveAndUnavailableSnapshots() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let health = UsageInsights.dataSourceHealth(snapshots: [
+            .codex: UsageSnapshot(service: .codex, status: .live, accounts: [], points: [], securityNotes: [], refreshedAt: now, pricingFingerprint: Pricing.fingerprint),
+            .claudeCode: UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "No Claude data")
+        ])
+
+        XCTAssertEqual(health.liveCount, 1)
+        XCTAssertEqual(health.issueCount, 1)
+        XCTAssertEqual(health.rows.map(\.service), [.claudeCode, .codex])
+    }
+
+    private func account(
+        id: String,
+        name: String,
+        fiveHourUsed: Double,
+        weeklyUsed: Double,
+        now: Date,
+        active: Bool,
+        fiveHourReset: Date? = nil
+    ) -> UsageAccount {
+        UsageAccount(
+            id: id,
+            service: .codex,
+            displayName: name,
+            username: name,
+            maskedEmail: name,
+            plan: "team",
+            sourceDescription: "test",
+            status: .live,
+            fiveHourWindow: UsageWindow(kind: .fiveHour, usedPercent: fiveHourUsed, windowMinutes: 300, resetsAt: fiveHourReset ?? now.addingTimeInterval(4 * 60 * 60)),
+            weeklyWindow: UsageWindow(kind: .weekly, usedPercent: weeklyUsed, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(2 * 24 * 60 * 60)),
+            tokens: .zero,
+            estimatedCostUSD: nil,
+            lastUpdated: now,
+            isActive: active
+        )
+    }
+
+    private func point(total: Int, minutesAgo: Int, now: Date) -> UsagePoint {
+        UsagePoint(
+            service: .codex,
+            model: "codex-local",
+            date: now.addingTimeInterval(TimeInterval(-minutesAgo * 60)),
+            tokens: TokenTotals(input: total / 2, cachedInput: 0, output: total / 2, reasoningOutput: 0, total: total),
+            estimatedCostUSD: nil
+        )
+    }
+}

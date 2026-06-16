@@ -89,8 +89,6 @@ struct StatisticsView: View {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: viewMode == .overview) {
                     viewMode = .overview
                 }
-                sidebarItem(L.text("timeline", store.language), systemImage: "chart.line.uptrend.xyaxis", active: viewMode == .timeline, enabled: false) {}
-                sidebarItem(L.text("details", store.language), systemImage: "list.bullet", active: viewMode == .details, enabled: false) {}
             }
 
             Spacer()
@@ -159,35 +157,10 @@ struct StatisticsView: View {
     }
 
     private var topChrome: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 0) {
             DashboardTopTabBar(selection: $topTab, language: store.language, theme: settings.themeColor)
                 .padding(.top, 12)
-
-            if topTab == .usage {
-                HStack {
-                    Spacer()
-                    HStack(spacing: 8) {
-                        Text(L.text("interval", store.language))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                        Picker("", selection: $store.selectedRange) {
-                            ForEach(UsageRange.allCases) { range in
-                                Text(range.dashboardLabel(store.language)).tag(range)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(width: 130)
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 30)
-                    .glassPanel(cornerRadius: 12, interactive: true)
-
-                    dashboardRefreshButton
-                }
-                .padding(.horizontal, 22)
-                .padding(.bottom, 8)
-            }
+                .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .background(.thinMaterial)
@@ -242,6 +215,8 @@ struct StatisticsView: View {
 
     private func dashboardContentStack(currentLimitsHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            dashboardOverviewHeader
+
             if !store.hasLoadedAccountInformation {
                 LoadingAccountPanel(
                     title: L.text("loading_account_info", store.language),
@@ -249,14 +224,17 @@ struct StatisticsView: View {
                 )
             }
 
-            LazyVGrid(columns: kpiColumns, spacing: 12) {
-                DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language), delta: "↓ 23.6%", accent: .primary, theme: settings.themeColor)
-                DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary, theme: settings.themeColor)
-                DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: settings.themeColor.tertiary, accent: settings.themeColor.tertiary, theme: settings.themeColor)
-                if hasClaudeData {
-                    DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: settings.themeColor.secondary, accent: settings.themeColor.secondary, theme: settings.themeColor)
+            GeometryReader { proxy in
+                LazyVGrid(columns: kpiColumns(for: proxy.size.width), spacing: 12) {
+                    DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language), delta: "↓ 23.6%", accent: .primary, theme: settings.themeColor)
+                    DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: "↓ 4.0%", accent: .primary, theme: settings.themeColor)
+                    DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: settings.themeColor.tertiary, accent: settings.themeColor.tertiary, theme: settings.themeColor)
+                    if hasClaudeData {
+                        DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: settings.themeColor.secondary, accent: settings.themeColor.secondary, theme: settings.themeColor)
+                    }
                 }
             }
+            .frame(height: hasClaudeData ? 152 : 70)
 
             Panel(title: "\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))") {
                 DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
@@ -299,6 +277,40 @@ struct StatisticsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .top)
         }
+    }
+
+    private var dashboardOverviewHeader: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L.text("overview", store.language))
+                    .font(.system(size: 20, weight: .bold))
+                Text("\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                Text(L.text("interval", store.language))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Picker("", selection: $store.selectedRange) {
+                    ForEach(UsageRange.allCases) { range in
+                        Text(range.dashboardLabel(store.language)).tag(range)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 130)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .glassPanel(cornerRadius: 12, interactive: true)
+
+            dashboardRefreshButton
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var settingsContent: some View {
@@ -459,8 +471,14 @@ struct StatisticsView: View {
         !claudeAccounts.isEmpty || store.points.contains { $0.service == .claudeCode }
     }
 
-    private var kpiColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: hasClaudeData ? 4 : 3)
+    private func kpiColumns(for width: CGFloat) -> [GridItem] {
+        let count: Int
+        if hasClaudeData {
+            count = 2
+        } else {
+            count = width < 760 ? 2 : 3
+        }
+        return Array(repeating: GridItem(.flexible(), spacing: 12), count: count)
     }
 
     private var displayBars: [DailyUsageBar] {

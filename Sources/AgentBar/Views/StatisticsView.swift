@@ -400,21 +400,23 @@ struct StatisticsView: View {
                 SettingsRow(title: L.text("current_version", store.language), subtitle: updates.currentVersion) {
                     EmptyView()
                 }
-                SettingsRow(title: L.text("check_for_updates", store.language), subtitle: updates.status.localizedMessage(language: store.language)) {
-                    HStack(spacing: 10) {
-                        Button(L.text("check_for_updates", store.language)) {
-                            Task { await updates.checkForUpdates() }
+                if updates.showsCheckForUpdatesControl {
+                    SettingsRow(title: L.text("check_for_updates", store.language), subtitle: updates.status.localizedMessage(language: store.language)) {
+                        HStack(spacing: 10) {
+                            Button(L.text("check_for_updates", store.language)) {
+                                Task { await updates.checkForUpdates() }
+                            }
+                            .disabled(!updates.canCheckForUpdates)
+                            if updates.status.isBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
                         }
-                        .disabled(!updates.canCheckForUpdates)
-                        if updates.status.isBusy {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
+                        .settingsControl(width: SettingsControlLayout.widePickerWidth)
                     }
-                    .settingsControl(width: SettingsControlLayout.widePickerWidth)
                 }
                 if updates.canInstallDownloadedUpdate {
-                    SettingsRow(title: L.text("install_and_restart", store.language), subtitle: L.text("update_install_subtitle", store.language)) {
+                    SettingsRow(title: L.text("install_and_restart", store.language), subtitle: updates.status.localizedMessage(language: store.language)) {
                         Button(L.text("install_and_restart", store.language)) {
                             updates.installDownloadedUpdate()
                         }

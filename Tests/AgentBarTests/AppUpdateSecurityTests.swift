@@ -3,6 +3,37 @@ import XCTest
 @testable import AgentBar
 
 final class AppUpdateSecurityTests: XCTestCase {
+    @MainActor
+    func testPendingDownloadedUpdateSuppressesManualUpdateCheck() throws {
+        let fileManager = FileManager.default
+        let appSupport = try fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let updatesRoot = appSupport.appending(path: "AgentBar/Updates", directoryHint: .isDirectory)
+        let version = "v999.0.0"
+        let app = updatesRoot.appending(path: "\(version)/expanded/AgentBar.app", directoryHint: .isDirectory)
+        try createFakeAgentBarApp(at: app)
+        try adHocSignApp(at: app)
+
+        let defaultsName = "AgentBarTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        defaults.set(version, forKey: "appUpdatePendingReleaseVersion")
+        defaults.set(app.path, forKey: "appUpdatePendingAppPath")
+        defer {
+            defaults.removePersistentDomain(forName: defaultsName)
+            try? fileManager.removeItem(at: updatesRoot.appending(path: version, directoryHint: .isDirectory))
+        }
+
+        let store = AppUpdateStore(defaults: defaults, fileManager: fileManager)
+
+        XCTAssertTrue(store.canInstallDownloadedUpdate)
+        XCTAssertFalse(store.showsCheckForUpdatesControl)
+        XCTAssertFalse(store.canCheckForUpdates)
+    }
+
     func testRequiredDigestAcceptsMatchingSHA256() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }

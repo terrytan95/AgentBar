@@ -1565,6 +1565,7 @@ private struct DataSourceHealthPanel: View {
     var health: DataSourceHealthSummary
     var language: AppLanguage
     var theme: AppThemeColor
+    @State private var expandedRows: Set<UsageService> = []
 
     var body: some View {
         if health.rows.isEmpty {
@@ -1577,30 +1578,64 @@ private struct DataSourceHealthPanel: View {
                 }
 
                 ForEach(health.rows) { row in
-                    HStack(spacing: 10) {
-                        Circle()
-                            .fill(color(for: row.status))
-                            .frame(width: 8, height: 8)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(row.service.rawValue)
-                                .font(.system(size: 12, weight: .bold))
-                            Text(detail(for: row))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Text(statusTitle(row.status))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(color(for: row.status))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    dataSourceRow(row)
                 }
             }
         }
     }
+
+    private func dataSourceRow(_ row: DataSourceHealthSummary.Row) -> some View {
+        let detailText = detail(for: row)
+        let isExpanded = expandedRows.contains(row.id)
+
+        return HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(color(for: row.status))
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.service.rawValue)
+                    .font(.system(size: 12, weight: .bold))
+                Text(detailText)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(isExpanded ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: isExpanded)
+            }
+            Spacer(minLength: 8)
+            if detailText.count > Self.compactDetailLimit {
+                Button {
+                    toggleExpanded(row.id)
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(isExpanded ? "Hide full text" : "Show full text")
+                .accessibilityLabel(isExpanded ? "Hide full text" : "Show full text")
+                .pointingHandCursor()
+            }
+            Text(statusTitle(row.status))
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(color(for: row.status))
+                .padding(.top, 2)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func toggleExpanded(_ id: UsageService) {
+        if expandedRows.contains(id) {
+            expandedRows.remove(id)
+        } else {
+            expandedRows.insert(id)
+        }
+    }
+
+    private static let compactDetailLimit = 86
 
     private func detail(for row: DataSourceHealthSummary.Row) -> String {
         let refreshed = DisplayFormatters.relativeString(for: row.refreshedAt)

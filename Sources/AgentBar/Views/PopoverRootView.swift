@@ -326,44 +326,79 @@ struct PopoverRecommendationPanel: View {
     var theme: AppThemeColor
     var isWorking: Bool
     var onAction: () -> Void
+    @State private var isExpanded = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: iconName)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 24, height: 24)
-                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 6))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: iconName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 24, height: 24)
+                    .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 6))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(recommendation.title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Text(recommendation.detail)
-                    .font(.caption2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(recommendation.title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    Text(recommendation.detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(isExpanded ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: isExpanded)
+                }
+
+                Spacer(minLength: 6)
+
+                if let actionTitle = recommendation.actionTitle {
+                    Button {
+                        onAction()
+                    } label: {
+                        if isWorking {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text(actionTitle)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(tint)
+                    .disabled(isWorking)
+                    .pointingHandCursor(enabled: !isWorking)
+                }
+
+                if hasExpandableText {
+                    Button {
+                        isExpanded.toggle()
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(width: 18, height: 18)
+                    }
+                    .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .help(isExpanded ? "Hide full text" : "Show full text")
+                    .accessibilityLabel(isExpanded ? "Hide full text" : "Show full text")
+                    .pointingHandCursor()
+                }
             }
 
-            Spacer(minLength: 6)
-
-            if let actionTitle = recommendation.actionTitle {
-                Button {
-                    onAction()
-                } label: {
-                    if isWorking {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Text(actionTitle)
-                            .lineLimit(1)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(tint)
-                .disabled(isWorking)
-                .pointingHandCursor(enabled: !isWorking)
+            if isExpanded,
+               let actionTitle = recommendation.actionTitle,
+               actionTitle.count > Self.compactActionTitleLimit {
+                Text(actionTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 34)
+            }
+        }
+        .onChange(of: recommendation) { _, newValue in
+            if !Self.hasExpandableText(for: newValue) {
+                isExpanded = false
             }
         }
         .padding(9)
@@ -374,6 +409,18 @@ struct PopoverRecommendationPanel: View {
                 .stroke(tint.opacity(0.18), lineWidth: 1)
         }
     }
+
+    private var hasExpandableText: Bool {
+        Self.hasExpandableText(for: recommendation)
+    }
+
+    private static func hasExpandableText(for recommendation: PopoverActionRecommendation) -> Bool {
+        recommendation.detail.count > compactDetailLimit ||
+            (recommendation.actionTitle?.count ?? 0) > compactActionTitleLimit
+    }
+
+    private static let compactDetailLimit = 72
+    private static let compactActionTitleLimit = 22
 
     private var iconName: String {
         switch recommendation.severity {

@@ -272,6 +272,9 @@ struct StatisticsView: View {
                             )
                         }
                     }
+                    Panel(title: dataSourceLocalized("data_source_health")) {
+                        DataSourceHealthPanel(health: dataSourceHealth, language: store.language, theme: settings.themeColor)
+                    }
                 }
                 .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
 
@@ -632,6 +635,10 @@ struct StatisticsView: View {
             settings.weeklyCostBudgetUSD > 0
     }
 
+    private var dataSourceHealth: DataSourceHealthSummary {
+        UsageInsights.dataSourceHealth(snapshots: store.snapshots)
+    }
+
     private func budgetLocalized(_ key: String) -> String {
         switch (key, store.language) {
         case ("budgets", .chinese): "预算"
@@ -654,6 +661,14 @@ struct StatisticsView: View {
         case ("weekly_token_budget_subtitle", _): "Set 0 to disable weekly token alerts."
         case ("daily_cost_budget_subtitle", _): "Set 0 to disable daily cost alerts."
         case ("weekly_cost_budget_subtitle", _): "Set 0 to disable weekly cost alerts."
+        default: key
+        }
+    }
+
+    private func dataSourceLocalized(_ key: String) -> String {
+        switch (key, store.language) {
+        case ("data_source_health", .chinese): "数据源健康"
+        case ("data_source_health", _): "Data source health"
         default: key
         }
     }
@@ -1527,6 +1542,113 @@ private struct BudgetStatusPanel: View {
         case ("week", _): "Week"
         default: key
         }
+    }
+}
+
+private struct DataSourceHealthPanel: View {
+    var health: DataSourceHealthSummary
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        if health.rows.isEmpty {
+            EmptyPanelMessage(localized("no_sources"))
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    HealthCountPill(title: localized("live"), value: health.liveCount, color: theme.primary)
+                    HealthCountPill(title: localized("issues"), value: health.issueCount, color: health.issueCount > 0 ? .orange : theme.tertiary)
+                }
+
+                ForEach(health.rows) { row in
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(color(for: row.status))
+                            .frame(width: 8, height: 8)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.service.rawValue)
+                                .font(.system(size: 12, weight: .bold))
+                            Text(detail(for: row))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text(statusTitle(row.status))
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(color(for: row.status))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func detail(for row: DataSourceHealthSummary.Row) -> String {
+        let refreshed = DisplayFormatters.relativeString(for: row.refreshedAt)
+        if let note = row.note, !note.isEmpty {
+            return "\(refreshed) · \(note.redactedForCredentialWords)"
+        }
+        switch language {
+        case .chinese: return "\(refreshed) 刷新"
+        case .english: return "Refreshed \(refreshed)"
+        }
+    }
+
+    private func statusTitle(_ status: DataSourceStatus) -> String {
+        switch (status, language) {
+        case (.live, .chinese): "正常"
+        case (.unavailable, .chinese): "不可用"
+        case (.needsAuthorization, .chinese): "需授权"
+        case (.error, .chinese): "错误"
+        case (.live, _): "Live"
+        case (.unavailable, _): "Unavailable"
+        case (.needsAuthorization, _): "Needs auth"
+        case (.error, _): "Error"
+        }
+    }
+
+    private func color(for status: DataSourceStatus) -> Color {
+        switch status {
+        case .live: theme.primary
+        case .unavailable: .secondary
+        case .needsAuthorization: .orange
+        case .error: .red
+        }
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("no_sources", .chinese): "暂无数据源状态"
+        case ("live", .chinese): "正常"
+        case ("issues", .chinese): "问题"
+        case ("no_sources", _): "No source status"
+        case ("live", _): "Live"
+        case ("issues", _): "Issues"
+        default: key
+        }
+    }
+}
+
+private struct HealthCountPill: View {
+    var title: String
+    var value: Int
+    var color: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 24)
+        .background(.thinMaterial, in: Capsule())
     }
 }
 

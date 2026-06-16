@@ -106,10 +106,10 @@ struct PopoverRootView: View {
             header
             Divider()
             PopoverScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
+                    recommendationSection
+                    quickSummarySection
                     accountSection
-                    summarySection
-                    dataSourceSection
                 }
                 .padding(.vertical, PopoverLayout.horizontalInset)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,6 +122,27 @@ struct PopoverRootView: View {
         .background(.regularMaterial)
         .preferredColorScheme(AppAppearance.colorScheme(useDarkAppearance: store.settings.useDarkAppearance))
         .animation(nil, value: store.settings.useDarkAppearance)
+    }
+
+    private var dataSourceHealth: DataSourceHealthSummary {
+        UsageInsights.dataSourceHealth(snapshots: store.snapshots)
+    }
+
+    private var quotaPressure: QuotaPressureInsight {
+        UsageInsights.quotaPressure(
+            accounts: store.accounts,
+            points: store.points,
+            rotationThresholdRemainingPercent: store.settings.codexRotationThresholdRemainingPercent,
+            autoRotationEnabled: store.settings.autoCodexAccountRotationEnabled
+        )
+    }
+
+    private var recommendation: PopoverActionRecommendation {
+        PopoverActionRecommendation.make(
+            pressure: quotaPressure,
+            dataSourceHealth: dataSourceHealth,
+            language: store.language
+        )
     }
 
     private var header: some View {
@@ -158,7 +179,7 @@ struct PopoverRootView: View {
 
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L.text("overview", store.language))
+            Text(L.text("accounts", store.language))
                 .font(.subheadline.weight(.semibold))
             if store.isLoadingAccountInformation && store.accounts.isEmpty {
                 PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
@@ -177,14 +198,54 @@ struct PopoverRootView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var summarySection: some View {
+    private var recommendationSection: some View {
+        PopoverRecommendationPanel(
+            recommendation: recommendation,
+            theme: store.settings.themeColor,
+            isWorking: isRecommendationActionWorking
+        ) {
+            performRecommendationAction(recommendation.action)
+        }
+    }
+
+    private var quickSummarySection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L.text("statistics", store.language))
+            Text(L.text("overview", store.language))
                 .font(.subheadline.weight(.semibold))
-            HStack {
+            HStack(spacing: 8) {
                 KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), tint: store.settings.themeColor.primary)
                 KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), tint: store.settings.themeColor.secondary)
+                KPIPill(title: L.text("data_sources", store.language), value: dataSourceSummaryText, tint: dataSourceHealth.issueCount == 0 ? .green : .orange)
             }
+
+            if !store.uiDataSourceSnapshots.isEmpty {
+                Text(dataSourceDetailText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var dataSourceSummaryText: String {
+        let total = max(dataSourceHealth.rows.count, store.uiDataSourceSnapshots.count)
+        return total > 0 ? "\(dataSourceHealth.liveCount)/\(total)" : "--"
+    }
+
+    private var dataSourceDetailText: String {
+        store.uiDataSourceSnapshots
+            .map { "\($0.service.rawValue) \($0.status.label)" }
+            .joined(separator: " · ")
+    }
+
+    private var isRecommendationActionWorking: Bool {
+        switch recommendation.action {
+        case .switchAccount(let accountID):
+            store.switchingAccountID == accountID
+        case .refresh:
+            store.isRefreshing
+        case .waitForReset, .none:
+            false
         }
     }
 
@@ -192,52 +253,46 @@ struct PopoverRootView: View {
         value.map { DisplayFormatters.costString($0) } ?? L.text("no_cost_data", store.language)
     }
 
-    private var dataSourceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L.text("data_sources", store.language))
-                .font(.subheadline.weight(.semibold))
-            ForEach(store.uiDataSourceSnapshots, id: \.service) { snapshot in
-                HStack {
-                    Text(snapshot.service.rawValue)
-                    Spacer()
-                    Text(snapshot.status.label)
-                        .foregroundStyle(snapshot.status == .live ? store.settings.themeColor.primary : .orange)
-                }
-                .font(.caption)
-            }
+    private func performRecommendationAction(_ action: PopoverActionRecommendation.Action) {
+        switch action {
+        case .switchAccount(let accountID):
+            guard let account = store.accounts.first(where: { $0.id == accountID }) else { return }
+            store.switchActiveAccount(account)
+        case .refresh:
+            store.refresh(force: true)
+        case .waitForReset, .none:
+            break
         }
     }
 
     private var footer: some View {
-        HStack {
-            Button {
+        HStack(spacing: 10) {
+            PopoverToolbarButton(title: L.text("statistics", store.language), systemImage: "chart.bar.xaxis") {
                 if let onOpenStatistics {
                     onOpenStatistics()
                 } else {
                     openWindow(id: "statistics")
                 }
-            } label: {
-                Label(L.text("statistics", store.language), systemImage: "chart.bar.xaxis")
             }
-            Spacer()
+
             if let onOpenSettings {
-                Button {
+                PopoverToolbarButton(title: L.text("settings", store.language), systemImage: "gearshape") {
                     onOpenSettings()
-                } label: {
-                    Label(L.text("settings", store.language), systemImage: "gearshape")
                 }
             } else {
                 SettingsLink {
                     Label(L.text("settings", store.language), systemImage: "gearshape")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
             }
-            Button {
+
+            PopoverToolbarButton(title: L.text("quit_app", store.language), systemImage: "power") {
                 onQuit()
-            } label: {
-                Label(L.text("quit_app", store.language), systemImage: "power")
             }
         }
-        .padding(.vertical, 9)
+        .padding(.vertical, 8)
     }
 }
 
@@ -264,6 +319,76 @@ struct PopoverLoadingRow: View {
     }
 }
 
+struct PopoverRecommendationPanel: View {
+    var recommendation: PopoverActionRecommendation
+    var theme: AppThemeColor
+    var isWorking: Bool
+    var onAction: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: iconName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 24, height: 24)
+                .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 6))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(recommendation.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text(recommendation.detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 6)
+
+            if let actionTitle = recommendation.actionTitle {
+                Button {
+                    onAction()
+                } label: {
+                    if isWorking {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text(actionTitle)
+                            .lineLimit(1)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(tint)
+                .disabled(isWorking)
+            }
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(tint.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private var iconName: String {
+        switch recommendation.severity {
+        case .ok: "checkmark.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .critical: "arrow.triangle.2.circlepath.circle.fill"
+        }
+    }
+
+    private var tint: Color {
+        switch recommendation.severity {
+        case .ok: theme.primary
+        case .warning: .orange
+        case .critical: .red
+        }
+    }
+}
+
 struct AccountRowView: View {
     var account: UsageAccount
     var language: AppLanguage
@@ -272,29 +397,41 @@ struct AccountRowView: View {
     var onSwitch: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.displayName)
                         .font(.callout.weight(.semibold))
+                        .lineLimit(1)
                     Text(secondaryIdentity)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    if account.isActive {
-                        Text(L.text("current", language))
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(theme.primary, in: Capsule())
+                if account.isActive {
+                    Text(L.text("current", language))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(theme.primary, in: Capsule())
+                } else {
+                    Button {
+                        onSwitch()
+                    } label: {
+                        if isSwitching {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label(L.text("use_account", language), systemImage: "arrow.triangle.2.circlepath")
+                                .labelStyle(.titleAndIcon)
+                        }
                     }
-                    Text(account.service.rawValue)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(theme.primary)
+                    .disabled(isSwitching)
                 }
             }
 
@@ -303,40 +440,27 @@ struct AccountRowView: View {
                 UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.lastActivityLine(language: language))
-                Text(account.accountTypeLine(language: language))
+            HStack(spacing: 6) {
+                Text(account.accountTypeValue)
+                Text("·")
+                Text(lastActivitySummary)
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
-
-            if !account.isActive {
-                Button {
-                    onSwitch()
-                } label: {
-                    if isSwitching {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Label(L.text("use_account", language), systemImage: "arrow.triangle.2.circlepath")
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(theme.primary)
-                .disabled(isSwitching)
-            }
+            .lineLimit(1)
         }
-        .padding(9)
+        .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var secondaryIdentity: String {
-        if let username = account.username, username != account.displayName {
-            return username
-        }
-        return account.sourceDescription
+        "\(account.sourceDescription) · \(account.service.rawValue)"
+    }
+
+    private var lastActivitySummary: String {
+        guard let lastUpdated = account.lastUpdated else { return "\(L.text("last_activity", language)): --" }
+        return "\(L.text("last_activity", language)): \(DisplayFormatters.relativeString(for: lastUpdated))"
     }
 }
 
@@ -352,6 +476,7 @@ struct UsageWindowGauge: View {
                 Text(title)
                 Spacer()
                 Text(DisplayFormatters.percentString(window?.remainingPercent))
+                    .monospacedDigit()
             }
             .font(.caption2)
             ProgressView(value: (window?.remainingPercent ?? 0) / 100)
@@ -415,5 +540,22 @@ struct MiniStackedBars: View {
             }
         }
         .accessibilityLabel("Stacked usage bars")
+    }
+}
+
+struct PopoverToolbarButton: View {
+    var title: String
+    var systemImage: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
+        .help(title)
     }
 }

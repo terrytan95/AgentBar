@@ -65,18 +65,142 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestWeekly?.usedPercent, 4)
     }
 
+    func testCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registryURL = accountDir.appending(path: "registry.json")
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "acct-a",
+          "accounts": [
+            {
+              "account_key": "acct-a",
+              "email": "person@example.com",
+              "plan": "team",
+              "last_usage": {
+                "primary": {"used_percent": 90, "window_minutes": 300, "resets_at": 1781400000},
+                "secondary": {"used_percent": 80, "window_minutes": 10080, "resets_at": 1781900000}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!.write(to: registryURL)
+        try """
+        {
+          "auth_mode": "chatgpt",
+          "tokens": {
+            "access_token": "secret-access-token",
+            "account_id": "chatgpt-account-id"
+          }
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-a.auth.json"))
+
+        let requestRecorder = UsageAPIRequestRecorder()
+        let syncer = CodexUsageAPISyncer(
+            homeDirectory: temp,
+            now: { Date(timeIntervalSince1970: 1_781_388_300) },
+            usageClient: { request, timeout in
+                XCTAssertEqual(request.url?.absoluteString, "https://chatgpt.com/backend-api/wham/usage")
+                XCTAssertEqual(timeout, 5)
+                requestRecorder.record(request)
+                return CodexUsageAPIResponse(
+                    statusCode: 200,
+                    data: """
+                    {
+                      "plan_type": "business",
+                      "rate_limit": {
+                        "primary_window": {"used_percent": 8, "limit_window_seconds": 18000, "reset_at": 1781400000},
+                        "secondary_window": {"used_percent": 55, "limit_window_seconds": 604800, "reset_at": 1781900000}
+                      }
+                    }
+                    """.data(using: .utf8)!
+                )
+            }
+        )
+
+        XCTAssertEqual(syncer.refreshUsage(), .success)
+
+        XCTAssertEqual(requestRecorder.authorization, "Bearer secret-access-token")
+        XCTAssertEqual(requestRecorder.accountID, "chatgpt-account-id")
+        let data = try Data(contentsOf: registryURL)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let accounts = try XCTUnwrap(json["accounts"] as? [[String: Any]])
+        let account = try XCTUnwrap(accounts.first)
+        let usage = try XCTUnwrap(account["last_usage"] as? [String: Any])
+        let primary = try XCTUnwrap(usage["primary"] as? [String: Any])
+        let secondary = try XCTUnwrap(usage["secondary"] as? [String: Any])
+        XCTAssertEqual(primary["used_percent"] as? Double, 8)
+        XCTAssertEqual(primary["window_minutes"] as? Int, 300)
+        XCTAssertEqual(secondary["used_percent"] as? Double, 55)
+        XCTAssertEqual(secondary["window_minutes"] as? Int, 10080)
+        XCTAssertEqual(usage["plan_type"] as? String, "business")
+        XCTAssertEqual(account["last_usage_at"] as? Double, 1_781_388_300)
+        XCTAssertFalse(String(data: data, encoding: .utf8)?.contains("secret-access-token") ?? true)
+    }
+
     @MainActor
     func testRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let store = UsageStore(settings: SettingsStore(defaults: defaults))
+        let store = UsageStore(
+            settings: SettingsStore(defaults: defaults),
+            codexUsageSynchronizer: { .success }
+        )
         store.applyTestData(accounts: [testAccount(id: "active", name: "active@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: Date())])
 
         store.refresh(force: true)
 
         XCTAssertTrue(store.hasLoadedAccountInformation)
         XCTAssertFalse(store.isLoadingAccountInformation)
+    }
+
+    @MainActor
+    func testRefreshSyncsCodexUsageAPIBeforeReadingUsage() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        let expectation = expectation(description: "refresh completed")
+        let recorder = RefreshOrderRecorder()
+        let now = Date()
+        let activeAccount = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 8, weeklyUsed: 55, now: now)
+        let store = UsageStore(
+            settings: settings,
+            codexUsageSynchronizer: {
+                recorder.record("sync")
+                return .success
+            },
+            codexUsageReader: {
+                XCTAssertEqual(recorder.events, ["sync"])
+                recorder.record("codex-read")
+                return UsageSnapshot(
+                    service: .codex,
+                    status: .live,
+                    accounts: [
+                        activeAccount
+                    ],
+                    points: [],
+                    securityNotes: [],
+                    refreshedAt: now,
+                    pricingFingerprint: Pricing.fingerprint
+                )
+            },
+            claudeUsageReader: {
+                XCTAssertEqual(recorder.events, ["sync", "codex-read"])
+                expectation.fulfill()
+                return .empty(service: .claudeCode, status: .unavailable, note: "test")
+            }
+        )
+
+        store.refresh(force: true)
+
+        wait(for: [expectation], timeout: 2)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(store.menuBarTitle, "5H 92%  WK 45%")
     }
 
     @MainActor
@@ -118,7 +242,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(defaults.double(forKey: "popoverHeight"), 1_200)
     }
 
-    func testCodexReadPrefersLatestSessionRateLimitsForActiveAccount() throws {
+    func testCodexReadPrefersRegistryUsageOverLocalSessionRateLimits() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -159,8 +283,8 @@ final class UsageParsingTests: XCTestCase {
         let active = try XCTUnwrap(snapshot.accounts.first { $0.id == "active" })
         let inactive = try XCTUnwrap(snapshot.accounts.first { $0.id == "inactive" })
 
-        XCTAssertEqual(active.fiveHourWindow?.usedPercent, 12)
-        XCTAssertEqual(active.weeklyWindow?.usedPercent, 34)
+        XCTAssertEqual(active.fiveHourWindow?.usedPercent, 90)
+        XCTAssertEqual(active.weeklyWindow?.usedPercent, 80)
         XCTAssertEqual(inactive.fiveHourWindow?.usedPercent, 40)
         XCTAssertEqual(inactive.weeklyWindow?.usedPercent, 30)
     }
@@ -390,7 +514,7 @@ final class UsageParsingTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
-        let store = UsageStore(settings: settings)
+        let store = UsageStore(settings: settings, codexUsageSynchronizer: { .success })
         let now = Date()
         store.applyTestData(accounts: [
             UsageAccount(
@@ -437,7 +561,7 @@ final class UsageParsingTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
-        let store = UsageStore(settings: settings)
+        let store = UsageStore(settings: settings, codexUsageSynchronizer: { .success })
         let now = Date()
         store.applyTestData(accounts: [
             testAccount(id: "empty", name: "empty@example.com", fiveHourUsed: 100, weeklyUsed: 100, now: now),
@@ -603,5 +727,45 @@ final class UsageParsingTests: XCTestCase {
             lastUpdated: now,
             isActive: false
         )
+    }
+
+    private final class RefreshOrderRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var recordedEvents: [String] = []
+
+        var events: [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedEvents
+        }
+
+        func record(_ event: String) {
+            lock.lock()
+            recordedEvents.append(event)
+            lock.unlock()
+        }
+    }
+
+    private final class UsageAPIRequestRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var request: URLRequest?
+
+        var authorization: String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return request?.value(forHTTPHeaderField: "Authorization")
+        }
+
+        var accountID: String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return request?.value(forHTTPHeaderField: "ChatGPT-Account-Id")
+        }
+
+        func record(_ request: URLRequest) {
+            lock.lock()
+            self.request = request
+            lock.unlock()
+        }
     }
 }

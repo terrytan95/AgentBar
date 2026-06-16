@@ -197,6 +197,7 @@ final class AccountRotationTests: XCTestCase {
         let recorder = AccountRotationRecorder()
         let store = UsageStore(
             settings: settings,
+            codexUsageSynchronizer: { .success },
             codexAccountSwitcher: { accountID in
                 recorder.recordSwitch(accountID)
             },
@@ -227,6 +228,7 @@ final class AccountRotationTests: XCTestCase {
         settings.autoCodexAccountRotationEnabled = false
         let store = UsageStore(
             settings: settings,
+            codexUsageSynchronizer: { .success },
             codexAccountSwitcher: { _ in XCTFail("Auto rotation should not switch when disabled.") },
             automaticCodexRestarter: {
                 XCTFail("Auto rotation should not restart Codex when disabled.")
@@ -254,6 +256,7 @@ final class AccountRotationTests: XCTestCase {
         let recorder = AccountRotationRecorder()
         let store = UsageStore(
             settings: settings,
+            codexUsageSynchronizer: { .success },
             codexAccountSwitcher: { accountID in
                 recorder.recordSwitch(accountID)
             },

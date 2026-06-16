@@ -8,7 +8,12 @@ struct StatisticsView: View {
     @State private var serviceFilter: DashboardServiceFilter = .all
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
-    @State private var currentLimitsHeight: CGFloat = 360
+    @State private var currentLimitsTopInContent: CGFloat = 0
+
+    private static let dashboardContentTopPadding: CGFloat = 12
+    private static let dashboardContentBottomPadding: CGFloat = 26
+    private static let currentLimitsMinHeight: CGFloat = 240
+    private static let dashboardContentCoordinateSpace = "dashboardContent"
 
     init(
         store: UsageStore,
@@ -30,11 +35,14 @@ struct StatisticsView: View {
                 topChrome
 
                 if topTab == .usage {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        dashboardContent
-                            .padding(.top, 12)
-                            .padding(.horizontal, 22)
-                            .padding(.bottom, 26)
+                    GeometryReader { proxy in
+                        ScrollView(.vertical, showsIndicators: false) {
+                            dashboardContent(viewportHeight: proxy.size.height)
+                                .coordinateSpace(name: Self.dashboardContentCoordinateSpace)
+                                .padding(.top, Self.dashboardContentTopPadding)
+                                .padding(.horizontal, 22)
+                                .padding(.bottom, Self.dashboardContentBottomPadding)
+                        }
                     }
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
@@ -216,11 +224,23 @@ struct StatisticsView: View {
     }
 
     @ViewBuilder
-    private var dashboardContent: some View {
-        dashboardContentStack
+    private func dashboardContent(viewportHeight: CGFloat) -> some View {
+        dashboardContentStack(currentLimitsHeight: currentLimitsHeight(viewportHeight: viewportHeight))
+            .onPreferenceChange(CurrentLimitsTopPreferenceKey.self) { top in
+                guard abs(currentLimitsTopInContent - top) > 0.5 else { return }
+                currentLimitsTopInContent = max(0, top)
+            }
     }
 
-    private var dashboardContentStack: some View {
+    private func currentLimitsHeight(viewportHeight: CGFloat) -> CGFloat {
+        let availableHeight = viewportHeight
+            - Self.dashboardContentTopPadding
+            - currentLimitsTopInContent
+            - Self.dashboardContentBottomPadding
+        return max(Self.currentLimitsMinHeight, availableHeight.rounded(.down))
+    }
+
+    private func dashboardContentStack(currentLimitsHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             if !store.hasLoadedAccountInformation {
                 LoadingAccountPanel(
@@ -261,16 +281,21 @@ struct StatisticsView: View {
                 }
                 .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
 
-                ResizablePanel(
+                FillToBottomPanel(
                     title: L.text("current_limits", store.language),
-                    height: $currentLimitsHeight,
-                    minHeight: 240,
-                    maxHeight: 720,
-                    theme: settings.themeColor
+                    height: currentLimitsHeight
                 ) {
                     currentLimitsRows
                 }
                 .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: CurrentLimitsTopPreferenceKey.self,
+                            value: proxy.frame(in: .named(Self.dashboardContentCoordinateSpace)).minY
+                        )
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .top)
         }
@@ -706,6 +731,33 @@ private struct Panel<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .dashboardPanel()
+    }
+}
+
+private struct FillToBottomPanel<Content: View>: View {
+    var title: String
+    var height: CGFloat
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading)
+        .dashboardPanel()
+    }
+}
+
+private struct CurrentLimitsTopPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

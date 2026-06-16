@@ -84,9 +84,6 @@ struct StatisticsView: View {
                 sidebarItem("Audit", systemImage: "chart.bar.doc.horizontal", active: viewMode == .audit) {
                     viewMode = .audit
                 }
-                sidebarItem("Guardian", systemImage: "shield.lefthalf.filled", active: viewMode == .guardian) {
-                    viewMode = .guardian
-                }
             }
 
             Spacer()
@@ -177,12 +174,6 @@ struct StatisticsView: View {
                         AuditView(
                             store: store,
                             points: filteredPoints,
-                            dataSourceHealth: dataSourceHealth,
-                            theme: settings.themeColor
-                        )
-                    case .guardian:
-                        GuardianView(
-                            store: store,
                             dataSourceHealth: dataSourceHealth,
                             theme: settings.themeColor
                         )
@@ -797,7 +788,6 @@ private enum DashboardServiceFilter: Hashable {
 private enum DashboardViewMode: Hashable {
     case overview
     case audit
-    case guardian
 }
 
 private struct DashboardTopTabBar: View {

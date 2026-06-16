@@ -44,14 +44,16 @@ struct SettingsView: View {
                         Text(updates.currentVersion)
                             .foregroundStyle(.secondary)
                     }
-                    HStack {
-                        Button(L.text("check_for_updates", store.language)) {
-                            Task { await updates.checkForUpdates() }
-                        }
-                        .disabled(!updates.canCheckForUpdates)
-                        if updates.status.isBusy {
-                            ProgressView()
-                                .controlSize(.small)
+                    if updates.showsCheckForUpdatesControl {
+                        HStack {
+                            Button(L.text("check_for_updates", store.language)) {
+                                Task { await updates.checkForUpdates() }
+                            }
+                            .disabled(!updates.canCheckForUpdates)
+                            if updates.status.isBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
                         }
                     }
                     Text(updates.status.localizedMessage(language: store.language))

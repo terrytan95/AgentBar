@@ -17,7 +17,7 @@ final class AppUpdateStore: ObservableObject {
     private var automaticCheckTimer: Timer?
     private var isChecking = false
 
-    private init(
+    init(
         defaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
         session: URLSession = .shared
@@ -32,8 +32,12 @@ final class AppUpdateStore: ObservableObject {
         AppVersion.currentDisplayVersion
     }
 
+    var showsCheckForUpdatesControl: Bool {
+        downloadedUpdate == nil
+    }
+
     var canCheckForUpdates: Bool {
-        !status.isBusy
+        showsCheckForUpdatesControl && !status.isBusy
     }
 
     var canInstallDownloadedUpdate: Bool {

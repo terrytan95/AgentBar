@@ -5,7 +5,6 @@ struct StatisticsView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject private var settings: SettingsStore
     @ObservedObject private var updates: AppUpdateStore
-    @State private var serviceFilter: DashboardServiceFilter = .all
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
     @State private var currentLimitsTopInContent: CGFloat = 0
@@ -32,8 +31,6 @@ struct StatisticsView: View {
                 .frame(width: 216)
 
             VStack(spacing: 0) {
-                topChrome
-
                 if topTab == .usage {
                     usageContent
                 } else {
@@ -63,33 +60,27 @@ struct StatisticsView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 22) {
-            sidebarGroup(title: L.text("service", store.language)) {
-                sidebarItem(L.text("all", store.language), active: serviceFilter == .all, tint: nil) {
-                    serviceFilter = .all
+            sidebarGroup(title: L.text("usage_statistics", store.language)) {
+                sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
+                    topTab = .usage
+                    viewMode = .overview
                 }
-                sidebarItem(L.text("openai", store.language), active: serviceFilter == .codex, service: .codex, tint: settings.themeColor.tertiary) {
-                    serviceFilter = .codex
-                }
-                if hasClaudeData {
-                    sidebarItem(L.text("anthropic", store.language), active: serviceFilter == .claude, tint: settings.themeColor.secondary) {
-                        serviceFilter = .claude
-                    }
+                sidebarItem("Audit", systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
+                    topTab = .usage
+                    viewMode = .audit
                 }
             }
 
-            sidebarGroup(title: L.text("view", store.language)) {
-                sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: viewMode == .overview) {
-                    viewMode = .overview
-                }
-                sidebarItem("Audit", systemImage: "chart.bar.doc.horizontal", active: viewMode == .audit) {
-                    viewMode = .audit
+            sidebarGroup(title: L.text("settings", store.language)) {
+                sidebarItem(L.text("settings", store.language), systemImage: "gearshape", active: topTab == .settings) {
+                    topTab = .settings
                 }
             }
 
             Spacer()
         }
         .padding(.horizontal, 12)
-        .padding(.top, 58)
+        .padding(.top, 42)
         .frame(maxHeight: .infinity, alignment: .top)
         .glassPanel(cornerRadius: 0, interactive: false)
     }
@@ -150,16 +141,6 @@ struct StatisticsView: View {
         .opacity(enabled ? 1 : 0.86)
         .pointingHandCursor(enabled: enabled)
         .glassPanel(cornerRadius: 8, interactive: enabled)
-    }
-
-    private var topChrome: some View {
-        VStack(spacing: 0) {
-            DashboardTopTabBar(selection: $topTab, language: store.language, theme: settings.themeColor)
-                .padding(.top, 12)
-                .padding(.bottom, 12)
-        }
-        .frame(maxWidth: .infinity, alignment: .top)
-        .background(.thinMaterial)
     }
 
     private var usageContent: some View {
@@ -519,13 +500,7 @@ struct StatisticsView: View {
     }
 
     private var filteredPoints: [UsagePoint] {
-        store.points.filter { point in
-            switch serviceFilter {
-            case .all: true
-            case .codex: point.service == .codex
-            case .claude: point.service == .claudeCode
-            }
-        }
+        store.points
     }
 
     private var codexAccounts: [UsageAccount] {
@@ -776,53 +751,9 @@ enum DashboardTopTab: String, Hashable {
     case settings
 }
 
-private enum DashboardServiceFilter: Hashable {
-    case all
-    case codex
-    case claude
-}
-
 private enum DashboardViewMode: Hashable {
     case overview
     case audit
-}
-
-private struct DashboardTopTabBar: View {
-    @Binding var selection: DashboardTopTab
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        HStack(spacing: 3) {
-            tabButton(.usage, title: L.text("usage_statistics", language))
-            tabButton(.settings, title: L.text("settings", language))
-        }
-        .padding(3)
-        .frame(height: 30)
-        .glassPanel(cornerRadius: 12, interactive: true)
-    }
-
-    private func tabButton(_ tab: DashboardTopTab, title: String) -> some View {
-        Button {
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                selection = tab
-            }
-        } label: {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .lineLimit(1)
-                .frame(width: 70, height: 24)
-                .foregroundStyle(selection == tab ? Color.white : Color.primary.opacity(0.74))
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selection == tab ? theme.primary : Color.clear)
-                )
-        }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
-    }
 }
 
 private struct DashboardKPI: View {

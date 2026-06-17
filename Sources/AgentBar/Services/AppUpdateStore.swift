@@ -106,7 +106,7 @@ final class AppUpdateStore: ObservableObject {
 
     private func fetchLatestRelease() async throws -> AppUpdateRelease {
         let url = URL(string: "https://api.github.com/repos/terrytan95/AgentBar/releases/latest")!
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("AgentBar", forHTTPHeaderField: "User-Agent")
 
@@ -138,7 +138,8 @@ final class AppUpdateStore: ObservableObject {
         let zipURL = updateDirectory.appending(path: try AppUpdateSecurity.safeAssetFileName(release.asset.name))
         let extractDirectory = updateDirectory.appending(path: "expanded", directoryHint: .isDirectory)
 
-        let (temporaryURL, response) = try await session.download(from: release.asset.downloadURL)
+        let request = URLRequest(url: release.asset.downloadURL, cachePolicy: .reloadIgnoringLocalCacheData)
+        let (temporaryURL, response) = try await session.download(for: request)
         try validateHTTPResponse(response)
         try fileManager.moveItem(at: temporaryURL, to: zipURL)
         try AppUpdateSecurity.verifyRequiredSHA256Digest(release.asset.digest, fileURL: zipURL)

@@ -115,4 +115,11 @@ final class PopoverLayoutTests: XCTestCase {
         XCTAssertEqual(clamped.x, 371)
         XCTAssertEqual(clamped.y, 197)
     }
+
+    func testChartTooltipHitTestingUsesFullPlotWidthSlots() {
+        XCTAssertEqual(ChartTooltipPlacement.barIndex(at: 1_237, plotWidth: 1_800, barCount: 24), 16)
+        XCTAssertEqual(ChartTooltipPlacement.barIndex(at: 76, plotWidth: 1_800, barCount: 24), 1)
+        XCTAssertNil(ChartTooltipPlacement.barIndex(at: -1, plotWidth: 1_800, barCount: 24))
+        XCTAssertNil(ChartTooltipPlacement.barIndex(at: 1_800, plotWidth: 1_800, barCount: 24))
+    }
 }

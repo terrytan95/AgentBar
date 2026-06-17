@@ -20,4 +20,9 @@ enum ChartTooltipPlacement {
             y: min(max(halfHeight, proposedY), max(halfHeight, plotSize.height - halfHeight))
         )
     }
+
+    static func barIndex(at x: CGFloat, plotWidth: CGFloat, barCount: Int) -> Int? {
+        guard barCount > 0, plotWidth > 0, x >= 0, x < plotWidth else { return nil }
+        return min(Int(x / (plotWidth / CGFloat(barCount))), barCount - 1)
+    }
 }

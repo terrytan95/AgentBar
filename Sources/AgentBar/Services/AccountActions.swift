@@ -101,6 +101,20 @@ private extension String {
 }
 
 enum AccountLoginLauncher {
+    static func promptCodexLoginAgain(message: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Codex account switch failed"
+            alert.informativeText = message
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Login Codex")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn {
+                openLogin(for: .codex)
+            }
+        }
+    }
+
     static func openLogin(for service: UsageService) {
         let command = service == .codex ? "codex login" : "claude login"
         let script = """

@@ -136,10 +136,9 @@ struct StatisticsView: View {
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .background(active ? settings.themeColor.primary : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.86)
-        .pointingHandCursor(enabled: enabled)
+        .tactilePlainButton(enabled: enabled)
         .glassPanel(cornerRadius: 8, interactive: enabled)
     }
 
@@ -190,8 +189,7 @@ struct StatisticsView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(L.text("refresh", store.language)))
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton()
         .glassPanel(cornerRadius: 10, interactive: true)
         .help(L.text("refresh", store.language))
     }
@@ -1546,11 +1544,10 @@ private struct DataSourceHealthPanel: View {
                         .font(.system(size: 10, weight: .bold))
                         .frame(width: 18, height: 18)
                 }
-                .buttonStyle(.plain)
+                .tactilePlainButton()
                 .foregroundStyle(.secondary)
                 .help(isExpanded ? "Hide full text" : "Show full text")
                 .accessibilityLabel(isExpanded ? "Hide full text" : "Show full text")
-                .pointingHandCursor()
             }
             Text(statusTitle(row.status))
                 .font(.system(size: 10, weight: .bold))
@@ -1951,16 +1948,7 @@ private extension View {
     @ViewBuilder
     func glassPanel(cornerRadius: CGFloat, interactive: Bool) -> some View {
         self
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.86))
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                    )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .agentBarPanel(cornerRadius: cornerRadius)
     }
 }
 

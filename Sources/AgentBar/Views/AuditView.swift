@@ -329,15 +329,6 @@ private struct EmptyAuditMessage: View {
 
 private extension View {
     func auditCard() -> some View {
-        background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.86))
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        agentBarPanel()
     }
 }

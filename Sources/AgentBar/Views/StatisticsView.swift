@@ -195,14 +195,12 @@ struct StatisticsView: View {
                     .font(.system(size: 12, weight: .semibold))
                 Text(L.text("refresh", store.language))
                     .font(.system(size: 12, weight: .semibold))
-                ZStack {
-                    if store.isManualRefreshFeedbackVisible {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accessibilityHidden(true)
-                    }
+                if store.isManualRefreshFeedbackVisible {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 12, height: 12)
+                        .accessibilityHidden(true)
                 }
-                .frame(width: 12, height: 12)
             }
             .foregroundStyle(settings.themeColor.primary)
             .padding(.horizontal, 10)
@@ -342,7 +340,6 @@ struct StatisticsView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(width: 130)
             }
             .padding(.horizontal, 10)
             .frame(height: 30)

@@ -21,6 +21,7 @@ final class UsageStore: ObservableObject {
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
     private let manualCodexAppRestarter: @Sendable () -> Void
+    private let codexAccountSwitchFailurePrompter: @Sendable (String) -> Void
     private var timer: Timer?
     private var refreshInFlight = false
     private var refreshQueued = false
@@ -46,6 +47,9 @@ final class UsageStore: ObservableObject {
         },
         manualCodexAppRestarter: @escaping @Sendable () -> Void = {
             AccountLoginLauncher.forceRestartCodexApp()
+        },
+        codexAccountSwitchFailurePrompter: @escaping @Sendable (String) -> Void = { message in
+            AccountLoginLauncher.promptCodexLoginAgain(message: message)
         }
     ) {
         self.settings = settings
@@ -55,6 +59,7 @@ final class UsageStore: ObservableObject {
         self.codexAccountSwitcher = codexAccountSwitcher
         self.automaticCodexRestarter = automaticCodexRestarter
         self.manualCodexAppRestarter = manualCodexAppRestarter
+        self.codexAccountSwitchFailurePrompter = codexAccountSwitchFailurePrompter
         configureTimer()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -278,6 +283,7 @@ final class UsageStore: ObservableObject {
         let switcher = codexAccountSwitcher
         let restarter = automaticCodexRestarter
         let manualRestarter = manualCodexAppRestarter
+        let promptRelogin = codexAccountSwitchFailurePrompter
 
         DispatchQueue.global(qos: .utility).async {
             let result = Result {
@@ -298,11 +304,18 @@ final class UsageStore: ObservableObject {
                     if self?.manualCodexRotationOverrideAccountID == account.id {
                         self?.manualCodexRotationOverrideAccountID = nil
                     }
-                    self?.lastError = error.localizedDescription.redactedForCredentialWords
+                    let message = Self.codexSwitchFailureMessage(for: error)
+                    self?.lastError = message.redactedForCredentialWords
+                    promptRelogin(message)
                 }
                 self?.refresh(force: true)
             }
         }
+    }
+
+    private static func codexSwitchFailureMessage(for error: Error) -> String {
+        let reason = error.localizedDescription.redactedForCredentialWords
+        return "The Codex account switch failed. Please login to this Codex account again. Additional phone number authentication might be needed. \(reason)"
     }
 
     func openLogin(for service: UsageService) {

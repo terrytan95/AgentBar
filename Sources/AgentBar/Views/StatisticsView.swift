@@ -1040,21 +1040,19 @@ private struct DashboardStackedBars: View {
                                     }
                                     .opacity(0.45)
 
-                                    HStack(alignment: .bottom, spacing: 15) {
+                                    HStack(alignment: .bottom, spacing: 0) {
                                         ForEach(bars) { bar in
-                                            ZStack(alignment: .bottom) {
-                                                VStack(spacing: 0) {
-                                                    Rectangle()
-                                                        .fill(theme.secondary)
-                                                        .frame(height: plotHeight * CGFloat(bar.claudeTokens) / CGFloat(maxValue))
-                                                    Rectangle()
-                                                        .fill(theme.tertiary)
-                                                        .frame(height: plotHeight * CGFloat(bar.codexTokens) / CGFloat(maxValue))
-                                                }
-                                                .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-                                                .frame(maxWidth: 28)
+                                            VStack(spacing: 0) {
+                                                Rectangle()
+                                                    .fill(theme.secondary)
+                                                    .frame(height: plotHeight * CGFloat(bar.claudeTokens) / CGFloat(maxValue))
+                                                Rectangle()
+                                                    .fill(theme.tertiary)
+                                                    .frame(height: plotHeight * CGFloat(bar.codexTokens) / CGFloat(maxValue))
                                             }
-                                            .frame(width: 32, height: plotHeight, alignment: .bottom)
+                                            .frame(width: 28, height: plotHeight, alignment: .bottom)
+                                            .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                                            .frame(maxWidth: .infinity, maxHeight: plotHeight, alignment: .bottom)
                                         }
                                     }
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -1108,17 +1106,8 @@ private struct DashboardStackedBars: View {
     }
 
     private func barID(at x: CGFloat, plotWidth: CGFloat) -> Date? {
-        let barWidth: CGFloat = 32
-        let spacing: CGFloat = 15
-        let totalWidth = CGFloat(bars.count) * barWidth + CGFloat(max(0, bars.count - 1)) * spacing
-        let leading = max(0, (plotWidth - totalWidth) / 2)
-        let relativeX = x - leading
-        guard relativeX >= 0, relativeX <= totalWidth else { return nil }
-        let stride = barWidth + spacing
-        let index = Int(relativeX / stride)
+        guard let index = ChartTooltipPlacement.barIndex(at: x, plotWidth: plotWidth, barCount: bars.count) else { return nil }
         guard bars.indices.contains(index) else { return nil }
-        let barStart = CGFloat(index) * stride
-        guard relativeX >= barStart, relativeX <= barStart + barWidth else { return nil }
         return bars[index].id
     }
 

@@ -293,10 +293,41 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertNil(recorder.restartResult)
     }
 
+    @MainActor
+    func testFailedManualSwitchPromptsCodexReloginWithPhoneAuthHint() throws {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let promptExpectation = expectation(description: "login prompt shown")
+        let recorder = AccountRotationRecorder()
+        let store = UsageStore(
+            settings: SettingsStore(defaults: defaults),
+            codexUsageSynchronizer: { .success },
+            codexAccountSwitcher: { _ in throw AccountActionError.missingAccountSnapshot },
+            manualCodexAppRestarter: {
+                XCTFail("Failed switch should not restart Codex.")
+            },
+            codexAccountSwitchFailurePrompter: { message in
+                recorder.recordPrompt(message)
+                promptExpectation.fulfill()
+            }
+        )
+        let account = account(id: "locked", used: 50, resetsAt: now.addingTimeInterval(300), lastUpdated: now)
+        store.applyTestData(accounts: [account])
+
+        store.switchActiveAccount(account)
+        wait(for: [promptExpectation], timeout: 2)
+
+        let promptMessage = try XCTUnwrap(recorder.promptMessage)
+        XCTAssertTrue(promptMessage.contains("login to this Codex account again"))
+        XCTAssertTrue(promptMessage.contains("phone number authentication might be needed"))
+    }
+
     private final class AccountRotationRecorder: @unchecked Sendable {
         private let lock = NSLock()
         private var recordedSwitchAccountID: String?
         private var recordedRestartResult: CodexAppRestartResult?
+        private var recordedPromptMessage: String?
 
         var switchedAccountID: String? {
             lock.lock()
@@ -308,6 +339,12 @@ final class AccountRotationTests: XCTestCase {
             lock.lock()
             defer { lock.unlock() }
             return recordedRestartResult
+        }
+
+        var promptMessage: String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedPromptMessage
         }
 
         func recordSwitch(_ accountID: String) {
@@ -322,10 +359,17 @@ final class AccountRotationTests: XCTestCase {
             lock.unlock()
         }
 
+        func recordPrompt(_ message: String) {
+            lock.lock()
+            recordedPromptMessage = message
+            lock.unlock()
+        }
+
         func reset() {
             lock.lock()
             recordedSwitchAccountID = nil
             recordedRestartResult = nil
+            recordedPromptMessage = nil
             lock.unlock()
         }
     }

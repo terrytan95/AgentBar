@@ -4,6 +4,51 @@ import XCTest
 
 final class AppUpdateSecurityTests: XCTestCase {
     @MainActor
+    func testManualUpdateCheckBypassesURLCacheRevalidation() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [UpdateCheckURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let defaultsName = "AgentBarTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        defer {
+            defaults.removePersistentDomain(forName: defaultsName)
+            UpdateCheckURLProtocol.handler.set(nil)
+        }
+
+        UpdateCheckURLProtocol.handler.set { request in
+            XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (
+                response,
+                Data("""
+                {
+                  "tag_name": "v0.0.0",
+                  "name": "AgentBar v0.0.0",
+                  "html_url": "https://github.com/terrytan95/AgentBar/releases/tag/v0.0.0",
+                  "assets": [{
+                    "name": "AgentBar-v0.0.0.zip",
+                    "browser_download_url": "https://github.com/terrytan95/AgentBar/releases/download/v0.0.0/AgentBar-v0.0.0.zip",
+                    "size": 1,
+                    "digest": "sha256:1ca77194abc4fa2675c7b5773420993b23f12d77e492f0e2787c3e0bf80de655"
+                  }]
+                }
+                """.utf8)
+            )
+        }
+
+        let store = AppUpdateStore(defaults: defaults, session: session)
+
+        await store.checkForUpdates()
+
+        XCTAssertEqual(store.status, .upToDate)
+    }
+
+    @MainActor
     func testPendingDownloadedUpdateSuppressesManualUpdateCheck() throws {
         let fileManager = FileManager.default
         let appSupport = try fileManager.url(
@@ -144,5 +189,51 @@ final class AppUpdateSecurityTests: XCTestCase {
         try process.run()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
+    }
+}
+
+private final class UpdateCheckURLProtocol: URLProtocol {
+    static let handler = UpdateCheckURLProtocolHandler()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let handler = Self.handler.get() else {
+            XCTFail("Missing URL protocol handler")
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+private final class UpdateCheckURLProtocolHandler: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    func set(_ handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?) {
+        lock.withLock {
+            self.handler = handler
+        }
+    }
+
+    func get() -> ((URLRequest) throws -> (HTTPURLResponse, Data))? {
+        lock.withLock {
+            handler
+        }
     }
 }

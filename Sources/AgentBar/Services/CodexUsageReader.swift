@@ -56,6 +56,10 @@ struct CodexUsageReader {
                    let latestWeekly = metrics.latestWeekly {
                     account.weeklyWindow = latestWeekly
                 }
+                if account.resetCredits == nil,
+                   (canUseSessionRateLimitsForActiveAccount || !account.isActive) {
+                    account.resetCredits = metrics.latestResetCredits
+                }
                 if account.tokens.total == 0 {
                     account.tokens = metrics.tokenTotals
                 }
@@ -91,6 +95,7 @@ struct CodexUsageReader {
             let secondary = raw.lastUsage?.secondary.map {
                 UsageWindow(kind: .weekly, usedPercent: $0.usedPercent, windowMinutes: $0.windowMinutes, resetsAt: epochDate($0.resetsAt))
             }
+            let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
 
             return UsageAccount(
                 id: raw.accountKey,
@@ -103,6 +108,7 @@ struct CodexUsageReader {
                 status: .live,
                 fiveHourWindow: primary,
                 weeklyWindow: secondary,
+                resetCredits: resetCredits,
                 tokens: .zero,
                 estimatedCostUSD: nil,
                 lastUpdated: epochDate(raw.lastUsageAt) ?? now,
@@ -128,6 +134,7 @@ struct CodexUsageReader {
         var points: [UsagePoint] = []
         var fiveHour: UsageWindow?
         var weekly: UsageWindow?
+        var resetCredits: UsageResetCredits?
         var latestRateLimitAt: Date?
         let decoder = JSONDecoder()
         let dateParser = CodexTimestampParser()
@@ -157,7 +164,7 @@ struct CodexUsageReader {
             }
 
             if let parsedEventDate,
-               payload.rateLimits != nil,
+               payload.rateLimits != nil || payload.resetCredits != nil,
                latestRateLimitAt == nil || parsedEventDate >= (latestRateLimitAt ?? .distantPast) {
                 if let primary = payload.rateLimits?.primary {
                     fiveHour = UsageWindow(kind: .fiveHour, usedPercent: primary.usedPercent, windowMinutes: primary.windowMinutes, resetsAt: epochDate(primary.resetsAt))
@@ -165,11 +172,14 @@ struct CodexUsageReader {
                 if let secondary = payload.rateLimits?.secondary {
                     weekly = UsageWindow(kind: .weekly, usedPercent: secondary.usedPercent, windowMinutes: secondary.windowMinutes, resetsAt: epochDate(secondary.resetsAt))
                 }
+                if let sessionResetCredits = payload.resetCredits {
+                    resetCredits = sessionResetCredits.toUsageResetCredits()
+                }
                 latestRateLimitAt = parsedEventDate
             }
         }
 
-        return CodexSessionMetrics(eventCount: eventCount, tokenTotals: latestTotal, points: points, latestFiveHour: fiveHour, latestWeekly: weekly, latestRateLimitAt: latestRateLimitAt)
+        return CodexSessionMetrics(eventCount: eventCount, tokenTotals: latestTotal, points: points, latestFiveHour: fiveHour, latestWeekly: weekly, latestResetCredits: resetCredits, latestRateLimitAt: latestRateLimitAt)
     }
 
     private func readSessionMetrics(root: URL) -> CodexSessionMetrics {
@@ -262,11 +272,45 @@ private struct CodexLastUsage: Decodable {
     var planType: String?
     var primary: CodexRateWindow?
     var secondary: CodexRateWindow?
+    var resetCredits: CodexResetCredits?
 
     enum CodingKeys: String, CodingKey {
         case planType = "plan_type"
         case primary
         case secondary
+        case resetCredits = "reset_credits"
+    }
+}
+
+private struct CodexResetCredits: Decodable {
+    var availableCount: Int
+    var resets: [CodexResetCredit]
+
+    enum CodingKeys: String, CodingKey {
+        case availableCount = "available_count"
+        case resets
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        availableCount = try container.decodeIfPresent(Int.self, forKey: .availableCount) ?? 0
+        resets = try container.decodeIfPresent([CodexResetCredit].self, forKey: .resets) ?? []
+    }
+
+    func toUsageResetCredits() -> UsageResetCredits? {
+        let credits = UsageResetCredits(
+            availableCount: availableCount,
+            resets: resets.map { UsageResetCredit(expiresAt: epochDate($0.expiresAt)) }
+        )
+        return credits.hasAvailableCredits ? credits : nil
+    }
+}
+
+private struct CodexResetCredit: Decodable {
+    var expiresAt: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case expiresAt = "expires_at"
     }
 }
 
@@ -368,6 +412,7 @@ private extension CodexSessionMetrics {
            self.latestRateLimitAt == nil || latestRateLimitAt >= (self.latestRateLimitAt ?? .distantPast) {
             latestFiveHour = metrics.latestFiveHour
             latestWeekly = metrics.latestWeekly
+            latestResetCredits = metrics.latestResetCredits
             self.latestRateLimitAt = latestRateLimitAt
         }
     }
@@ -376,10 +421,12 @@ private extension CodexSessionMetrics {
 private struct CodexSessionPayload: Decodable {
     var info: CodexInfo?
     var rateLimits: CodexRateLimits?
+    var resetCredits: CodexResetCredits?
 
     enum CodingKeys: String, CodingKey {
         case info
         case rateLimits = "rate_limits"
+        case resetCredits = "rate_limit_reset_credits"
     }
 }
 
@@ -437,7 +484,7 @@ private func maskEmail(_ email: String?) -> String? {
 
 private func epochDate(_ value: Double?) -> Date? {
     guard let value else { return nil }
-    return Date(timeIntervalSince1970: value)
+    return Date(timeIntervalSince1970: value > 10_000_000_000 ? value / 1_000 : value)
 }
 
 private func epochMillisecondsDate(_ value: Double?) -> Date? {

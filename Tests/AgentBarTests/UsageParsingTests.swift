@@ -18,7 +18,11 @@ final class UsageParsingTests: XCTestCase {
               "last_usage": {
                 "plan_type": "team",
                 "primary": {"used_percent": 18, "window_minutes": 300, "resets_at": 1781400000},
-                "secondary": {"used_percent": 51, "window_minutes": 10080, "resets_at": 1781900000}
+                "secondary": {"used_percent": 51, "window_minutes": 10080, "resets_at": 1781900000},
+                "reset_credits": {
+                  "available_count": 2,
+                  "resets": [{"expires_at": 1782000000}]
+                }
               }
             },
             {
@@ -39,6 +43,8 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts[0].maskedEmail, "p***@example.com")
         XCTAssertEqual(snapshot.accounts[0].fiveHourWindow?.usedPercent, 18)
         XCTAssertEqual(snapshot.accounts[0].weeklyWindow?.usedPercent, 51)
+        XCTAssertEqual(snapshot.accounts[0].resetCredits?.availableCount, 2)
+        XCTAssertEqual(snapshot.accounts[0].resetCredits?.resets.first?.expiresAt, Date(timeIntervalSince1970: 1_782_000_000))
         XCTAssertTrue(snapshot.accounts[0].isActive)
         XCTAssertEqual(snapshot.accounts[1].displayName, "Personal")
         XCTAssertEqual(snapshot.accounts[1].username, "Personal")
@@ -111,6 +117,10 @@ final class UsageParsingTests: XCTestCase {
                     data: """
                     {
                       "plan_type": "business",
+                      "rate_limit_reset_credits": {
+                        "available_count": 2,
+                        "resets": [{"expires_at": 1782000000}]
+                      },
                       "rate_limit": {
                         "primary_window": {"used_percent": 8, "limit_window_seconds": 18000, "reset_at": 1781400000},
                         "secondary_window": {"used_percent": 55, "limit_window_seconds": 604800, "reset_at": 1781900000}
@@ -136,6 +146,10 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(primary["window_minutes"] as? Int, 300)
         XCTAssertEqual(secondary["used_percent"] as? Double, 55)
         XCTAssertEqual(secondary["window_minutes"] as? Int, 10080)
+        let resetCredits = try XCTUnwrap(usage["reset_credits"] as? [String: Any])
+        XCTAssertEqual(resetCredits["available_count"] as? Int, 2)
+        let resets = try XCTUnwrap(resetCredits["resets"] as? [[String: Any]])
+        XCTAssertEqual(resets.first?["expires_at"] as? Double, 1_782_000_000)
         XCTAssertEqual(usage["plan_type"] as? String, "business")
         XCTAssertEqual(account["last_usage_at"] as? Double, 1_781_388_300)
         XCTAssertFalse(String(data: data, encoding: .utf8)?.contains("secret-access-token") ?? true)

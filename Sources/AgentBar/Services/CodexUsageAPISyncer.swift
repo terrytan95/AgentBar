@@ -225,6 +225,9 @@ struct CodexUsageAPISyncer {
         if let credits = parseCredits(root["credits"]) {
             snapshot["credits"] = credits
         }
+        if let resetCredits = parseResetCredits(root["rate_limit_reset_credits"]) {
+            snapshot["reset_credits"] = resetCredits
+        }
 
         guard snapshot["primary"] != nil || snapshot["secondary"] != nil else {
             return nil
@@ -246,6 +249,36 @@ struct CodexUsageAPISyncer {
             window["resets_at"] = resetAt
         }
         return window
+    }
+
+    private static func parseResetCredits(_ value: Any?) -> [String: Any]? {
+        guard let object = value as? [String: Any] else { return nil }
+        let resetItems = firstArray([object["resets"], object["credits"], object["items"]])
+            .compactMap(parseResetCredit)
+        let availableCount = firstNumber([object["available_count"], object["availableCount"], object["count"]])?.intValue ?? resetItems.count
+        guard availableCount > 0 || !resetItems.isEmpty else { return nil }
+
+        var output: [String: Any] = ["available_count": availableCount]
+        if !resetItems.isEmpty {
+            output["resets"] = resetItems
+        }
+        return output
+    }
+
+    private static func parseResetCredit(_ value: Any) -> [String: Any]? {
+        guard let object = value as? [String: Any] else { return nil }
+        var output: [String: Any] = [:]
+        if let expiresAt = firstNumber([
+            object["expires_at"],
+            object["expiration_at"],
+            object["expiresAt"],
+            object["expirationAt"],
+            object["valid_until"],
+            object["validUntil"]
+        ])?.doubleValue {
+            output["expires_at"] = expiresAt
+        }
+        return output.isEmpty ? nil : output
     }
 
     private static func parseCredits(_ value: Any?) -> [String: Any]? {
@@ -278,6 +311,14 @@ struct CodexUsageAPISyncer {
             let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         }.first
+    }
+
+    private static func firstNumber(_ values: [Any?]) -> NSNumber? {
+        values.compactMap(number).first
+    }
+
+    private static func firstArray(_ values: [Any?]) -> [Any] {
+        values.compactMap { $0 as? [Any] }.first ?? []
     }
 
     private static func number(_ value: Any?) -> NSNumber? {

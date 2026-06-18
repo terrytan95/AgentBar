@@ -67,6 +67,46 @@ struct UsageWindow: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+struct UsageResetCredit: Codable, Equatable, Sendable {
+    var expiresAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case expiresAt = "expires_at"
+    }
+}
+
+struct UsageResetCredits: Codable, Equatable, Sendable {
+    var availableCount: Int
+    var resets: [UsageResetCredit] = []
+
+    enum CodingKeys: String, CodingKey {
+        case availableCount = "available_count"
+        case resets
+    }
+
+    var visibleCount: Int {
+        max(availableCount, resets.count)
+    }
+
+    var hasAvailableCredits: Bool {
+        visibleCount > 0
+    }
+
+    func summaryLine(language: AppLanguage) -> String {
+        let key = visibleCount == 1 ? "reset_available" : "resets_available"
+        return "\(visibleCount) \(L.text(key, language))"
+    }
+
+    func expirationLines(language: AppLanguage) -> [String] {
+        resets.enumerated().compactMap { index, reset in
+            guard let expiresAt = reset.expiresAt else { return nil }
+            let timestamp = DisplayFormatters.shortDateTimeString(for: expiresAt, language: language)
+            let relative = DisplayFormatters.relativeString(for: expiresAt)
+            return "\(L.text("reset", language)) \(index + 1) \(L.text("expires", language)): \(timestamp) (\(relative))"
+        }
+    }
+}
+
 struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var service: UsageService
@@ -78,6 +118,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var status: DataSourceStatus
     var fiveHourWindow: UsageWindow?
     var weeklyWindow: UsageWindow?
+    var resetCredits: UsageResetCredits? = nil
     var tokens: TokenTotals
     var estimatedCostUSD: Decimal?
     var lastUpdated: Date?
@@ -238,5 +279,6 @@ struct CodexSessionMetrics: Equatable, Sendable {
     var points: [UsagePoint]
     var latestFiveHour: UsageWindow?
     var latestWeekly: UsageWindow?
+    var latestResetCredits: UsageResetCredits? = nil
     var latestRateLimitAt: Date?
 }

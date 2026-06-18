@@ -491,6 +491,21 @@ struct AccountRowView: View {
                 UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
             }
 
+            if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(resetCredits.summaryLine(language: language), systemImage: "arrow.counterclockwise.circle")
+                        .labelStyle(.titleAndIcon)
+                    ForEach(Array(resetCredits.expirationLines(language: language).enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .padding(.leading, 17)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+
             HStack(spacing: 6) {
                 Text(account.accountTypeValue)
                 Text("·")

@@ -26,7 +26,15 @@ struct CodexUsageReader {
         ]
 
         if let data = try? Data(contentsOf: registryURL),
-           let registryDetails = try? Self.parseRegistryDetails(data: data, now: now) {
+           let registryDetails = try? Self.parseRegistryDetails(
+            data: data,
+            now: now,
+            authSnapshotModifiedAt: { accountKey in
+                let authURL = Self.accountAuthURL(for: accountKey, homeDirectory: homeDirectory)
+                guard let attributes = try? fileManager.attributesOfItem(atPath: authURL.path) else { return nil }
+                return attributes[.modificationDate] as? Date
+            }
+           ) {
             accounts = registryDetails.snapshot.accounts
             activeAccountActivatedAt = registryDetails.activeAccountActivatedAt
             notes.append(contentsOf: registryDetails.snapshot.securityNotes)
@@ -84,7 +92,11 @@ struct CodexUsageReader {
         try parseRegistryDetails(data: data, now: now).snapshot
     }
 
-    private static func parseRegistryDetails(data: Data, now: Date) throws -> (snapshot: UsageSnapshot, activeAccountActivatedAt: Date?) {
+    private static func parseRegistryDetails(
+        data: Data,
+        now: Date,
+        authSnapshotModifiedAt: ((String) -> Date?)? = nil
+    ) throws -> (snapshot: UsageSnapshot, activeAccountActivatedAt: Date?) {
         let registry = try JSONDecoder().decode(CodexRegistry.self, from: data)
         let accounts = registry.accounts.map { raw in
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
@@ -97,7 +109,7 @@ struct CodexUsageReader {
             }
             let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
             let loginWarning: UsageAccountLoginWarning? =
-                raw.hasForcedLogoutWarning ? .forcedLogout :
+                raw.hasForcedLogoutWarning(authModifiedAt: authSnapshotModifiedAt?(raw.accountKey)) ? .forcedLogout :
                 raw.lastUsage?.hasUnreadableResetWarning == true ? .unreadableReset :
                 nil
 
@@ -264,6 +276,11 @@ struct CodexUsageReader {
         sessionMetricsCache.removeAll()
     }
 
+    private static func accountAuthURL(for accountKey: String, homeDirectory: URL) -> URL {
+        let fileKey = accountKey.needsCodexAccountFilenameEncoding ? accountKey.codexAccountFileKey : accountKey
+        return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
+    }
+
     private static func canUseSessionRateLimits(
         for account: UsageAccount,
         activeAccountActivatedAt: Date?,
@@ -309,8 +326,16 @@ private struct CodexRegistryAccount: Decodable {
         case authError = "agentbar_auth_error"
     }
 
-    var hasForcedLogoutWarning: Bool {
-        authError?.statusCode == 401 || plan == "401" || lastUsage?.planType == "401"
+    func hasForcedLogoutWarning(authModifiedAt: Date? = nil) -> Bool {
+        if let authError, authError.statusCode == 401 {
+            if let detectedAt = authError.detectedAt,
+               let authModifiedAt,
+               authModifiedAt.timeIntervalSince1970 > detectedAt {
+                return false
+            }
+            return true
+        }
+        return plan == "401" || lastUsage?.planType == "401"
     }
 }
 
@@ -343,9 +368,27 @@ private struct CodexLastUsage: Decodable {
 
 private struct CodexAuthError: Decodable {
     var statusCode: Int?
+    var detectedAt: TimeInterval?
 
     enum CodingKeys: String, CodingKey {
         case statusCode = "status_code"
+        case detectedAt = "detected_at"
+    }
+}
+
+private extension String {
+    var needsCodexAccountFilenameEncoding: Bool {
+        guard !isEmpty, self != ".", self != ".." else { return true }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+        return unicodeScalars.contains { !allowed.contains($0) }
+    }
+
+    var codexAccountFileKey: String {
+        Data(utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 }
 

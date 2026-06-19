@@ -85,6 +85,42 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-reset" }?.loginWarning, .unreadableReset)
     }
 
+    func testCodexReadClearsStale401AfterNewerAuthSnapshot() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "accounts": [
+            {
+              "account_key": "user-a::org",
+              "email": "person@example.com",
+              "plan": "team",
+              "agentbar_auth_error": {"status_code": 401, "detected_at": 1000},
+              "last_usage": {
+                "plan_type": "team",
+                "primary": {"used_percent": 8, "window_minutes": 300, "resets_at": 1781400000}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        let authFileKey = Data("user-a::org".utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        let authURL = accountDir.appending(path: "\(authFileKey).auth.json")
+        try "{}".data(using: .utf8)!.write(to: authURL)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: authURL.path)
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+
+        XCTAssertNil(snapshot.accounts.first?.loginWarning)
+    }
+
     func testCodexSessionJsonlAggregatesTokenUsageAndRateLimits() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1,"total_tokens":13},"total_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1,"total_tokens":13}},"rate_limits":{"primary":{"used_percent":5,"window_minutes":300,"resets_at":1781406270},"secondary":{"used_percent":3,"window_minutes":10080,"resets_at":1781894023},"plan_type":"team"}}}
@@ -258,6 +294,49 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(successSyncer.refreshUsage(), .success)
         account = try registryAccount(from: registryURL)
         XCTAssertNil(account["agentbar_auth_error"])
+    }
+
+    func testCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registryURL = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"person@example.com","agentbar_auth_error":{"status_code":401,"detected_at":1000}}]}
+        """.data(using: .utf8)!.write(to: registryURL)
+        let staleSnapshotURL = accountDir.appending(path: "acct-a.auth.json")
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"old-token","account_id":"chatgpt-account-id"}}
+        """.data(using: .utf8)!.write(to: staleSnapshotURL)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000)], ofItemAtPath: staleSnapshotURL.path)
+        let activeAuthURL = temp.appending(path: ".codex/auth.json")
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"new-token","account_id":"chatgpt-account-id"}}
+        """.data(using: .utf8)!.write(to: activeAuthURL)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: activeAuthURL.path)
+
+        let syncer = CodexUsageAPISyncer(
+            homeDirectory: temp,
+            usageClient: { request, _ in
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer new-token")
+                return CodexUsageAPIResponse(
+                    statusCode: 200,
+                    data: #"{"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}}}"#.data(using: .utf8)!
+                )
+            }
+        )
+
+        XCTAssertEqual(syncer.refreshUsage(), .success)
+        XCTAssertTrue((try String(contentsOf: staleSnapshotURL)).contains("new-token"))
+        XCTAssertNil(try registryAccount(from: registryURL)["agentbar_auth_error"])
+    }
+
+    func testCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot() {
+        let command = AccountLoginLauncher.codexRecoveryLoginCommand(accountID: "user-a::org")
+
+        XCTAssertTrue(command.hasPrefix("codex login &&"))
+        XCTAssertTrue(command.contains(#"cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/dXNlci1hOjpvcmc.auth.json""#))
     }
 
     @MainActor

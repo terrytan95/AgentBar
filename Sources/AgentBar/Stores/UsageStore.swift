@@ -365,6 +365,14 @@ final class UsageStore: ObservableObject {
         AccountLoginLauncher.openLogin(for: service)
     }
 
+    func openLogin(for account: UsageAccount) {
+        if account.service == .codex {
+            AccountLoginLauncher.openCodexRecoveryLogin(accountID: account.id, accountLabel: account.displayName)
+        } else {
+            AccountLoginLauncher.openLogin(for: account.service)
+        }
+    }
+
     func applyTestData(
         snapshots: [UsageService: UsageSnapshot] = [:],
         accounts: [UsageAccount] = [],

@@ -166,6 +166,9 @@ extension Array where Element == UsageAccount {
             }
             switch mode {
             case .quotaPressure:
+                let lhsResetCredits = lhs.resetCredits?.visibleCount ?? 0
+                let rhsResetCredits = rhs.resetCredits?.visibleCount ?? 0
+                if lhsResetCredits != rhsResetCredits { return lhsResetCredits > rhsResetCredits }
                 let lhsFive = lhs.fiveHourWindow?.remainingPercent ?? Double.greatestFiniteMagnitude
                 let rhsFive = rhs.fiveHourWindow?.remainingPercent ?? Double.greatestFiniteMagnitude
                 if lhsFive != rhsFive { return lhsFive < rhsFive }

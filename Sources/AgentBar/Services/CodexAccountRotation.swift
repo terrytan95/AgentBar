@@ -18,6 +18,21 @@ struct CodexAccountRotationPolicy {
         }
         guard !candidates.isEmpty else { return nil }
 
+        if let resetCreditAccount = candidates
+            .filter({ ($0.resetCredits?.visibleCount ?? 0) > 0 })
+            .sorted(by: { lhs, rhs in
+                let lhsCredits = lhs.resetCredits?.visibleCount ?? 0
+                let rhsCredits = rhs.resetCredits?.visibleCount ?? 0
+                if lhsCredits != rhsCredits { return lhsCredits > rhsCredits }
+                let lhsRemaining = lhs.fiveHourWindow?.remainingPercent ?? -.infinity
+                let rhsRemaining = rhs.fiveHourWindow?.remainingPercent ?? -.infinity
+                if lhsRemaining != rhsRemaining { return lhsRemaining > rhsRemaining }
+                return lhs.stableRotationSortKey < rhs.stableRotationSortKey
+            })
+            .first {
+            return resetCreditAccount
+        }
+
         if let unused = candidates
             .filter({ $0.isUnusedSinceCurrentFiveHourReset(now: now) })
             .sorted(by: { lhs, rhs in

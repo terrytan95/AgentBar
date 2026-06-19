@@ -7,12 +7,9 @@ struct StatisticsView: View {
     @ObservedObject private var updates: AppUpdateStore
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
-    @State private var currentLimitsTopInContent: CGFloat = 0
 
     private static let dashboardContentTopPadding: CGFloat = 12
     private static let dashboardContentBottomPadding: CGFloat = 26
-    private static let currentLimitsMinHeight: CGFloat = 240
-    private static let dashboardContentCoordinateSpace = "dashboardContent"
 
     init(
         store: UsageStore,
@@ -143,26 +140,23 @@ struct StatisticsView: View {
     }
 
     private var usageContent: some View {
-        GeometryReader { proxy in
-            ScrollView(.vertical, showsIndicators: false) {
-                Group {
-                    switch viewMode {
-                    case .overview:
-                        dashboardContent(viewportHeight: proxy.size.height)
-                            .coordinateSpace(name: Self.dashboardContentCoordinateSpace)
-                    case .audit:
-                        AuditView(
-                            store: store,
-                            points: filteredPoints,
-                            dataSourceHealth: dataSourceHealth,
-                            theme: settings.themeColor
-                        )
-                    }
+        ScrollView(.vertical, showsIndicators: false) {
+            Group {
+                switch viewMode {
+                case .overview:
+                    dashboardContent
+                case .audit:
+                    AuditView(
+                        store: store,
+                        points: filteredPoints,
+                        dataSourceHealth: dataSourceHealth,
+                        theme: settings.themeColor
+                    )
                 }
-                .padding(.top, Self.dashboardContentTopPadding)
-                .padding(.horizontal, 22)
-                .padding(.bottom, Self.dashboardContentBottomPadding)
             }
+            .padding(.top, Self.dashboardContentTopPadding)
+            .padding(.horizontal, 22)
+            .padding(.bottom, Self.dashboardContentBottomPadding)
         }
     }
 
@@ -195,23 +189,7 @@ struct StatisticsView: View {
     }
 
     @ViewBuilder
-    private func dashboardContent(viewportHeight: CGFloat) -> some View {
-        dashboardContentStack(currentLimitsHeight: currentLimitsHeight(viewportHeight: viewportHeight))
-            .onPreferenceChange(CurrentLimitsTopPreferenceKey.self) { top in
-                guard abs(currentLimitsTopInContent - top) > 0.5 else { return }
-                currentLimitsTopInContent = max(0, top)
-            }
-    }
-
-    private func currentLimitsHeight(viewportHeight: CGFloat) -> CGFloat {
-        let availableHeight = viewportHeight
-            - Self.dashboardContentTopPadding
-            - currentLimitsTopInContent
-            - Self.dashboardContentBottomPadding
-        return max(Self.currentLimitsMinHeight, availableHeight.rounded(.down))
-    }
-
-    private func dashboardContentStack(currentLimitsHeight: CGFloat) -> some View {
+    private var dashboardContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             dashboardOverviewHeader
 
@@ -276,21 +254,10 @@ struct StatisticsView: View {
                 }
                 .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
 
-                FillToBottomPanel(
-                    title: L.text("current_limits", store.language),
-                    height: currentLimitsHeight
-                ) {
+                Panel(title: L.text("current_limits", store.language)) {
                     currentLimitsRows
                 }
                 .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: CurrentLimitsTopPreferenceKey.self,
-                            value: proxy.frame(in: .named(Self.dashboardContentCoordinateSpace)).minY
-                        )
-                    }
-                }
             }
             .frame(maxWidth: .infinity, alignment: .top)
         }
@@ -602,13 +569,16 @@ struct StatisticsView: View {
             EmptyPanelMessage(L.text("no_quota_windows", store.language))
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                CurrentLimitSummaryStrip(summary: currentLimitSummary, language: store.language, theme: settings.themeColor)
+                CurrentLimitSummaryStrip(
+                    summary: currentLimitSummary,
+                    resetCreditsCount: totalResetCreditsCount,
+                    language: store.language,
+                    theme: settings.themeColor
+                )
 
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(accounts) { account in
-                            AccountLimitGroupView(account: account, language: store.language, theme: settings.themeColor)
-                        }
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(accounts) { account in
+                        AccountLimitGroupView(account: account, language: store.language, theme: settings.themeColor)
                     }
                 }
             }
@@ -617,6 +587,10 @@ struct StatisticsView: View {
 
     private var currentLimitSummary: CurrentLimitSummary {
         UsageInsights.currentLimitSummary(accounts: currentLimitAccounts)
+    }
+
+    private var totalResetCreditsCount: Int {
+        store.accounts.reduce(0) { $0 + ($1.resetCredits?.visibleCount ?? 0) }
     }
 
     private var quotaPressure: QuotaPressureInsight {
@@ -679,7 +653,9 @@ struct StatisticsView: View {
 
     private var currentLimitAccounts: [UsageAccount] {
         store.accounts.filter { account in
-            account.fiveHourWindow != nil || account.weeklyWindow != nil
+            account.fiveHourWindow != nil ||
+                account.weeklyWindow != nil ||
+                account.resetCredits?.hasAvailableCredits == true
         }
         .sorted(using: settings.accountSortMode)
     }
@@ -815,33 +791,6 @@ private struct Panel<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .dashboardPanel()
-    }
-}
-
-private struct FillToBottomPanel<Content: View>: View {
-    var title: String
-    var height: CGFloat
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold))
-            content()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .clipped()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading)
-        .dashboardPanel()
-    }
-}
-
-private struct CurrentLimitsTopPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 
@@ -1252,6 +1201,7 @@ private struct LoadingAccountPanel: View {
 
 private struct CurrentLimitSummaryStrip: View {
     var summary: CurrentLimitSummary
+    var resetCreditsCount: Int
     var language: AppLanguage
     var theme: AppThemeColor
 
@@ -1273,6 +1223,11 @@ private struct CurrentLimitSummaryStrip: View {
                 color: theme.quotaColor(remaining: summary.lowestWeeklyRemaining)
             )
             SummaryChip(
+                title: localized("resets"),
+                value: "\(resetCreditsCount)",
+                color: theme.primary
+            )
+            SummaryChip(
                 title: localized("accounts"),
                 value: "\(summary.accountCount)",
                 color: theme.tertiary
@@ -1285,10 +1240,12 @@ private struct CurrentLimitSummaryStrip: View {
         case ("most_constrained", .chinese): "最紧张"
         case ("lowest_5h", .chinese): "最低 5 小时"
         case ("lowest_weekly", .chinese): "最低本周"
+        case ("resets", .chinese): "重置次数"
         case ("accounts", .chinese): "账号"
         case ("most_constrained", _): "Most constrained"
         case ("lowest_5h", _): "Lowest 5H"
         case ("lowest_weekly", _): "Lowest weekly"
+        case ("resets", _): "Resets"
         case ("accounts", _): "Accounts"
         default: key
         }
@@ -1335,6 +1292,12 @@ private struct QuotaPressurePanel: View {
                     Text(recommendedAccount.displayName)
                         .font(.system(size: 12, weight: .bold))
                         .lineLimit(1)
+                    if let resetCredits = recommendedAccount.resetCredits, resetCredits.hasAvailableCredits {
+                        Text(resetCredits.summaryLine(language: language))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
         }
@@ -1783,6 +1746,21 @@ private struct AccountLimitGroupView: View {
             HStack(spacing: 12) {
                 UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language, theme: theme)
                 UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
+            }
+
+            if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(resetCredits.summaryLine(language: language), systemImage: "arrow.counterclockwise.circle")
+                        .labelStyle(.titleAndIcon)
+                    ForEach(Array(resetCredits.expirationLines(language: language).enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .padding(.leading, 17)
+                    }
+                }
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             }
         }
         .padding(9)

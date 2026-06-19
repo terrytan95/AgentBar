@@ -86,12 +86,26 @@ struct PopoverActionRecommendation: Equatable {
             let activeName = active?.displayName ?? "Current account"
             let remaining = DisplayFormatters.percentString(active?.mostConstrainedRemainingPercent)
             let recommendedRemaining = DisplayFormatters.percentString(recommended.mostConstrainedRemainingPercent)
+            let resetDetail = resetCreditDetail(for: recommended, language: language)
             return "\(activeName) is at \(remaining). \(recommended.displayName) has \(recommendedRemaining) remaining."
+                + resetDetail
         case .chinese:
             let activeName = active?.displayName ?? "当前账号"
             let remaining = DisplayFormatters.percentString(active?.mostConstrainedRemainingPercent)
             let recommendedRemaining = DisplayFormatters.percentString(recommended.mostConstrainedRemainingPercent)
+            let resetDetail = resetCreditDetail(for: recommended, language: language)
             return "\(activeName) 剩余 \(remaining)。\(recommended.displayName) 还有 \(recommendedRemaining)。"
+                + resetDetail
+        }
+    }
+
+    private static func resetCreditDetail(for account: UsageAccount, language: AppLanguage) -> String {
+        guard let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits else { return "" }
+        switch language {
+        case .english:
+            return " \(resetCredits.summaryLine(language: language))."
+        case .chinese:
+            return " \(resetCredits.summaryLine(language: language))。"
         }
     }
 

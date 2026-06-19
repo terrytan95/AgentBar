@@ -19,6 +19,13 @@ enum AccountActionError: LocalizedError {
     }
 }
 
+struct CodexAccountSwitchRecovery: @unchecked Sendable {
+    var accountID: String
+    var accountLabel: String
+    var message: String
+    var startLogin: @MainActor @Sendable () -> Void
+}
+
 struct CodexAccountSwitcher {
     var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     var fileManager: FileManager = .default
@@ -101,26 +108,42 @@ private extension String {
 }
 
 enum AccountLoginLauncher {
-    static func promptCodexLoginAgain(message: String) {
+    static func promptCodexLoginAgain(recovery: CodexAccountSwitchRecovery) {
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "Codex account switch failed"
-            alert.informativeText = message
+            alert.informativeText = "\(recovery.message)\n\nAccount: \(recovery.accountLabel)\n\nAfter login, AgentBar will retry this account on the next refresh."
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "Login Codex")
+            alert.addButton(withTitle: "Login & Retry")
             alert.addButton(withTitle: "Cancel")
             if alert.runModal() == .alertFirstButtonReturn {
-                openLogin(for: .codex)
+                recovery.startLogin()
             }
         }
     }
 
     static func openLogin(for service: UsageService) {
         let command = service == .codex ? "codex login" : "claude login"
+        openTerminal(command: command)
+    }
+
+    static func openCodexRecoveryLogin(accountID: String, accountLabel: String) {
+        _ = accountID
+        let command = """
+        printf '\\033]0;AgentBar Codex login\\007'
+        echo 'AgentBar Codex account recovery'
+        printf 'Account: %s\\n' \(shellQuoted(accountLabel))
+        echo 'Finish the Codex login. AgentBar will retry this account on the next refresh.'
+        codex login
+        """
+        openTerminal(command: command)
+    }
+
+    private static func openTerminal(command: String) {
         let script = """
         tell application "Terminal"
           activate
-          do script "\(command)"
+          do script \(appleScriptString(command))
         end tell
         """
         runAppleScript(script)
@@ -155,5 +178,13 @@ enum AccountLoginLauncher {
             try? process.run()
             process.waitUntilExit()
         }
+    }
+
+    private static func appleScriptString(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
+    }
+
+    private static func shellQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 }

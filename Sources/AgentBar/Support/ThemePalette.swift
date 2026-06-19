@@ -52,10 +52,10 @@ extension AppThemeColor {
 extension AccountSortMode {
     func title(_ language: AppLanguage) -> String {
         switch (self, language) {
-        case (.quotaPressure, .english): "5H, then weekly"
+        case (.quotaPressure, .english): "Resets, then 5H"
         case (.activeFirst, .english): "Current first"
         case (.alphabetical, .english): "Name"
-        case (.quotaPressure, .chinese): "先 5 小时，再本周"
+        case (.quotaPressure, .chinese): "先重置，再 5 小时"
         case (.activeFirst, .chinese): "当前账号优先"
         case (.alphabetical, .chinese): "按名称"
         }

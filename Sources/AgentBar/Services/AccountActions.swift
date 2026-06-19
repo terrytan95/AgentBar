@@ -128,14 +128,14 @@ enum AccountLoginLauncher {
     }
 
     static func openCodexRecoveryLogin(accountID: String, accountLabel: String) {
-        _ = accountID
+        let command = codexRecoveryLoginCommand(accountID: accountID)
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "AgentBar Codex account recovery"
             alert.informativeText = """
             Account: \(accountLabel)
 
-            Finish the Codex login. AgentBar will retry this account on the next refresh.
+            Finish the Codex login. AgentBar will save it for this account and retry on the next refresh.
 
             Terminal will run: codex login
 
@@ -146,9 +146,14 @@ enum AccountLoginLauncher {
             alert.addButton(withTitle: "Open Login")
             alert.addButton(withTitle: "Cancel")
             if alert.runModal() == .alertFirstButtonReturn {
-                openTerminal(command: "codex login")
+                openTerminal(command: command)
             }
         }
+    }
+
+    static func codexRecoveryLoginCommand(accountID: String) -> String {
+        let fileKey = accountID.needsCodexAccountFilenameEncoding ? accountID.codexAccountFileKey : accountID
+        return #"codex login && mkdir -p "$HOME/.codex/accounts" && cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/\#(fileKey).auth.json""#
     }
 
     private static func openTerminal(command: String) {

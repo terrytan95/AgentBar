@@ -59,6 +59,7 @@ struct CodexUsageAPISyncer {
             return .unavailable("Codex account registry was not found or could not be parsed.")
         }
 
+        let activeAccountKey = registry["active_account_key"] as? String
         var attempted = 0
         var updated = false
         var lastFailure: CodexUsageSyncResult?
@@ -73,7 +74,8 @@ struct CodexUsageAPISyncer {
             else {
                 continue
             }
-            let authURL = accountAuthURL(for: accountKey)
+            let accountSnapshotURL = accountAuthURL(for: accountKey)
+            let authURL = preferredAuthURL(for: accountKey, activeAccountKey: activeAccountKey, accountSnapshotURL: accountSnapshotURL)
             guard let authData = try? Data(contentsOf: authURL),
                   let authInfo = Self.parseAuthInfo(data: authData)
             else {
@@ -116,6 +118,14 @@ struct CodexUsageAPISyncer {
                 continue
             }
 
+            if authURL != accountSnapshotURL {
+                do {
+                    try authData.write(to: accountSnapshotURL, options: [.atomic])
+                } catch {
+                    lastFailure = .failed(error.localizedDescription)
+                    continue
+                }
+            }
             if accounts[index]["agentbar_auth_error"] != nil {
                 accounts[index].removeValue(forKey: "agentbar_auth_error")
                 updated = true
@@ -146,6 +156,19 @@ struct CodexUsageAPISyncer {
     private func accountAuthURL(for accountKey: String) -> URL {
         let fileKey = accountKey.needsCodexAccountFilenameEncoding ? accountKey.codexAccountFileKey : accountKey
         return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
+    }
+
+    private func preferredAuthURL(for accountKey: String, activeAccountKey: String?, accountSnapshotURL: URL) -> URL {
+        guard accountKey == activeAccountKey else { return accountSnapshotURL }
+        let activeAuthURL = homeDirectory.appending(path: ".codex/auth.json")
+        guard let activeModifiedAt = modificationDate(activeAuthURL) else { return accountSnapshotURL }
+        let snapshotModifiedAt = modificationDate(accountSnapshotURL) ?? .distantPast
+        return activeModifiedAt > snapshotModifiedAt ? activeAuthURL : accountSnapshotURL
+    }
+
+    private func modificationDate(_ url: URL) -> Date? {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path) else { return nil }
+        return attributes[.modificationDate] as? Date
     }
 
     private func writeRegistry(_ registry: [String: Any], to registryURL: URL) throws {

@@ -129,14 +129,26 @@ enum AccountLoginLauncher {
 
     static func openCodexRecoveryLogin(accountID: String, accountLabel: String) {
         _ = accountID
-        let command = """
-        printf '\\033]0;AgentBar Codex login\\007'
-        echo 'AgentBar Codex account recovery'
-        printf 'Account: %s\\n' \(shellQuoted(accountLabel))
-        echo 'Finish the Codex login. AgentBar will retry this account on the next refresh.'
-        codex login
-        """
-        openTerminal(command: command)
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "AgentBar Codex account recovery"
+            alert.informativeText = """
+            Account: \(accountLabel)
+
+            Finish the Codex login. AgentBar will retry this account on the next refresh.
+
+            Terminal will run: codex login
+
+            If your browser does not open, use the authentication URL printed in Terminal.
+            On a remote or headless machine, run codex login --device-auth instead.
+            """
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Open Login")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn {
+                openTerminal(command: "codex login")
+            }
+        }
     }
 
     private static func openTerminal(command: String) {
@@ -184,7 +196,4 @@ enum AccountLoginLauncher {
         "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
     }
 
-    private static func shellQuoted(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
-    }
 }

@@ -486,6 +486,18 @@ struct AccountRowView: View {
                 }
             }
 
+            if let warning = account.loginWarningLine(language: language) {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+            }
+
             HStack(spacing: 10) {
                 UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language, theme: theme)
                 UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
@@ -517,7 +529,12 @@ struct AccountRowView: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(account.needsLogin ? Color.red.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(account.needsLogin ? Color.red.opacity(0.70) : Color.clear, lineWidth: 1.5)
+        }
     }
 
     private var secondaryIdentity: String {

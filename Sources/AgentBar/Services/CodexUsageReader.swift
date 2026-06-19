@@ -96,6 +96,10 @@ struct CodexUsageReader {
                 UsageWindow(kind: .weekly, usedPercent: $0.usedPercent, windowMinutes: $0.windowMinutes, resetsAt: epochDate($0.resetsAt))
             }
             let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
+            let loginWarning: UsageAccountLoginWarning? =
+                raw.hasForcedLogoutWarning ? .forcedLogout :
+                raw.lastUsage?.hasUnreadableResetWarning == true ? .unreadableReset :
+                nil
 
             return UsageAccount(
                 id: raw.accountKey,
@@ -112,7 +116,8 @@ struct CodexUsageReader {
                 tokens: .zero,
                 estimatedCostUSD: nil,
                 lastUpdated: epochDate(raw.lastUsageAt) ?? now,
-                isActive: raw.accountKey == registry.activeAccountKey
+                isActive: raw.accountKey == registry.activeAccountKey,
+                loginWarning: loginWarning
             )
         }
 
@@ -291,6 +296,7 @@ private struct CodexRegistryAccount: Decodable {
     var plan: String?
     var lastUsage: CodexLastUsage?
     var lastUsageAt: Double?
+    var authError: CodexAuthError?
 
     enum CodingKeys: String, CodingKey {
         case accountKey = "account_key"
@@ -300,6 +306,11 @@ private struct CodexRegistryAccount: Decodable {
         case plan
         case lastUsage = "last_usage"
         case lastUsageAt = "last_usage_at"
+        case authError = "agentbar_auth_error"
+    }
+
+    var hasForcedLogoutWarning: Bool {
+        authError?.statusCode == 401 || plan == "401" || lastUsage?.planType == "401"
     }
 }
 
@@ -308,12 +319,33 @@ private struct CodexLastUsage: Decodable {
     var primary: CodexRateWindow?
     var secondary: CodexRateWindow?
     var resetCredits: CodexResetCredits?
+    var hasUnreadableResetWarning: Bool
 
     enum CodingKeys: String, CodingKey {
         case planType = "plan_type"
         case primary
         case secondary
         case resetCredits = "reset_credits"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        planType = try container.decodeIfPresent(String.self, forKey: .planType)
+        primary = try? container.decodeIfPresent(CodexRateWindow.self, forKey: .primary)
+        secondary = try? container.decodeIfPresent(CodexRateWindow.self, forKey: .secondary)
+        resetCredits = try container.decodeIfPresent(CodexResetCredits.self, forKey: .resetCredits)
+
+        hasUnreadableResetWarning =
+            (container.contains(.primary) && (primary == nil || primary?.resetsAt == nil)) ||
+            (container.contains(.secondary) && (secondary == nil || secondary?.resetsAt == nil))
+    }
+}
+
+private struct CodexAuthError: Decodable {
+    var statusCode: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case statusCode = "status_code"
     }
 }
 
@@ -358,6 +390,17 @@ private struct CodexRateWindow: Decodable {
         case usedPercent = "used_percent"
         case windowMinutes = "window_minutes"
         case resetsAt = "resets_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let usedPercent = try container.decode(Double.self, forKey: .usedPercent)
+        guard 0...100 ~= usedPercent else {
+            throw DecodingError.dataCorruptedError(forKey: .usedPercent, in: container, debugDescription: "Quota percent must be between 0 and 100.")
+        }
+        self.usedPercent = usedPercent
+        windowMinutes = try container.decode(Int.self, forKey: .windowMinutes)
+        resetsAt = try container.decodeIfPresent(Double.self, forKey: .resetsAt)
     }
 
     var resetDate: Date? {

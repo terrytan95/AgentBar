@@ -136,6 +136,9 @@ struct CodexUsageReader {
         var weekly: UsageWindow?
         var resetCredits: UsageResetCredits?
         var latestRateLimitAt: Date?
+        var currentCumulativeResetAt: Date?
+        var previousCumulativeUsage: TokenTotals?
+        var previousCumulativeResetAt: Date?
         let decoder = JSONDecoder()
         let dateParser = CodexTimestampParser()
 
@@ -146,19 +149,29 @@ struct CodexUsageReader {
             guard let payload = event.payload else { continue }
             let parsedEventDate = event.parsedDate(using: dateParser)
             let eventDate = parsedEventDate ?? .distantPast
-            if let cumulativeUsage = payload.info?.totalTokenUsage ?? payload.info?.lastTokenUsage {
-                latestTotal = cumulativeUsage.toTotals()
+            if let resetAt = payload.rateLimits?.primary?.resetDate ?? payload.rateLimits?.secondary?.resetDate {
+                currentCumulativeResetAt = resetAt
+            }
+            if let info = payload.info,
+               let pointUsage = Self.pointUsage(
+                from: info,
+                previousCumulativeUsage: previousCumulativeResetAt == currentCumulativeResetAt ? previousCumulativeUsage : nil
+               ) {
+                let cumulativeTotals = info.totalTokenUsage?.toTotals()
+                latestTotal = cumulativeTotals ?? pointUsage
+                if let cumulativeTotals {
+                    previousCumulativeUsage = cumulativeTotals
+                    previousCumulativeResetAt = currentCumulativeResetAt
+                }
                 eventCount += 1
-                let model = payload.info?.model ?? "Codex local"
-                let pointUsage = payload.info?.lastTokenUsage ?? cumulativeUsage
-                let tokens = pointUsage.toTotals()
+                let model = info.model ?? "Codex local"
                 points.append(
                     UsagePoint(
                         service: .codex,
                         model: model,
                         date: eventDate,
-                        tokens: tokens,
-                        estimatedCostUSD: Pricing.cost(model: model, tokens: tokens)
+                        tokens: pointUsage,
+                        estimatedCostUSD: Pricing.cost(model: model, tokens: pointUsage)
                     )
                 )
             }
@@ -180,6 +193,28 @@ struct CodexUsageReader {
         }
 
         return CodexSessionMetrics(eventCount: eventCount, tokenTotals: latestTotal, points: points, latestFiveHour: fiveHour, latestWeekly: weekly, latestResetCredits: resetCredits, latestRateLimitAt: latestRateLimitAt)
+    }
+
+    private static func pointUsage(
+        from info: CodexInfo,
+        previousCumulativeUsage: TokenTotals?
+    ) -> TokenTotals? {
+        if let lastTokenUsage = info.lastTokenUsage {
+            return lastTokenUsage.toTotals()
+        }
+        guard let cumulativeUsage = info.totalTokenUsage?.toTotals() else { return nil }
+        return cumulativeDelta(from: cumulativeUsage, previous: previousCumulativeUsage)
+    }
+
+    private static func cumulativeDelta(from current: TokenTotals, previous: TokenTotals?) -> TokenTotals {
+        guard let previous, current.total >= previous.total else { return current }
+        return TokenTotals(
+            input: max(0, current.input - previous.input),
+            cachedInput: max(0, current.cachedInput - previous.cachedInput),
+            output: max(0, current.output - previous.output),
+            reasoningOutput: max(0, current.reasoningOutput - previous.reasoningOutput),
+            total: current.total - previous.total
+        )
     }
 
     private func readSessionMetrics(root: URL) -> CodexSessionMetrics {
@@ -323,6 +358,10 @@ private struct CodexRateWindow: Decodable {
         case usedPercent = "used_percent"
         case windowMinutes = "window_minutes"
         case resetsAt = "resets_at"
+    }
+
+    var resetDate: Date? {
+        epochDate(resetsAt)
     }
 }
 

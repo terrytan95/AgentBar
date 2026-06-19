@@ -62,6 +62,19 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(selected.id, "largest-remaining")
     }
 
+    func testSelectorPrefersResetCreditAccountBeforeLargestRemainingFallback() throws {
+        let accounts = [
+            account(id: "active", used: 95, resetsAt: now.addingTimeInterval(600), lastUpdated: now, isActive: true),
+            account(id: "reset-credit", used: 40, resetsAt: now.addingTimeInterval(1_800), lastUpdated: now, resetCredits: 1),
+            account(id: "largest-remaining", used: 5, resetsAt: now.addingTimeInterval(3_600), lastUpdated: now)
+        ]
+
+        let selected = try XCTUnwrap(CodexAccountRotationPolicy(thresholdRemainingPercent: 10)
+            .selectedAccount(from: accounts, now: now))
+
+        XCTAssertEqual(selected.id, "reset-credit")
+    }
+
     func testSelectorUsesUnknownResetAccountOnlyAsFallback() throws {
         let unknownReset = account(id: "unknown-reset", used: 10, resetsAt: nil, lastUpdated: nil)
         let unusedKnownReset = account(
@@ -294,40 +307,78 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedManualSwitchPromptsCodexReloginWithPhoneAuthHint() throws {
+    func testFailedManualSwitchPromptsCodexReloginWithPhoneAuthHintAndRetriesAfterRecovery() throws {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let promptExpectation = expectation(description: "login prompt shown")
+        let retryExpectation = expectation(description: "failed account retried after recovery")
         let recorder = AccountRotationRecorder()
+        let account = account(id: "locked", used: 50, resetsAt: now.addingTimeInterval(300), lastUpdated: now)
+        let codexSnapshot = UsageSnapshot(
+            service: .codex,
+            status: .live,
+            accounts: [account],
+            points: [],
+            securityNotes: [],
+            refreshedAt: now,
+            pricingFingerprint: Pricing.fingerprint
+        )
         let store = UsageStore(
             settings: SettingsStore(defaults: defaults),
             codexUsageSynchronizer: { .success },
-            codexAccountSwitcher: { _ in throw AccountActionError.missingAccountSnapshot },
-            manualCodexAppRestarter: {
-                XCTFail("Failed switch should not restart Codex.")
+            codexUsageReader: { codexSnapshot },
+            claudeUsageReader: {
+                UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "test")
             },
-            codexAccountSwitchFailurePrompter: { message in
-                recorder.recordPrompt(message)
+            codexAccountSwitcher: { accountID in
+                recorder.recordSwitch(accountID)
+                if recorder.consumeFailNextSwitch() {
+                    throw AccountActionError.missingAccountSnapshot
+                }
+            },
+            manualCodexAppRestarter: {
+                recorder.recordRestart(.restarted)
+                retryExpectation.fulfill()
+            },
+            codexAccountSwitchFailurePrompter: { recovery in
+                recorder.recordPrompt(recovery)
                 promptExpectation.fulfill()
+            },
+            codexAccountRecoveryLoginLauncher: { accountID, accountLabel in
+                recorder.recordRecoveryLogin(accountID: accountID, accountLabel: accountLabel)
             }
         )
-        let account = account(id: "locked", used: 50, resetsAt: now.addingTimeInterval(300), lastUpdated: now)
         store.applyTestData(accounts: [account])
 
         store.switchActiveAccount(account)
         wait(for: [promptExpectation], timeout: 2)
 
-        let promptMessage = try XCTUnwrap(recorder.promptMessage)
+        let recovery = try XCTUnwrap(recorder.promptRecovery)
+        XCTAssertEqual(recovery.accountID, "locked")
+        XCTAssertEqual(recovery.accountLabel, "locked@example.com")
+        let promptMessage = recovery.message
         XCTAssertTrue(promptMessage.contains("login to this Codex account again"))
         XCTAssertTrue(promptMessage.contains("phone number authentication might be needed"))
+
+        recovery.startLogin()
+        XCTAssertEqual(recorder.recoveryLoginAccountID, "locked")
+        XCTAssertEqual(recorder.recoveryLoginAccountLabel, "locked@example.com")
+
+        store.refresh(force: true)
+        wait(for: [retryExpectation], timeout: 2)
+        XCTAssertEqual(recorder.switchedAccountID, "locked")
+        XCTAssertEqual(recorder.restartResult, .restarted)
     }
 
     private final class AccountRotationRecorder: @unchecked Sendable {
         private let lock = NSLock()
         private var recordedSwitchAccountID: String?
         private var recordedRestartResult: CodexAppRestartResult?
-        private var recordedPromptMessage: String?
+        private var recordedPromptRecovery: CodexAccountSwitchRecovery?
+        private var recordedRecoveryLoginAccountID: String?
+        private var recordedRecoveryLoginAccountLabel: String?
+        private var shouldFailNextSwitch = true
 
         var switchedAccountID: String? {
             lock.lock()
@@ -341,10 +392,22 @@ final class AccountRotationTests: XCTestCase {
             return recordedRestartResult
         }
 
-        var promptMessage: String? {
+        var promptRecovery: CodexAccountSwitchRecovery? {
             lock.lock()
             defer { lock.unlock() }
-            return recordedPromptMessage
+            return recordedPromptRecovery
+        }
+
+        var recoveryLoginAccountID: String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedRecoveryLoginAccountID
+        }
+
+        var recoveryLoginAccountLabel: String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedRecoveryLoginAccountLabel
         }
 
         func recordSwitch(_ accountID: String) {
@@ -353,15 +416,32 @@ final class AccountRotationTests: XCTestCase {
             lock.unlock()
         }
 
+        func consumeFailNextSwitch() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if shouldFailNextSwitch {
+                shouldFailNextSwitch = false
+                return true
+            }
+            return false
+        }
+
         func recordRestart(_ result: CodexAppRestartResult) {
             lock.lock()
             recordedRestartResult = result
             lock.unlock()
         }
 
-        func recordPrompt(_ message: String) {
+        func recordPrompt(_ recovery: CodexAccountSwitchRecovery) {
             lock.lock()
-            recordedPromptMessage = message
+            recordedPromptRecovery = recovery
+            lock.unlock()
+        }
+
+        func recordRecoveryLogin(accountID: String, accountLabel: String) {
+            lock.lock()
+            recordedRecoveryLoginAccountID = accountID
+            recordedRecoveryLoginAccountLabel = accountLabel
             lock.unlock()
         }
 
@@ -369,7 +449,10 @@ final class AccountRotationTests: XCTestCase {
             lock.lock()
             recordedSwitchAccountID = nil
             recordedRestartResult = nil
-            recordedPromptMessage = nil
+            recordedPromptRecovery = nil
+            recordedRecoveryLoginAccountID = nil
+            recordedRecoveryLoginAccountLabel = nil
+            shouldFailNextSwitch = true
             lock.unlock()
         }
     }
@@ -380,7 +463,8 @@ final class AccountRotationTests: XCTestCase {
         used: Double?,
         resetsAt: Date?,
         lastUpdated: Date?,
-        isActive: Bool = false
+        isActive: Bool = false,
+        resetCredits: Int = 0
     ) -> UsageAccount {
         UsageAccount(
             id: id,
@@ -395,6 +479,7 @@ final class AccountRotationTests: XCTestCase {
                 UsageWindow(kind: .fiveHour, usedPercent: $0, windowMinutes: 300, resetsAt: resetsAt)
             },
             weeklyWindow: nil,
+            resetCredits: resetCredits > 0 ? UsageResetCredits(availableCount: resetCredits) : nil,
             tokens: .zero,
             estimatedCostUSD: nil,
             lastUpdated: lastUpdated,

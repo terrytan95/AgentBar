@@ -134,6 +134,30 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertTrue(recommendation.detail.contains("active@example.com"))
     }
 
+    func testPopoverRecommendationPrioritizesAndExplainsResetCreditAccount() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let active = account(id: "active", name: "active@example.com", fiveHourUsed: 98, weeklyUsed: 30, now: now, active: true)
+        let resetCredit = account(id: "reset", name: "reset@example.com", fiveHourUsed: 45, weeklyUsed: 25, now: now, active: false, resetCredits: 2)
+        let moreQuota = account(id: "more", name: "more@example.com", fiveHourUsed: 8, weeklyUsed: 10, now: now, active: false)
+        let pressure = UsageInsights.quotaPressure(
+            accounts: [active, resetCredit, moreQuota],
+            points: [point(total: 4_000, minutesAgo: 15, now: now)],
+            rotationThresholdRemainingPercent: 10,
+            autoRotationEnabled: true,
+            now: now
+        )
+
+        let recommendation = PopoverActionRecommendation.make(
+            pressure: pressure,
+            dataSourceHealth: DataSourceHealthSummary(rows: [], liveCount: 1, issueCount: 0),
+            language: .english
+        )
+
+        XCTAssertEqual(pressure.recommendedAccount?.id, "reset")
+        XCTAssertEqual(recommendation.action, .switchAccount("reset"))
+        XCTAssertTrue(recommendation.detail.contains("2 resets available"))
+    }
+
     func testPopoverRecommendationAsksForRefreshWhenSourcesHaveIssuesAndNoActiveAccountExists() {
         let health = DataSourceHealthSummary(
             rows: [
@@ -175,7 +199,8 @@ final class UsageInsightsTests: XCTestCase {
         weeklyUsed: Double,
         now: Date,
         active: Bool,
-        fiveHourReset: Date? = nil
+        fiveHourReset: Date? = nil,
+        resetCredits: Int = 0
     ) -> UsageAccount {
         UsageAccount(
             id: id,
@@ -188,6 +213,7 @@ final class UsageInsightsTests: XCTestCase {
             status: .live,
             fiveHourWindow: UsageWindow(kind: .fiveHour, usedPercent: fiveHourUsed, windowMinutes: 300, resetsAt: fiveHourReset ?? now.addingTimeInterval(4 * 60 * 60)),
             weeklyWindow: UsageWindow(kind: .weekly, usedPercent: weeklyUsed, windowMinutes: 10_080, resetsAt: now.addingTimeInterval(2 * 24 * 60 * 60)),
+            resetCredits: resetCredits > 0 ? UsageResetCredits(availableCount: resetCredits) : nil,
             tokens: .zero,
             estimatedCostUSD: nil,
             lastUpdated: now,

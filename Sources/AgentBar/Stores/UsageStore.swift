@@ -21,12 +21,14 @@ final class UsageStore: ObservableObject {
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
     private let manualCodexAppRestarter: @Sendable () -> Void
-    private let codexAccountSwitchFailurePrompter: @Sendable (String) -> Void
+    private let codexAccountSwitchFailurePrompter: @Sendable (CodexAccountSwitchRecovery) -> Void
+    private let codexAccountRecoveryLoginLauncher: @Sendable (String, String) -> Void
     private var timer: Timer?
     private var refreshInFlight = false
     private var refreshQueued = false
     private var manualRefreshQueued = false
     private var manualCodexRotationOverrideAccountID: String?
+    private var pendingCodexSwitchRecovery: PendingCodexSwitchRecovery?
 
     init(
         settings: SettingsStore = SettingsStore(),
@@ -48,8 +50,11 @@ final class UsageStore: ObservableObject {
         manualCodexAppRestarter: @escaping @Sendable () -> Void = {
             AccountLoginLauncher.forceRestartCodexApp()
         },
-        codexAccountSwitchFailurePrompter: @escaping @Sendable (String) -> Void = { message in
-            AccountLoginLauncher.promptCodexLoginAgain(message: message)
+        codexAccountSwitchFailurePrompter: @escaping @Sendable (CodexAccountSwitchRecovery) -> Void = { recovery in
+            AccountLoginLauncher.promptCodexLoginAgain(recovery: recovery)
+        },
+        codexAccountRecoveryLoginLauncher: @escaping @Sendable (String, String) -> Void = { accountID, accountLabel in
+            AccountLoginLauncher.openCodexRecoveryLogin(accountID: accountID, accountLabel: accountLabel)
         }
     ) {
         self.settings = settings
@@ -60,6 +65,7 @@ final class UsageStore: ObservableObject {
         self.automaticCodexRestarter = automaticCodexRestarter
         self.manualCodexAppRestarter = manualCodexAppRestarter
         self.codexAccountSwitchFailurePrompter = codexAccountSwitchFailurePrompter
+        self.codexAccountRecoveryLoginLauncher = codexAccountRecoveryLoginLauncher
         configureTimer()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -212,6 +218,9 @@ final class UsageStore: ObservableObject {
                     self.refresh(force: true, showManualFeedback: queuedShowsManualFeedback)
                 } else {
                     self.isManualRefreshFeedbackVisible = false
+                    if self.retryPendingCodexSwitchRecovery() {
+                        return
+                    }
                     self.evaluateAutomaticCodexRotation()
                 }
             }
@@ -299,18 +308,52 @@ final class UsageStore: ObservableObject {
             }
 
             DispatchQueue.main.async { [weak self] in
-                self?.switchingAccountID = nil
+                guard let self else { return }
+                self.switchingAccountID = nil
                 if case let .failure(error) = result {
-                    if self?.manualCodexRotationOverrideAccountID == account.id {
-                        self?.manualCodexRotationOverrideAccountID = nil
+                    if self.manualCodexRotationOverrideAccountID == account.id {
+                        self.manualCodexRotationOverrideAccountID = nil
                     }
                     let message = Self.codexSwitchFailureMessage(for: error)
-                    self?.lastError = message.redactedForCredentialWords
-                    promptRelogin(message)
+                    self.lastError = message.redactedForCredentialWords
+                    promptRelogin(self.codexSwitchRecovery(for: account, restartMode: restartMode, message: message))
+                } else if self.pendingCodexSwitchRecovery?.accountID == account.id {
+                    self.pendingCodexSwitchRecovery = nil
                 }
-                self?.refresh(force: true)
+                self.refresh(force: true)
             }
         }
+    }
+
+    private func retryPendingCodexSwitchRecovery() -> Bool {
+        guard let pending = pendingCodexSwitchRecovery,
+              let account = accounts.first(where: { $0.id == pending.accountID && $0.service == .codex })
+        else {
+            return false
+        }
+        pendingCodexSwitchRecovery = nil
+        switchCodexAccount(account, restartMode: pending.restartMode)
+        return true
+    }
+
+    private func codexSwitchRecovery(
+        for account: UsageAccount,
+        restartMode: CodexSwitchRestartMode,
+        message: String
+    ) -> CodexAccountSwitchRecovery {
+        let loginLauncher = codexAccountRecoveryLoginLauncher
+        return CodexAccountSwitchRecovery(
+            accountID: account.id,
+            accountLabel: account.displayName,
+            message: message,
+            startLogin: { [weak self] in
+                self?.pendingCodexSwitchRecovery = PendingCodexSwitchRecovery(
+                    accountID: account.id,
+                    restartMode: restartMode
+                )
+                loginLauncher(account.id, account.displayName)
+            }
+        )
     }
 
     private static func codexSwitchFailureMessage(for error: Error) -> String {
@@ -338,7 +381,12 @@ final class UsageStore: ObservableObject {
         manualRefreshQueued = false
     }
 
-    private enum CodexSwitchRestartMode {
+    private struct PendingCodexSwitchRecovery {
+        var accountID: String
+        var restartMode: CodexSwitchRestartMode
+    }
+
+    private enum CodexSwitchRestartMode: Sendable {
         case manualForceCodexAppRestart
         case safeForceCodexAppRestart
     }

@@ -71,6 +71,37 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestWeekly?.usedPercent, 4)
     }
 
+    func testCodexSessionJsonlParsesResetCreditsFromRateLimitEvents() throws {
+        let jsonl = """
+        {"type":"event_msg","timestamp":"2026-06-13T22:06:23.246Z","payload":{"rate_limits":{"primary":{"used_percent":7,"window_minutes":300,"resets_at":1781406270}},"rate_limit_reset_credits":{"available_count":2,"resets":[{"expires_at":1782000000}]}}}
+        """.data(using: .utf8)!
+
+        let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl)
+
+        XCTAssertEqual(metrics.latestResetCredits?.availableCount, 2)
+        XCTAssertEqual(metrics.latestResetCredits?.resets.first?.expiresAt, Date(timeIntervalSince1970: 1_782_000_000))
+    }
+
+    func testCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {
+        let jsonl = """
+        {"type":"event_msg","timestamp":"2026-06-14T02:30:00.000Z","payload":{"info":{"total_token_usage":{"input_tokens":80,"cached_input_tokens":10,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100}},"rate_limits":{"primary":{"used_percent":90,"window_minutes":300,"resets_at":1781488800},"secondary":{"used_percent":40,"window_minutes":10080,"resets_at":1781900000}}}}
+        {"type":"event_msg","timestamp":"2026-06-14T02:45:00.000Z","payload":{"info":{"total_token_usage":{"input_tokens":130,"cached_input_tokens":15,"output_tokens":30,"reasoning_output_tokens":0,"total_tokens":160}},"rate_limits":{"primary":{"used_percent":96,"window_minutes":300,"resets_at":1781488800},"secondary":{"used_percent":41,"window_minutes":10080,"resets_at":1781900000}}}}
+        {"type":"event_msg","timestamp":"2026-06-14T03:10:00.000Z","payload":{"info":{"total_token_usage":{"input_tokens":20,"cached_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0,"total_tokens":25}},"rate_limits":{"primary":{"used_percent":4,"window_minutes":300,"resets_at":1781506800},"secondary":{"used_percent":41,"window_minutes":10080,"resets_at":1781900000}}}}
+        """.data(using: .utf8)!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = ISO8601DateFormatter().date(from: "2026-06-14T04:00:00Z")!
+
+        let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl)
+        let summary = UsageStatistics.summarize(points: metrics.points, range: .today, now: now, calendar: calendar)
+        let bar = try XCTUnwrap(summary.dailyBars.first)
+        let tooltip = bar.tooltipText(language: .english)
+
+        XCTAssertEqual(bar.codexTokens, 185)
+        XCTAssertTrue(tooltip.contains("Codex: 185 Tokens"))
+        XCTAssertFalse(tooltip.contains("285"))
+    }
+
     func testCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -708,6 +739,19 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.id), ["b", "c", "a"])
     }
 
+    func testAccountSortingPrioritizesResetCreditsAfterActiveAccount() {
+        let now = Date()
+        let accounts = [
+            testAccount(id: "more-quota", name: "more@example.com", fiveHourUsed: 1, weeklyUsed: 10, now: now),
+            testAccount(id: "reset-credit", name: "reset@example.com", fiveHourUsed: 45, weeklyUsed: 20, now: now, resetCredits: 1),
+            testAccount(id: "constrained", name: "constrained@example.com", fiveHourUsed: 99, weeklyUsed: 99, now: now)
+        ]
+
+        let sorted = accounts.sorted(using: .quotaPressure)
+
+        XCTAssertEqual(sorted.map(\.id), ["reset-credit", "constrained", "more-quota"])
+    }
+
     func testAccountSortingAlwaysKeepsActiveAccountOnTop() {
         let now = Date()
         var active = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 1, weeklyUsed: 1, now: now)
@@ -798,7 +842,14 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "old active auth")
     }
 
-    private func testAccount(id: String, name: String, fiveHourUsed: Double, weeklyUsed: Double, now: Date) -> UsageAccount {
+    private func testAccount(
+        id: String,
+        name: String,
+        fiveHourUsed: Double,
+        weeklyUsed: Double,
+        now: Date,
+        resetCredits: Int = 0
+    ) -> UsageAccount {
         UsageAccount(
             id: id,
             service: .codex,
@@ -810,6 +861,7 @@ final class UsageParsingTests: XCTestCase {
             status: .live,
             fiveHourWindow: UsageWindow(kind: .fiveHour, usedPercent: fiveHourUsed, windowMinutes: 300, resetsAt: now),
             weeklyWindow: UsageWindow(kind: .weekly, usedPercent: weeklyUsed, windowMinutes: 10080, resetsAt: now),
+            resetCredits: resetCredits > 0 ? UsageResetCredits(availableCount: resetCredits) : nil,
             tokens: .zero,
             estimatedCostUSD: nil,
             lastUpdated: now,

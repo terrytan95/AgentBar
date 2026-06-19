@@ -85,7 +85,12 @@ enum UsageInsights {
         let bestAlternative = accounts
             .filter { $0.service == .codex && $0.id != active?.id }
             .max { lhs, rhs in
-                (lhs.mostConstrainedRemainingPercent ?? -1) < (rhs.mostConstrainedRemainingPercent ?? -1)
+                let lhsResetCredits = lhs.resetCredits?.visibleCount ?? 0
+                let rhsResetCredits = rhs.resetCredits?.visibleCount ?? 0
+                if lhsResetCredits != rhsResetCredits {
+                    return lhsResetCredits < rhsResetCredits
+                }
+                return (lhs.mostConstrainedRemainingPercent ?? -1) < (rhs.mostConstrainedRemainingPercent ?? -1)
             }
 
         let fiveHourRemaining = active?.fiveHourWindow?.remainingPercent

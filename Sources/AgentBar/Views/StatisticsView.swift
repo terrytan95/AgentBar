@@ -578,7 +578,9 @@ struct StatisticsView: View {
 
                 LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(accounts) { account in
-                        AccountLimitGroupView(account: account, language: store.language, theme: settings.themeColor)
+                        AccountLimitGroupView(account: account, language: store.language, theme: settings.themeColor) {
+                            store.openLogin(for: account)
+                        }
                     }
                 }
             }
@@ -1710,6 +1712,7 @@ private struct AccountLimitGroupView: View {
     var account: UsageAccount
     var language: AppLanguage
     var theme: AppThemeColor
+    var onLogin: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1734,12 +1737,25 @@ private struct AccountLimitGroupView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(account.service.rawValue)
-                        .font(.system(size: 10, weight: .bold))
-                    Text(account.accountTypeValue)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                if account.needsLogin {
+                    Button {
+                        onLogin()
+                    } label: {
+                        Label(L.text("login_account", language), systemImage: "person.crop.circle.badge.exclamationmark")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(.red)
+                    .pointingHandCursor()
+                } else {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(account.service.rawValue)
+                            .font(.system(size: 10, weight: .bold))
+                        Text(account.accountTypeValue)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

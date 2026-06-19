@@ -191,7 +191,8 @@ struct PopoverRootView: View {
                         language: store.language,
                         theme: store.settings.themeColor,
                         isSwitching: store.switchingAccountID == account.id,
-                        onSwitch: { store.switchActiveAccount(account) }
+                        onSwitch: { store.switchActiveAccount(account) },
+                        onLogin: { store.openLogin(for: account) }
                     )
                 }
             }
@@ -445,6 +446,7 @@ struct AccountRowView: View {
     var theme: AppThemeColor
     var isSwitching: Bool
     var onSwitch: () -> Void
+    var onLogin: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -459,7 +461,18 @@ struct AccountRowView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                if account.isActive {
+                if account.needsLogin {
+                    Button {
+                        onLogin()
+                    } label: {
+                        Label(L.text("login_account", language), systemImage: "person.crop.circle.badge.exclamationmark")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(.red)
+                    .pointingHandCursor()
+                } else if account.isActive {
                     Text(L.text("current", language))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.white)

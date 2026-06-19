@@ -107,6 +107,11 @@ struct UsageResetCredits: Codable, Equatable, Sendable {
     }
 }
 
+enum UsageAccountLoginWarning: String, Codable, Equatable, Sendable {
+    case forcedLogout
+    case unreadableReset
+}
+
 struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var service: UsageService
@@ -123,6 +128,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var estimatedCostUSD: Decimal?
     var lastUpdated: Date?
     var isActive: Bool
+    var loginWarning: UsageAccountLoginWarning? = nil
 
     var mostConstrainedRemainingPercent: Double? {
         [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]
@@ -147,6 +153,21 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         }
         return status.label.uppercased()
     }
+
+    var needsLogin: Bool {
+        loginWarning != nil
+    }
+
+    func loginWarningLine(language: AppLanguage) -> String? {
+        switch loginWarning {
+        case .forcedLogout:
+            L.text("account_forced_logout_warning", language)
+        case .unreadableReset:
+            L.text("account_unreadable_reset_warning", language)
+        case nil:
+            nil
+        }
+    }
 }
 
 extension Array where Element == UsageAccount {
@@ -166,6 +187,7 @@ extension Array where Element == UsageAccount {
             }
             switch mode {
             case .quotaPressure:
+                if lhs.needsLogin != rhs.needsLogin { return !lhs.needsLogin }
                 let lhsResetCredits = lhs.resetCredits?.visibleCount ?? 0
                 let rhsResetCredits = rhs.resetCredits?.visibleCount ?? 0
                 if lhsResetCredits != rhsResetCredits { return lhsResetCredits > rhsResetCredits }

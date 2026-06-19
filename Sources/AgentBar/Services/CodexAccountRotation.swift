@@ -14,6 +14,7 @@ struct CodexAccountRotationPolicy {
         let candidates = accounts.filter { account in
             account.service == .codex
                 && !account.isActive
+                && !account.needsLogin
                 && account.fiveHourWindow?.remainingPercent != nil
         }
         guard !candidates.isEmpty else { return nil }

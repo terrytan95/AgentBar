@@ -52,6 +52,39 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("token"))
     }
 
+    func testCodexRegistryFlagsAccountsThatNeedLoginAgain() throws {
+        let registry = """
+        {
+          "schema_version": 3,
+          "accounts": [
+            {
+              "account_key": "acct-401",
+              "email": "locked@example.com",
+              "plan": "401",
+              "agentbar_auth_error": {"status_code": 401},
+              "last_usage": {
+                "plan_type": "401",
+                "primary": {"used_percent": 401, "window_minutes": 300, "resets_at": 1781400000}
+              }
+            },
+            {
+              "account_key": "acct-reset",
+              "email": "reset@example.com",
+              "last_usage": {
+                "primary": {"used_percent": 8, "window_minutes": 300}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CodexUsageReader.parseRegistry(data: registry, now: Date(timeIntervalSince1970: 1_781_388_300))
+
+        XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-401" }?.loginWarning, .forcedLogout)
+        XCTAssertNil(snapshot.accounts.first { $0.id == "acct-401" }?.fiveHourWindow)
+        XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-reset" }?.loginWarning, .unreadableReset)
+    }
+
     func testCodexSessionJsonlAggregatesTokenUsageAndRateLimits() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1,"total_tokens":13},"total_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1,"total_tokens":13}},"rate_limits":{"primary":{"used_percent":5,"window_minutes":300,"resets_at":1781406270},"secondary":{"used_percent":3,"window_minutes":10080,"resets_at":1781894023},"plan_type":"team"}}}
@@ -184,6 +217,47 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(usage["plan_type"] as? String, "business")
         XCTAssertEqual(account["last_usage_at"] as? Double, 1_781_388_300)
         XCTAssertFalse(String(data: data, encoding: .utf8)?.contains("secret-access-token") ?? true)
+    }
+
+    func testCodexUsageAPISyncerPersists401AndClearsItAfterSuccess() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registryURL = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"accounts":[{"account_key":"acct-a","email":"person@example.com"}]}
+        """.data(using: .utf8)!.write(to: registryURL)
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"secret-access-token","account_id":"chatgpt-account-id"}}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-a.auth.json"))
+
+        let unauthorizedResponse = CodexUsageAPIResponse(statusCode: 401, data: Data())
+        let unauthorizedSyncer = CodexUsageAPISyncer(
+            homeDirectory: temp,
+            now: { Date(timeIntervalSince1970: 1_781_388_300) },
+            usageClient: { _, _ in unauthorizedResponse }
+        )
+
+        XCTAssertEqual(unauthorizedSyncer.refreshUsage(), .failed("HTTP 401"))
+        var account = try registryAccount(from: registryURL)
+        XCTAssertEqual((account["agentbar_auth_error"] as? [String: Any])?["status_code"] as? Int, 401)
+
+        let successResponse = CodexUsageAPIResponse(
+            statusCode: 200,
+            data: """
+            {"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}}}
+            """.data(using: .utf8)!
+        )
+        let successSyncer = CodexUsageAPISyncer(
+            homeDirectory: temp,
+            now: { Date(timeIntervalSince1970: 1_781_388_400) },
+            usageClient: { _, _ in successResponse }
+        )
+
+        XCTAssertEqual(successSyncer.refreshUsage(), .success)
+        account = try registryAccount(from: registryURL)
+        XCTAssertNil(account["agentbar_auth_error"])
     }
 
     @MainActor
@@ -867,6 +941,13 @@ final class UsageParsingTests: XCTestCase {
             lastUpdated: now,
             isActive: false
         )
+    }
+
+    private func registryAccount(from url: URL) throws -> [String: Any] {
+        let data = try Data(contentsOf: url)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let accounts = try XCTUnwrap(json["accounts"] as? [[String: Any]])
+        return try XCTUnwrap(accounts.first)
     }
 
     private final class RefreshOrderRecorder: @unchecked Sendable {

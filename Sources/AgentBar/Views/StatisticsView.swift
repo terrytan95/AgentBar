@@ -1743,6 +1743,18 @@ private struct AccountLimitGroupView: View {
                 }
             }
 
+            if let warning = account.loginWarningLine(language: language) {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+
             HStack(spacing: 12) {
                 UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language, theme: theme)
                 UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
@@ -1764,7 +1776,12 @@ private struct AccountLimitGroupView: View {
             }
         }
         .padding(9)
+        .background(account.needsLogin ? Color.red.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(account.needsLogin ? Color.red.opacity(0.70) : Color.clear, lineWidth: 1.5)
+        }
     }
 
     private var accountDetailLine: String {

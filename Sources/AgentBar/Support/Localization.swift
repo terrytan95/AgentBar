@@ -101,6 +101,8 @@ enum L {
         "language_subtitle": "Interface language.",
         "current_account": "Current account",
         "current": "Current",
+        "account_forced_logout_warning": "OpenAI returned 401. Log in to this account again.",
+        "account_unreadable_reset_warning": "Reset data is unreadable. Log in to this account again.",
         "no_cost_data": "No cost data",
         "usage_windows": "Usage windows",
         "team": "Team"
@@ -212,6 +214,8 @@ enum L {
         "language_subtitle": "界面语言。",
         "current_account": "当前账号",
         "current": "当前",
+        "account_forced_logout_warning": "OpenAI 返回 401，请重新登录此账号。",
+        "account_unreadable_reset_warning": "重置数据不可读，请重新登录此账号。",
         "no_cost_data": "暂无费用数据",
         "usage_windows": "用量窗口",
         "team": "团队",

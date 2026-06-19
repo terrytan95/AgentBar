@@ -108,6 +108,22 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertNil(selected)
     }
 
+    func testSelectorIgnoresAccountsThatNeedLoginAgain() throws {
+        var locked = account(id: "locked", used: 1, resetsAt: now.addingTimeInterval(600), lastUpdated: now)
+        locked.loginWarning = .forcedLogout
+        let usable = account(id: "usable", used: 30, resetsAt: now.addingTimeInterval(900), lastUpdated: now)
+        let accounts = [
+            account(id: "active", used: 98, resetsAt: now.addingTimeInterval(600), lastUpdated: now, isActive: true),
+            locked,
+            usable
+        ]
+
+        let selected = try XCTUnwrap(CodexAccountRotationPolicy(thresholdRemainingPercent: 10)
+            .selectedAccount(from: accounts, now: now))
+
+        XCTAssertEqual(selected.id, "usable")
+    }
+
     func testSelectorReturnsNilWhenNoActiveCodexAccountExists() {
         let accounts = [
             account(id: "candidate", used: 2, resetsAt: now.addingTimeInterval(600), lastUpdated: nil)

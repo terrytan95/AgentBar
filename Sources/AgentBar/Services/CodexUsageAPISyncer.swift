@@ -101,6 +101,13 @@ struct CodexUsageAPISyncer {
             }
 
             guard 200..<300 ~= response.statusCode else {
+                if response.statusCode == 401 {
+                    accounts[index]["agentbar_auth_error"] = [
+                        "status_code": 401,
+                        "detected_at": now().timeIntervalSince1970
+                    ]
+                    updated = true
+                }
                 lastFailure = .failed("HTTP \(response.statusCode)\(Self.responseErrorCode(from: response.data))")
                 continue
             }
@@ -109,6 +116,10 @@ struct CodexUsageAPISyncer {
                 continue
             }
 
+            if accounts[index]["agentbar_auth_error"] != nil {
+                accounts[index].removeValue(forKey: "agentbar_auth_error")
+                updated = true
+            }
             if !Self.jsonValue(accounts[index]["last_usage"], equals: usage) {
                 accounts[index]["last_usage"] = usage
                 accounts[index]["last_usage_at"] = now().timeIntervalSince1970

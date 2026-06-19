@@ -84,6 +84,7 @@ enum UsageInsights {
             ?? accounts.first(where: { $0.service == .codex })
         let bestAlternative = accounts
             .filter { $0.service == .codex && $0.id != active?.id }
+            .filter { !$0.needsLogin }
             .max { lhs, rhs in
                 let lhsResetCredits = lhs.resetCredits?.visibleCount ?? 0
                 let rhsResetCredits = rhs.resetCredits?.visibleCount ?? 0

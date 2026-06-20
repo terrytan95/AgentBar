@@ -81,7 +81,7 @@ struct ResizablePopoverRootView: View {
                 }
             }
             .frame(height: 12)
-            .accessibilityLabel("Resize popover")
+            .accessibilityLabel(L.text("resize_popover", store.language))
 
             Capsule()
                 .fill(settings.themeColor.primary.opacity(0.30))
@@ -204,6 +204,7 @@ struct PopoverRootView: View {
         PopoverRecommendationPanel(
             recommendation: recommendation,
             theme: store.settings.themeColor,
+            language: store.language,
             isWorking: isRecommendationActionWorking
         ) {
             performRecommendationAction(recommendation.action)
@@ -236,7 +237,7 @@ struct PopoverRootView: View {
 
     private var dataSourceDetailText: String {
         store.uiDataSourceSnapshots
-            .map { "\($0.service.rawValue) \($0.status.label)" }
+            .map { "\($0.service.rawValue) \($0.status.label(language: store.language))" }
             .joined(separator: " · ")
     }
 
@@ -325,6 +326,7 @@ struct PopoverLoadingRow: View {
 struct PopoverRecommendationPanel: View {
     var recommendation: PopoverActionRecommendation
     var theme: AppThemeColor
+    var language: AppLanguage
     var isWorking: Bool
     var onAction: () -> Void
     @State private var isExpanded = false
@@ -380,8 +382,8 @@ struct PopoverRecommendationPanel: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .help(isExpanded ? "Hide full text" : "Show full text")
-                    .accessibilityLabel(isExpanded ? "Hide full text" : "Show full text")
+                    .help(L.text(isExpanded ? "hide_full_text" : "show_full_text", language))
+                    .accessibilityLabel(L.text(isExpanded ? "hide_full_text" : "show_full_text", language))
                     .pointingHandCursor()
                 }
             }
@@ -532,7 +534,7 @@ struct AccountRowView: View {
             }
 
             HStack(spacing: 6) {
-                Text(account.accountTypeValue)
+                Text(account.accountTypeValue(language: language))
                 Text("·")
                 Text(lastActivitySummary)
             }
@@ -556,7 +558,7 @@ struct AccountRowView: View {
 
     private var lastActivitySummary: String {
         guard let lastUpdated = account.lastUpdated else { return "\(L.text("last_activity", language)): --" }
-        return "\(L.text("last_activity", language)): \(DisplayFormatters.relativeString(for: lastUpdated))"
+        return "\(L.text("last_activity", language)): \(DisplayFormatters.relativeString(for: lastUpdated, language: language))"
     }
 }
 
@@ -635,7 +637,7 @@ struct MiniStackedBars: View {
                 }
             }
         }
-        .accessibilityLabel("Stacked usage bars")
+        .accessibilityLabel(L.text("stacked_usage_bars", .english))
     }
 }
 

@@ -14,11 +14,15 @@ enum DataSourceStatus: String, Codable, Equatable, Sendable {
     case error
 
     var label: String {
+        label(language: .english)
+    }
+
+    func label(language: AppLanguage) -> String {
         switch self {
-        case .live: "Live"
-        case .unavailable: "Unavailable"
-        case .needsAuthorization: "Needs auth"
-        case .error: "Error"
+        case .live: language == .chinese ? "正常" : "Live"
+        case .unavailable: language == .chinese ? "不可用" : "Unavailable"
+        case .needsAuthorization: language == .chinese ? "需授权" : "Needs auth"
+        case .error: language == .chinese ? "错误" : "Error"
         }
     }
 }
@@ -62,7 +66,7 @@ struct UsageWindow: Codable, Equatable, Identifiable, Sendable {
     func resetLine(language: AppLanguage) -> String {
         guard let resetsAt else { return L.text("reset_time_unknown", language) }
         let timestamp = DisplayFormatters.shortDateTimeString(for: resetsAt, language: language)
-        let relative = DisplayFormatters.relativeString(for: resetsAt)
+        let relative = DisplayFormatters.relativeString(for: resetsAt, language: language)
         return "\(L.text("reset", language)): \(timestamp) (\(relative))"
     }
 }
@@ -101,7 +105,7 @@ struct UsageResetCredits: Codable, Equatable, Sendable {
         resets.enumerated().compactMap { index, reset in
             guard let expiresAt = reset.expiresAt else { return nil }
             let timestamp = DisplayFormatters.shortDateTimeString(for: expiresAt, language: language)
-            let relative = DisplayFormatters.relativeString(for: expiresAt)
+            let relative = DisplayFormatters.relativeString(for: expiresAt, language: language)
             return "\(L.text("reset", language)) \(index + 1) \(L.text("expires", language)): \(timestamp) (\(relative))"
         }
     }
@@ -137,21 +141,26 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     }
 
     func accountTypeLine(language: AppLanguage) -> String {
-        "\(L.text("account_type", language)): \(accountTypeValue)"
+        "\(L.text("account_type", language)): \(accountTypeValue(language: language))"
     }
 
     func lastActivityLine(language: AppLanguage) -> String {
         guard let lastUpdated else { return "\(L.text("last_activity", language)): --" }
         let timestamp = DisplayFormatters.shortDateTimeString(for: lastUpdated, language: language)
-        let relative = DisplayFormatters.relativeString(for: lastUpdated)
+        let relative = DisplayFormatters.relativeString(for: lastUpdated, language: language)
         return "\(L.text("last_activity", language)): \(timestamp) (\(relative))"
     }
 
     var accountTypeValue: String {
+        accountTypeValue(language: .english)
+    }
+
+    func accountTypeValue(language: AppLanguage) -> String {
         if let plan, !plan.isEmpty {
             return plan.uppercased()
         }
-        return status.label.uppercased()
+        let label = status.label(language: language)
+        return language == .chinese ? label : label.uppercased()
     }
 
     var needsLogin: Bool {

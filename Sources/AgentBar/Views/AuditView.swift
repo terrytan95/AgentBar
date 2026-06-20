@@ -29,6 +29,7 @@ struct AuditView: View {
             range: store.selectedRange,
             budgetStatus: budgetStatusForReport,
             dataSourceHealth: dataSourceHealth,
+            language: store.language,
             customStart: store.customStart,
             customEnd: store.customEnd
         )
@@ -67,7 +68,7 @@ struct AuditView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Audit")
+                Text(L.text("audit", store.language))
                     .font(.system(size: 20, weight: .bold))
                 Text(localized("subtitle"))
                     .font(.system(size: 12, weight: .semibold))

@@ -133,6 +133,8 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var lastUpdated: Date?
     var isActive: Bool
     var loginWarning: UsageAccountLoginWarning? = nil
+    var workspaceName: String? = nil
+    var workspaceID: String? = nil
 
     var mostConstrainedRemainingPercent: Double? {
         [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]
@@ -149,6 +151,25 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         let timestamp = DisplayFormatters.shortDateTimeString(for: lastUpdated, language: language)
         let relative = DisplayFormatters.relativeString(for: lastUpdated, language: language)
         return "\(L.text("last_activity", language)): \(timestamp) (\(relative))"
+    }
+
+    var workspaceDisplayValue: String? {
+        let name = workspaceName.trimmedNonEmpty
+        let id = workspaceID.trimmedNonEmpty.map(Self.shortWorkspaceID)
+        if name == displayName {
+            return id ?? name
+        }
+        let value = [name, id].compactMap { $0 }.joined(separator: " · ")
+        return value.isEmpty ? nil : value
+    }
+
+    func workspaceLine(language: AppLanguage) -> String? {
+        workspaceDisplayValue.map { "\(L.text("workspace", language)): \($0)" }
+    }
+
+    func displayNameWithWorkspace(language: AppLanguage) -> String {
+        guard let workspaceDisplayValue, workspaceDisplayValue != displayName else { return displayName }
+        return "\(displayName) · \(workspaceDisplayValue)"
     }
 
     var accountTypeValue: String {
@@ -176,6 +197,17 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         case nil:
             nil
         }
+    }
+
+    private static func shortWorkspaceID(_ id: String) -> String {
+        id.count > 12 ? String(id.prefix(8)) : id
+    }
+}
+
+private extension Optional where Wrapped == String {
+    var trimmedNonEmpty: String? {
+        guard let value = self?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
     }
 }
 

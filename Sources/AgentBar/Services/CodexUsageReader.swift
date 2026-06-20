@@ -101,6 +101,8 @@ struct CodexUsageReader {
         let accounts = registry.accounts.map { raw in
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
             let displayName = username ?? "Codex Account"
+            let workspaceName = firstNonEmptyOptional([raw.workspaceName, raw.accountName, raw.organizationName])
+            let workspaceID = firstNonEmptyOptional([raw.workspaceID, raw.chatGPTAccountID, raw.accountKey.codexWorkspaceID])
             let primary = raw.lastUsage?.primary.map {
                 UsageWindow(kind: .fiveHour, usedPercent: $0.usedPercent, windowMinutes: $0.windowMinutes, resetsAt: epochDate($0.resetsAt))
             }
@@ -129,7 +131,9 @@ struct CodexUsageReader {
                 estimatedCostUSD: nil,
                 lastUpdated: epochDate(raw.lastUsageAt) ?? now,
                 isActive: raw.accountKey == registry.activeAccountKey,
-                loginWarning: loginWarning
+                loginWarning: loginWarning,
+                workspaceName: workspaceName,
+                workspaceID: workspaceID
             )
         }
 
@@ -310,6 +314,10 @@ private struct CodexRegistryAccount: Decodable {
     var accountName: String?
     var alias: String?
     var email: String?
+    var chatGPTAccountID: String?
+    var workspaceID: String?
+    var workspaceName: String?
+    var organizationName: String?
     var plan: String?
     var lastUsage: CodexLastUsage?
     var lastUsageAt: Double?
@@ -320,6 +328,10 @@ private struct CodexRegistryAccount: Decodable {
         case accountName = "account_name"
         case alias
         case email
+        case chatGPTAccountID = "chatgpt_account_id"
+        case workspaceID = "workspace_id"
+        case workspaceName = "workspace_name"
+        case organizationName = "organization_name"
         case plan
         case lastUsage = "last_usage"
         case lastUsageAt = "last_usage_at"
@@ -389,6 +401,12 @@ private extension String {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+
+    var codexWorkspaceID: String? {
+        guard let delimiter = range(of: "::") else { return nil }
+        let value = self[delimiter.upperBound...]
+        return value.isEmpty ? nil : String(value)
     }
 }
 

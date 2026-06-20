@@ -464,6 +464,12 @@ struct AccountRowView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if let workspaceLine = account.workspaceLine(language: language) {
+                        Text(workspaceLine)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer()
                 HStack(spacing: 6) {

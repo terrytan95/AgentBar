@@ -2,12 +2,16 @@ import SwiftUI
 
 extension AppThemeColor {
     var title: String {
+        title(language: .english)
+    }
+
+    func title(language: AppLanguage) -> String {
         switch self {
-        case .blue: "Blue"
-        case .green: "Green"
-        case .purple: "Purple"
-        case .orange: "Orange"
-        case .graphite: "Graphite"
+        case .blue: language == .chinese ? "蓝色" : "Blue"
+        case .green: language == .chinese ? "绿色" : "Green"
+        case .purple: language == .chinese ? "紫色" : "Purple"
+        case .orange: language == .chinese ? "橙色" : "Orange"
+        case .graphite: language == .chinese ? "石墨色" : "Graphite"
         }
     }
 

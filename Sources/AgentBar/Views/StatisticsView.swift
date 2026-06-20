@@ -62,11 +62,11 @@ struct StatisticsView: View {
                     topTab = .usage
                     viewMode = .overview
                 }
-                sidebarItem("Resets", systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
+                sidebarItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
                     topTab = .usage
                     viewMode = .resets
                 }
-                sidebarItem("Audit", systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
+                sidebarItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
                     topTab = .usage
                     viewMode = .audit
                 }
@@ -306,18 +306,18 @@ struct StatisticsView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Resets")
+                    Text(L.text("resets", store.language))
                         .font(.system(size: 20, weight: .bold))
-                    Text("Banked credits, expiry warnings, and the spend call.")
+                    Text(L.text("reset_intro", store.language))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Toggle(isOn: $settings.detailedResetCreditsEnabled) {
-                    Label("Expiry dates", systemImage: settings.detailedResetCreditsEnabled ? "hourglass.circle.fill" : "hourglass")
+                    Label(L.text("expiry_dates", store.language), systemImage: settings.detailedResetCreditsEnabled ? "hourglass.circle.fill" : "hourglass")
                 }
                 .toggleStyle(.button)
-                .help("Opt in to a read-only reset-credit expiry check using local Codex auth")
+                .help(L.text("expiry_dates_help", store.language))
                 .onChange(of: settings.detailedResetCreditsEnabled) { _, enabled in
                     if enabled {
                         store.refresh(force: true, showManualFeedback: true)
@@ -327,19 +327,19 @@ struct StatisticsView: View {
             }
 
             HStack(spacing: 8) {
-                SummaryChip(title: "Resets", value: "\(totalResetCreditsCount)", color: settings.themeColor.primary)
-                SummaryChip(title: "Next expiry", value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry))
-                SummaryChip(title: "5H left", value: DisplayFormatters.percentString(store.activeAccount?.fiveHourWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.fiveHourWindow?.remainingPercent))
-                SummaryChip(title: "Weekly left", value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.weeklyWindow?.remainingPercent))
+                SummaryChip(title: L.text("resets", store.language), value: "\(totalResetCreditsCount)", color: settings.themeColor.primary)
+                SummaryChip(title: L.text("next_expiry", store.language), value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry))
+                SummaryChip(title: L.text("five_hour_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.fiveHourWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.fiveHourWindow?.remainingPercent))
+                SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.weeklyWindow?.remainingPercent))
             }
 
             ResetAdvicePanel(advice: resetSpendAdvice, theme: settings.themeColor)
 
             HStack(alignment: .top, spacing: 14) {
-                Panel(title: "Expiry watch") {
+                Panel(title: L.text("expiry_watch", store.language)) {
                     resetExpiryRows
                 }
-                Panel(title: "Current windows") {
+                Panel(title: L.text("current_windows", store.language)) {
                     currentLimitsRows
                 }
             }
@@ -454,7 +454,7 @@ struct StatisticsView: View {
                 SettingsRow(title: L.text("tone_color", store.language), subtitle: L.text("tone_color_subtitle", store.language)) {
                     Picker("", selection: $settings.themeColor) {
                         ForEach(AppThemeColor.allCases) { theme in
-                            Text(theme.title).tag(theme)
+                            Text(theme.title(language: store.language)).tag(theme)
                         }
                     }
                     .labelsHidden()
@@ -659,14 +659,15 @@ struct StatisticsView: View {
             fiveHour: store.activeAccount?.fiveHourWindow,
             weekly: store.activeAccount?.weeklyWindow,
             resetCount: totalResetCreditsCount,
-            nextExpiry: nextResetExpiry
+            nextExpiry: nextResetExpiry,
+            language: store.language
         )
     }
 
     @ViewBuilder
     private var resetExpiryRows: some View {
         if !settings.detailedResetCreditsEnabled {
-            EmptyPanelMessage("Turn on Expiry dates to fetch detailed reset-credit expiry times.")
+            EmptyPanelMessage(L.text("enable_expiry_dates", store.language))
         } else {
             let rows = store.accounts.flatMap { account in
                 (account.resetCredits?.resets ?? []).enumerated().map { index, reset in
@@ -674,7 +675,7 @@ struct StatisticsView: View {
                 }
             }
             if rows.isEmpty {
-                EmptyPanelMessage(totalResetCreditsCount > 0 ? "No detailed expiry dates returned yet." : "No banked resets found.")
+                EmptyPanelMessage(totalResetCreditsCount > 0 ? L.text("no_detailed_expiry_dates", store.language) : L.text("no_banked_resets", store.language))
             } else {
                 VStack(spacing: 8) {
                     ForEach(rows) { row in
@@ -801,7 +802,7 @@ struct StatisticsView: View {
 
     private func resetText(_ date: Date?) -> String {
         guard let date else { return L.text("reset_time_unknown", store.language) }
-        return "\(DisplayFormatters.relativeString(for: date)) \(L.text("resets_after", store.language))"
+        return "\(DisplayFormatters.relativeString(for: date, language: store.language)) \(L.text("resets_after", store.language))"
     }
 
     private func statusColor(_ percent: Double?, fallback: Color) -> Color {
@@ -838,34 +839,103 @@ private struct ResetSpendAdvice {
     var systemImage: String
     var color: Color
 
-    static func make(fiveHour: UsageWindow?, weekly: UsageWindow?, resetCount: Int, nextExpiry: Date?, now: Date = Date()) -> ResetSpendAdvice {
+    static func make(fiveHour: UsageWindow?, weekly: UsageWindow?, resetCount: Int, nextExpiry: Date?, language: AppLanguage, now: Date = Date()) -> ResetSpendAdvice {
         if resetCount > 0, let nextExpiry, nextExpiry.timeIntervalSince(now) <= 86_400 {
-            return ResetSpendAdvice(title: "Use it or lose it", message: "A banked reset expires today. If useful work is queued, spend it before it disappears.", detail: "Expiry warning", systemImage: "exclamationmark.octagon.fill", color: .red)
+            return ResetSpendAdvice(title: localized("use_it_or_lose_it", language), message: localized("expires_today_message", language), detail: localized("expiry_warning", language), systemImage: "exclamationmark.octagon.fill", color: .red)
         }
         guard let weekly else {
-            return ResetSpendAdvice(title: "Waiting on meters", message: "Reset stash is visible, but Codex usage windows are not loaded yet.", detail: "Refresh after Codex signs in", systemImage: "questionmark.circle", color: .secondary)
+            return ResetSpendAdvice(title: localized("waiting_on_meters", language), message: localized("waiting_on_meters_message", language), detail: localized("refresh_after_sign_in", language), systemImage: "questionmark.circle", color: .secondary)
         }
         let weeklyRemaining = weekly.remainingPercent
         let weeklyReset = weekly.resetsAt?.timeIntervalSince(now)
         if resetCount == 0 {
-            return ResetSpendAdvice(title: "No reset cushion", message: "No banked reset is available, so keep an eye on the weekly meter.", detail: DisplayFormatters.percentString(weeklyRemaining) + " weekly left", systemImage: "exclamationmark.triangle.fill", color: .secondary)
+            return ResetSpendAdvice(title: localized("no_reset_cushion", language), message: localized("no_reset_cushion_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "exclamationmark.triangle.fill", color: .secondary)
         }
         if let fiveHour, let fiveReset = fiveHour.resetsAt?.timeIntervalSince(now), fiveHour.remainingPercent <= 12, weeklyRemaining >= 25, fiveReset <= 90 * 60 {
-            return ResetSpendAdvice(title: "Let the 5H tank refill", message: "Weekly room is still decent and the short window is close. Save the reset.", detail: "5H resets \(DisplayFormatters.relativeString(for: fiveHour.resetsAt ?? now))", systemImage: "hourglass", color: .blue)
+            return ResetSpendAdvice(title: localized("let_5h_refill", language), message: localized("let_5h_refill_message", language), detail: fiveHourResetDetail(fiveHour.resetsAt ?? now, language), systemImage: "hourglass", color: .blue)
         }
         if let fiveHour, fiveHour.remainingPercent <= 12, weeklyRemaining >= 50 {
-            return ResetSpendAdvice(title: "Deadline call", message: "The short window is tight but weekly runway is healthy. Spend a reset only if real work is blocked.", detail: "5H nearly empty", systemImage: "bolt.badge.clock", color: .orange)
+            return ResetSpendAdvice(title: localized("deadline_call", language), message: localized("deadline_call_message", language), detail: localized("five_hour_nearly_empty", language), systemImage: "bolt.badge.clock", color: .orange)
         }
         if let weeklyReset, resetCount >= 2, weeklyRemaining <= 15, weeklyReset >= 4 * 86_400 {
-            return ResetSpendAdvice(title: "Go burn some tokens", message: "You have resets banked, weekly room is thin, and refresh is days away.", detail: DisplayFormatters.percentString(weeklyRemaining) + " weekly left", systemImage: "bolt.fill", color: .green)
+            return ResetSpendAdvice(title: localized("go_burn_tokens", language), message: localized("go_burn_tokens_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "bolt.fill", color: .green)
         }
         if let weeklyReset, weeklyRemaining <= 20, weeklyReset >= 2 * 86_400 {
-            return ResetSpendAdvice(title: "Green light, with brakes", message: "If Codex blocks real work, spending a reset makes sense. Do not burn it just to tidy the meter.", detail: DisplayFormatters.relativeString(for: weekly.resetsAt ?? now) + " to weekly reset", systemImage: "bolt.badge.clock", color: .orange)
+            return ResetSpendAdvice(title: localized("green_light_with_brakes", language), message: localized("green_light_with_brakes_message", language), detail: weeklyResetDetail(weekly.resetsAt ?? now, language), systemImage: "bolt.badge.clock", color: .orange)
         }
         if let weeklyReset, weeklyRemaining >= 35, weeklyReset <= 3 * 86_400 {
-            return ResetSpendAdvice(title: "Hold that reset", message: "Weekly room is healthy and the next refresh is close.", detail: DisplayFormatters.percentString(weeklyRemaining) + " weekly left", systemImage: "shield.fill", color: .blue)
+            return ResetSpendAdvice(title: localized("hold_that_reset", language), message: localized("hold_that_reset_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "shield.fill", color: .blue)
         }
-        return ResetSpendAdvice(title: "Cruise mode", message: "Keep working. Re-check before a big run.", detail: DisplayFormatters.percentString(weeklyRemaining) + " weekly left", systemImage: "gauge.with.dots.needle.50percent", color: .cyan)
+        return ResetSpendAdvice(title: localized("cruise_mode", language), message: localized("cruise_mode_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "gauge.with.dots.needle.50percent", color: .cyan)
+    }
+
+    private static func weeklyLeftDetail(_ remaining: Double, _ language: AppLanguage) -> String {
+        switch language {
+        case .chinese: "\(DisplayFormatters.percentString(remaining)) 本周剩余"
+        case .english: "\(DisplayFormatters.percentString(remaining)) weekly left"
+        }
+    }
+
+    private static func fiveHourResetDetail(_ date: Date, _ language: AppLanguage) -> String {
+        switch language {
+        case .chinese: "5 小时额度 \(DisplayFormatters.relativeString(for: date, language: language)) 重置"
+        case .english: "5H resets \(DisplayFormatters.relativeString(for: date, language: language))"
+        }
+    }
+
+    private static func weeklyResetDetail(_ date: Date, _ language: AppLanguage) -> String {
+        switch language {
+        case .chinese: "距离本周重置 \(DisplayFormatters.relativeString(for: date, language: language))"
+        case .english: "\(DisplayFormatters.relativeString(for: date, language: language)) to weekly reset"
+        }
+    }
+
+    private static func localized(_ key: String, _ language: AppLanguage) -> String {
+        switch (key, language) {
+        case ("use_it_or_lose_it", .chinese): "用掉，否则失效"
+        case ("expires_today_message", .chinese): "有一张储备重置今天过期。如有重要任务排队，建议过期前使用。"
+        case ("expiry_warning", .chinese): "过期提醒"
+        case ("waiting_on_meters", .chinese): "等待额度数据"
+        case ("waiting_on_meters_message", .chinese): "已看到重置储备，但 Codex 用量窗口还没加载。"
+        case ("refresh_after_sign_in", .chinese): "Codex 登录后刷新"
+        case ("no_reset_cushion", .chinese): "没有重置缓冲"
+        case ("no_reset_cushion_message", .chinese): "当前没有可用储备重置，请留意本周额度。"
+        case ("let_5h_refill", .chinese): "等 5 小时额度恢复"
+        case ("let_5h_refill_message", .chinese): "本周余量还可以，短窗口也快恢复，先保留重置。"
+        case ("deadline_call", .chinese): "按截止期限判断"
+        case ("deadline_call_message", .chinese): "短窗口紧张但本周余量充足；只有真实工作被挡住时才用重置。"
+        case ("five_hour_nearly_empty", .chinese): "5 小时额度将尽"
+        case ("go_burn_tokens", .chinese): "可以消耗一些额度"
+        case ("go_burn_tokens_message", .chinese): "你有储备重置，本周额度偏低，距离刷新还有几天。"
+        case ("green_light_with_brakes", .chinese): "可以用，但别浪费"
+        case ("green_light_with_brakes_message", .chinese): "如果 Codex 阻塞真实工作，使用重置是合理的；不要只为清空仪表而消耗。"
+        case ("hold_that_reset", .chinese): "保留这次重置"
+        case ("hold_that_reset_message", .chinese): "本周余量健康，下次刷新也比较近。"
+        case ("cruise_mode", .chinese): "正常使用"
+        case ("cruise_mode_message", .chinese): "继续工作。大批量运行前再检查一次。"
+        case ("use_it_or_lose_it", _): "Use it or lose it"
+        case ("expires_today_message", _): "A banked reset expires today. If useful work is queued, spend it before it disappears."
+        case ("expiry_warning", _): "Expiry warning"
+        case ("waiting_on_meters", _): "Waiting on meters"
+        case ("waiting_on_meters_message", _): "Reset stash is visible, but Codex usage windows are not loaded yet."
+        case ("refresh_after_sign_in", _): "Refresh after Codex signs in"
+        case ("no_reset_cushion", _): "No reset cushion"
+        case ("no_reset_cushion_message", _): "No banked reset is available, so keep an eye on the weekly meter."
+        case ("let_5h_refill", _): "Let the 5H tank refill"
+        case ("let_5h_refill_message", _): "Weekly room is still decent and the short window is close. Save the reset."
+        case ("deadline_call", _): "Deadline call"
+        case ("deadline_call_message", _): "The short window is tight but weekly runway is healthy. Spend a reset only if real work is blocked."
+        case ("five_hour_nearly_empty", _): "5H nearly empty"
+        case ("go_burn_tokens", _): "Go burn some tokens"
+        case ("go_burn_tokens_message", _): "You have resets banked, weekly room is thin, and refresh is days away."
+        case ("green_light_with_brakes", _): "Green light, with brakes"
+        case ("green_light_with_brakes_message", _): "If Codex blocks real work, spending a reset makes sense. Do not burn it just to tidy the meter."
+        case ("hold_that_reset", _): "Hold that reset"
+        case ("hold_that_reset_message", _): "Weekly room is healthy and the next refresh is close."
+        case ("cruise_mode", _): "Cruise mode"
+        case ("cruise_mode_message", _): "Keep working. Re-check before a big run."
+        default: key
+        }
     }
 }
 
@@ -1517,7 +1587,7 @@ private struct QuotaPressurePanel: View {
 
     private var detailLine: String {
         let active = pressure.activeAccount?.displayName ?? "--"
-        let projected = pressure.projectedFiveHourExhaustion.map { DisplayFormatters.relativeString(for: $0) }
+        let projected = pressure.projectedFiveHourExhaustion.map { DisplayFormatters.relativeString(for: $0, language: language) }
         let rotation = pressure.shouldTriggerRotation ? localized("rotation_ready") : localized("rotation_standby")
         if let projected {
             return "\(active) · \(localized("five_hour_exhausts")) \(projected) · \(rotation)"
@@ -1686,8 +1756,8 @@ private struct DataSourceHealthPanel: View {
                 }
                 .tactilePlainButton()
                 .foregroundStyle(.secondary)
-                .help(isExpanded ? "Hide full text" : "Show full text")
-                .accessibilityLabel(isExpanded ? "Hide full text" : "Show full text")
+                .help(L.text(isExpanded ? "hide_full_text" : "show_full_text", language))
+                .accessibilityLabel(L.text(isExpanded ? "hide_full_text" : "show_full_text", language))
             }
             Text(statusTitle(row.status))
                 .font(.system(size: 10, weight: .bold))
@@ -1710,7 +1780,7 @@ private struct DataSourceHealthPanel: View {
     private static let compactDetailLimit = 86
 
     private func detail(for row: DataSourceHealthSummary.Row) -> String {
-        let refreshed = DisplayFormatters.relativeString(for: row.refreshedAt)
+        let refreshed = DisplayFormatters.relativeString(for: row.refreshedAt, language: language)
         if let note = row.note, !note.isEmpty {
             return "\(refreshed) · \(note.redactedForCredentialWords)"
         }
@@ -1874,7 +1944,7 @@ private struct ResetExpiryRow: View {
                 .foregroundStyle(color)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(row.account) · Reset \(row.index)")
+                Text("\(row.account) · \(L.text("reset", language)) \(row.index)")
                     .font(.system(size: 12, weight: .bold))
                     .lineLimit(1)
                 Text(detail)
@@ -1893,22 +1963,23 @@ private struct ResetExpiryRow: View {
     }
 
     private var detail: String {
-        guard let expiresAt = row.expiresAt else { return "Expiry date unavailable" }
-        return "\(DisplayFormatters.shortDateTimeString(for: expiresAt, language: language)) · \(DisplayFormatters.relativeString(for: expiresAt))"
+        guard let expiresAt = row.expiresAt else { return L.text("expiry_date_unavailable", language) }
+        return "\(DisplayFormatters.shortDateTimeString(for: expiresAt, language: language)) · \(DisplayFormatters.relativeString(for: expiresAt, language: language))"
     }
 
     private var badge: String {
-        guard let expiresAt = row.expiresAt else { return "Unknown" }
+        guard let expiresAt = row.expiresAt else { return L.text("unknown", language) }
         let seconds = expiresAt.timeIntervalSinceNow
-        if seconds <= 0 { return "Expired" }
-        if seconds <= 86_400 { return "Today" }
-        if seconds <= 3 * 86_400 { return "Soon" }
-        if seconds <= 7 * 86_400 { return "This week" }
-        return "Available"
+        if seconds <= 0 { return L.text("expired", language) }
+        if seconds <= 86_400 { return L.text("today", language) }
+        if seconds <= 3 * 86_400 { return L.text("soon", language) }
+        if seconds <= 7 * 86_400 { return L.text("this_week", language) }
+        return L.text("available", language)
     }
 
     private var iconName: String {
-        badge == "Expired" || badge == "Today" ? "exclamationmark.octagon.fill" : "checkmark.seal.fill"
+        guard let expiresAt = row.expiresAt else { return "checkmark.seal.fill" }
+        return expiresAt.timeIntervalSinceNow <= 86_400 ? "exclamationmark.octagon.fill" : "checkmark.seal.fill"
     }
 
     private var color: Color {
@@ -1993,7 +2064,7 @@ private struct AccountLimitGroupView: View {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(account.service.rawValue)
                             .font(.system(size: 10, weight: .bold))
-                        Text(account.accountTypeValue)
+                        Text(account.accountTypeValue(language: language))
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
@@ -2044,7 +2115,7 @@ private struct AccountLimitGroupView: View {
     private var accountDetailLine: String {
         let identity = account.username ?? account.maskedEmail ?? account.sourceDescription
         if let lastUpdated = account.lastUpdated {
-            return "\(identity) · \(DisplayFormatters.relativeString(for: lastUpdated))"
+            return "\(identity) · \(DisplayFormatters.relativeString(for: lastUpdated, language: language))"
         }
         return identity
     }

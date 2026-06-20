@@ -76,9 +76,12 @@ enum DisplayFormatters {
         return "0.0%"
     }
 
-    static func relativeString(for date: Date) -> String {
+    static func relativeString(for date: Date, language: AppLanguage? = nil) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
+        if let language {
+            formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        }
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 

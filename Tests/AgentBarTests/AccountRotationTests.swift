@@ -422,6 +422,42 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: activeAuthURL.path))
     }
 
+    @MainActor
+    func testUsageStoreRefreshesAfterAccountRemovalNotification() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let refreshExpectation = expectation(description: "store refreshed after account removal")
+        refreshExpectation.assertForOverFulfill = false
+        let refreshDate = now
+        let store = UsageStore(
+            settings: SettingsStore(defaults: defaults),
+            codexUsageSynchronizer: { .success },
+            codexUsageReader: {
+                refreshExpectation.fulfill()
+                return UsageSnapshot(
+                    service: .codex,
+                    status: .live,
+                    accounts: [],
+                    points: [],
+                    securityNotes: [],
+                    refreshedAt: refreshDate,
+                    pricingFingerprint: Pricing.fingerprint
+                )
+            },
+            claudeUsageReader: {
+                UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "test")
+            }
+        )
+        store.applyTestData(accounts: [
+            account(id: "removed", used: 10, resetsAt: now, lastUpdated: now, isActive: true)
+        ])
+
+        NotificationCenter.default.post(name: UsageStore.accountRemovalNotification, object: nil)
+
+        wait(for: [refreshExpectation], timeout: 0.4)
+    }
+
     private final class AccountRotationRecorder: @unchecked Sendable {
         private let lock = NSLock()
         private var recordedSwitchAccountID: String?

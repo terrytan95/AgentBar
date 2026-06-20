@@ -2,6 +2,8 @@ import Foundation
 
 @MainActor
 final class UsageStore: ObservableObject {
+    static let accountRemovalNotification = Notification.Name("AgentBarUsageStoreAccountRemoval")
+
     @Published private(set) var snapshots: [UsageService: UsageSnapshot] = [:]
     @Published private(set) var accounts: [UsageAccount] = []
     @Published private(set) var points: [UsagePoint] = []
@@ -26,6 +28,7 @@ final class UsageStore: ObservableObject {
     private let codexAccountSwitchFailurePrompter: @Sendable (CodexAccountSwitchRecovery) -> Void
     private let codexAccountRecoveryLoginLauncher: @Sendable (String, String) -> Void
     private var timer: Timer?
+    private var accountRemovalObserver: NSObjectProtocol?
     private var refreshInFlight = false
     private var refreshQueued = false
     private var manualRefreshQueued = false
@@ -76,6 +79,15 @@ final class UsageStore: ObservableObject {
         self.manualCodexAppRestarter = manualCodexAppRestarter
         self.codexAccountSwitchFailurePrompter = codexAccountSwitchFailurePrompter
         self.codexAccountRecoveryLoginLauncher = codexAccountRecoveryLoginLauncher
+        accountRemovalObserver = NotificationCenter.default.addObserver(
+            forName: Self.accountRemovalNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refresh(force: true)
+            }
+        }
         configureTimer()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -278,7 +290,7 @@ final class UsageStore: ObservableObject {
                     self.pendingCodexSwitchRecovery = nil
                 }
                 self.accounts.removeAll { $0.service == .codex && $0.id == account.id }
-                self.refresh(force: true)
+                NotificationCenter.default.post(name: Self.accountRemovalNotification, object: nil)
             }
         }
     }

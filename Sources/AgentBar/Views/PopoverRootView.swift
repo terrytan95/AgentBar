@@ -105,7 +105,7 @@ struct PopoverRootView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            PopoverScrollView {
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     recommendationSection
                     quickSummarySection
@@ -120,7 +120,7 @@ struct PopoverRootView: View {
         }
         .padding(.horizontal, PopoverLayout.horizontalInset)
         .background(.regularMaterial)
-        .preferredColorScheme(AppAppearance.colorScheme(useDarkAppearance: store.settings.useDarkAppearance))
+        .preferredColorScheme(store.settings.useDarkAppearance ? .dark : .light)
         .animation(nil, value: store.settings.useDarkAppearance)
     }
 

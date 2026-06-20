@@ -35,12 +35,6 @@ enum DashboardNavigation {
     }
 }
 
-enum LaunchStatusAccountList {
-    static func accountsToDisplay(from accounts: [UsageAccount]) -> [UsageAccount] {
-        accounts
-    }
-}
-
 @MainActor
 final class LaunchStatusWindowController {
     static let shared = LaunchStatusWindowController()

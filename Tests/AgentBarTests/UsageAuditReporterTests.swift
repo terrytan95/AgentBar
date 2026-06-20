@@ -26,7 +26,6 @@ final class UsageAuditReporterTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(report.kind, .daily)
         XCTAssertTrue(report.title.contains("Daily"))
         XCTAssertTrue(report.body.contains("6,200 tokens"))
         XCTAssertTrue(report.body.contains("Top service: Codex"))

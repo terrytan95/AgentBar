@@ -415,8 +415,6 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(reloaded.useDarkAppearance)
         XCTAssertEqual(L.text("tone_color", .english), "Tone color")
         XCTAssertEqual(L.text("dark_theme", .chinese), "深色主题")
-        XCTAssertEqual(AppAppearance.colorScheme(useDarkAppearance: false), .light)
-        XCTAssertEqual(AppAppearance.colorScheme(useDarkAppearance: true), .dark)
     }
 
     @MainActor

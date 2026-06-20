@@ -23,9 +23,4 @@ enum AppLogo {
         return image()
     }
 
-    static func templateImage() -> NSImage {
-        let image = menuBarImage().copy() as? NSImage ?? menuBarImage()
-        image.isTemplate = false
-        return image
-    }
 }

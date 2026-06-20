@@ -1,13 +1,6 @@
 import Foundation
 
-enum AuditReportKind: Equatable, Sendable {
-    case daily
-    case weekly
-    case range
-}
-
 struct AuditReport: Equatable, Sendable {
-    var kind: AuditReportKind
     var title: String
     var body: String
 }
@@ -92,8 +85,7 @@ enum UsageAuditReporter {
         let topModel = modelRows(points: filtered).first
         let comparison = rangeComparison(points: points, range: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd)
         let anomalies = UsageInsights.usageAnomalies(points: points, now: now, calendar: calendar)
-        let kind = reportKind(for: range)
-        let title = "\(reportTitlePrefix(for: kind)) Usage Report"
+        let title = "\(reportTitlePrefix(for: range)) Usage Report"
 
         var lines = [
             "\(title)",
@@ -123,7 +115,7 @@ enum UsageAuditReporter {
         lines.append("Data sources: \(dataSourceHealth.liveCount) live, \(dataSourceHealth.issueCount) issue\(dataSourceHealth.issueCount == 1 ? "" : "s").")
         lines.append("Basis: local parsed session logs and available rate-limit data, not official billing records.")
 
-        return AuditReport(kind: kind, title: title, body: lines.joined(separator: "\n"))
+        return AuditReport(title: title, body: lines.joined(separator: "\n"))
     }
 
     static func rangeComparison(
@@ -284,22 +276,11 @@ enum UsageAuditReporter {
         return severity.rawValue
     }
 
-    private static func reportKind(for range: UsageRange) -> AuditReportKind {
+    private static func reportTitlePrefix(for range: UsageRange) -> String {
         switch range {
-        case .today:
-            return .daily
-        case .thisWeek, .last7Days:
-            return .weekly
-        case .yesterday, .thisMonth, .thisYear, .last30Days, .all, .custom:
-            return .range
-        }
-    }
-
-    private static func reportTitlePrefix(for kind: AuditReportKind) -> String {
-        switch kind {
-        case .daily: return "Daily"
-        case .weekly: return "Weekly"
-        case .range: return "Range"
+        case .today: return "Daily"
+        case .thisWeek, .last7Days: return "Weekly"
+        case .yesterday, .thisMonth, .thisYear, .last30Days, .all, .custom: return "Range"
         }
     }
 

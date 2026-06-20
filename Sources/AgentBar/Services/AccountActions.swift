@@ -91,6 +91,55 @@ struct CodexAccountSwitcher {
     }
 }
 
+struct CodexAccountRemover {
+    var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    var fileManager: FileManager = .default
+
+    func removeAccount(accountID: String) throws {
+        let registryURL = homeDirectory.appending(path: ".codex/accounts/registry.json")
+        let accountSnapshotURL = accountSnapshotURL(for: accountID)
+        let activeAuthURL = homeDirectory.appending(path: ".codex/auth.json")
+        guard fileManager.fileExists(atPath: registryURL.path) else {
+            throw AccountActionError.missingRegistry
+        }
+
+        let data = try Data(contentsOf: registryURL)
+        guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let accounts = json["accounts"] as? [[String: Any]]
+        else {
+            throw AccountActionError.invalidRegistry
+        }
+        let filteredAccounts = accounts.filter { $0["account_key"] as? String != accountID }
+        guard filteredAccounts.count != accounts.count else {
+            throw AccountActionError.missingAccount
+        }
+
+        let wasActive = json["active_account_key"] as? String == accountID
+        json["accounts"] = filteredAccounts
+        if wasActive {
+            json.removeValue(forKey: "active_account_key")
+            json.removeValue(forKey: "active_account_activated_at_ms")
+        }
+        if json["previous_active_account_key"] as? String == accountID {
+            json.removeValue(forKey: "previous_active_account_key")
+        }
+
+        let output = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        try output.write(to: registryURL, options: [.atomic])
+        if fileManager.fileExists(atPath: accountSnapshotURL.path) {
+            try fileManager.removeItem(at: accountSnapshotURL)
+        }
+        if wasActive, fileManager.fileExists(atPath: activeAuthURL.path) {
+            try fileManager.removeItem(at: activeAuthURL)
+        }
+    }
+
+    private func accountSnapshotURL(for accountID: String) -> URL {
+        let fileKey = accountID.needsCodexAccountFilenameEncoding ? accountID.codexAccountFileKey : accountID
+        return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
+    }
+}
+
 private extension String {
     var needsCodexAccountFilenameEncoding: Bool {
         guard !isEmpty, self != ".", self != ".." else { return true }

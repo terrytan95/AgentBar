@@ -387,6 +387,41 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(recorder.restartResult, .restarted)
     }
 
+    func testCodexAccountRemoverDeletesActiveAccountFilesAndRegistryEntry() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appending(path: "AgentBarTests-\(UUID().uuidString)")
+        let accountsDirectory = home.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountsDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let registryURL = accountsDirectory.appending(path: "registry.json")
+        let snapshotURL = accountsDirectory.appending(path: "remove-me.auth.json")
+        let activeAuthURL = home.appending(path: ".codex/auth.json")
+        try """
+        {
+          "active_account_key": "remove-me",
+          "previous_active_account_key": "keep-me",
+          "accounts": [
+            { "account_key": "remove-me", "email": "remove@example.com" },
+            { "account_key": "keep-me", "email": "keep@example.com" }
+          ]
+        }
+        """.data(using: .utf8)!.write(to: registryURL)
+        try "{}".write(to: snapshotURL, atomically: true, encoding: .utf8)
+        try "{}".write(to: activeAuthURL, atomically: true, encoding: .utf8)
+
+        try CodexAccountRemover(homeDirectory: home).removeAccount(accountID: "remove-me")
+
+        let data = try Data(contentsOf: registryURL)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let accounts = try XCTUnwrap(json["accounts"] as? [[String: Any]])
+        XCTAssertEqual(accounts.compactMap { $0["account_key"] as? String }, ["keep-me"])
+        XCTAssertNil(json["active_account_key"])
+        XCTAssertEqual(json["previous_active_account_key"] as? String, "keep-me")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: snapshotURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: activeAuthURL.path))
+    }
+
     private final class AccountRotationRecorder: @unchecked Sendable {
         private let lock = NSLock()
         private var recordedSwitchAccountID: String?

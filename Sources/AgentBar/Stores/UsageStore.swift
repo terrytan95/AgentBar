@@ -16,6 +16,7 @@ final class UsageStore: ObservableObject {
 
     let settings: SettingsStore
     private let codexUsageSynchronizer: @Sendable () -> CodexUsageSyncResult
+    private let codexDetailedResetCreditsSynchronizer: @Sendable () -> CodexUsageSyncResult
     private let codexUsageReader: @Sendable () -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
@@ -34,6 +35,9 @@ final class UsageStore: ObservableObject {
         settings: SettingsStore = SettingsStore(),
         codexUsageSynchronizer: @escaping @Sendable () -> CodexUsageSyncResult = {
             CodexUsageAPISyncer().refreshUsage()
+        },
+        codexDetailedResetCreditsSynchronizer: @escaping @Sendable () -> CodexUsageSyncResult = {
+            CodexUsageAPISyncer(detailedResetCreditsEnabled: true).refreshUsage()
         },
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot = {
             CodexUsageReader().read()
@@ -59,6 +63,7 @@ final class UsageStore: ObservableObject {
     ) {
         self.settings = settings
         self.codexUsageSynchronizer = codexUsageSynchronizer
+        self.codexDetailedResetCreditsSynchronizer = codexDetailedResetCreditsSynchronizer
         self.codexUsageReader = codexUsageReader
         self.claudeUsageReader = claudeUsageReader
         self.codexAccountSwitcher = codexAccountSwitcher
@@ -191,7 +196,7 @@ final class UsageStore: ObservableObject {
         refreshInFlight = true
         isRefreshing = true
         lastError = nil
-        let syncCodexUsage = codexUsageSynchronizer
+        let syncCodexUsage = settings.detailedResetCreditsEnabled ? codexDetailedResetCreditsSynchronizer : codexUsageSynchronizer
         let readCodexUsage = codexUsageReader
         let readClaudeUsage = claudeUsageReader
 

@@ -29,25 +29,29 @@ struct CodexUsageAPISyncer {
     typealias UsageClient = @Sendable (URLRequest, TimeInterval) throws -> CodexUsageAPIResponse
 
     static let usageEndpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
+    static let resetCreditsEndpoint = URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!
 
     var homeDirectory: URL
     var fileManager: FileManager
     var now: @Sendable () -> Date
     var usageClient: UsageClient
     var timeout: TimeInterval
+    var detailedResetCreditsEnabled: Bool
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default,
         now: @escaping @Sendable () -> Date = Date.init,
         usageClient: @escaping UsageClient = Self.defaultUsageClient,
-        timeout: TimeInterval = 5
+        timeout: TimeInterval = 5,
+        detailedResetCreditsEnabled: Bool = false
     ) {
         self.homeDirectory = homeDirectory
         self.fileManager = fileManager
         self.now = now
         self.usageClient = usageClient
         self.timeout = timeout
+        self.detailedResetCreditsEnabled = detailedResetCreditsEnabled
     }
 
     func refreshUsage() -> CodexUsageSyncResult {
@@ -113,9 +117,13 @@ struct CodexUsageAPISyncer {
                 lastFailure = .failed("HTTP \(response.statusCode)\(Self.responseErrorCode(from: response.data))")
                 continue
             }
-            guard let usage = Self.parseUsageResponse(data: response.data) else {
+            guard var usage = Self.parseUsageResponse(data: response.data) else {
                 lastFailure = .failed("Usage response did not contain rate limit windows.")
                 continue
+            }
+            if detailedResetCreditsEnabled,
+               let detailedResetCredits = fetchDetailedResetCredits(authInfo: authInfo) {
+                usage["reset_credits"] = detailedResetCredits
             }
 
             if authURL != accountSnapshotURL {
@@ -302,17 +310,63 @@ struct CodexUsageAPISyncer {
     private static func parseResetCredit(_ value: Any) -> [String: Any]? {
         guard let object = value as? [String: Any] else { return nil }
         var output: [String: Any] = [:]
-        if let expiresAt = firstNumber([
+        if let expiresAt = firstDateEpoch([
             object["expires_at"],
             object["expiration_at"],
             object["expiresAt"],
             object["expirationAt"],
             object["valid_until"],
             object["validUntil"]
-        ])?.doubleValue {
+        ]) {
             output["expires_at"] = expiresAt
         }
         return output.isEmpty ? nil : output
+    }
+
+    private func fetchDetailedResetCredits(authInfo: CodexUsageAuthInfo) -> [String: Any]? {
+        var request = URLRequest(url: Self.resetCreditsEndpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeout
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("AgentBar", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(authInfo.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(authInfo.accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
+        request.setValue("Codex Desktop", forHTTPHeaderField: "originator")
+        request.setValue("CODEX", forHTTPHeaderField: "OAI-Product-Sku")
+
+        guard let response = try? usageClient(request, timeout),
+              200..<300 ~= response.statusCode
+        else { return nil }
+        return Self.parseDetailedResetCreditsResponse(data: response.data)
+    }
+
+    private static func parseDetailedResetCreditsResponse(data: Data) -> [String: Any]? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let credits = firstArray([root["credits"], root["resets"], root["items"]])
+            .compactMap(parseDetailedResetCredit)
+        let available = credits.filter { ($0["is_available"] as? Bool) ?? true }
+        let availableCount = firstNumber([root["available_count"], root["availableCount"], root["count"]])?.intValue ?? available.count
+        guard availableCount > 0 || !available.isEmpty else { return nil }
+        var output: [String: Any] = ["available_count": availableCount]
+        let resets = available.map { credit in
+            credit.filter { $0.key != "is_available" }
+        }
+        if !resets.isEmpty {
+            output["resets"] = resets
+        }
+        return output
+    }
+
+    private static func parseDetailedResetCredit(_ value: Any) -> [String: Any]? {
+        guard let object = value as? [String: Any] else { return nil }
+        let status = firstNonEmptyString([object["status"]])
+        var output: [String: Any] = [
+            "is_available": status?.localizedCaseInsensitiveCompare("available") == .orderedSame || status == nil
+        ]
+        if let expiresAt = firstDateEpoch([object["expires_at"], object["expiresAt"], object["expiration_at"], object["expirationAt"]]) {
+            output["expires_at"] = expiresAt
+        }
+        return output
     }
 
     private static func parseCredits(_ value: Any?) -> [String: Any]? {
@@ -351,12 +405,35 @@ struct CodexUsageAPISyncer {
         values.compactMap(number).first
     }
 
+    private static func firstDateEpoch(_ values: [Any?]) -> Double? {
+        for value in values {
+            if let number = number(value) {
+                return number.doubleValue
+            }
+            if let string = value as? String,
+               let date = iso8601Date(from: string) {
+                return date.timeIntervalSince1970
+            }
+        }
+        return nil
+    }
+
     private static func firstArray(_ values: [Any?]) -> [Any] {
         values.compactMap { $0 as? [Any] }.first ?? []
     }
 
     private static func number(_ value: Any?) -> NSNumber? {
         value as? NSNumber
+    }
+
+    private static func iso8601Date(from string: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: string) {
+            return date
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: string)
     }
 
     private static func jsonValue(_ lhs: Any?, equals rhs: [String: Any]) -> Bool {

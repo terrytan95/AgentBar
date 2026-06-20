@@ -6,7 +6,7 @@ APP_NAME="AgentBar"
 BUNDLE_ID="com.terrytan.AgentBar"
 MIN_SYSTEM_VERSION="14.0"
 APP_VERSION="1.1.13"
-APP_BUILD="129"
+APP_BUILD="130"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"

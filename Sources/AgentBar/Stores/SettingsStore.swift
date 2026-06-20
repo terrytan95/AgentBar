@@ -73,6 +73,10 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(autoCodexAccountRotationEnabled, forKey: Keys.autoCodexAccountRotationEnabled) }
     }
 
+    @Published var detailedResetCreditsEnabled: Bool {
+        didSet { defaults.set(detailedResetCreditsEnabled, forKey: Keys.detailedResetCreditsEnabled) }
+    }
+
     @Published var codexRotationThresholdRemainingPercent: Double {
         didSet {
             let clamped = Self.clampedRotationThreshold(codexRotationThresholdRemainingPercent)
@@ -165,6 +169,7 @@ final class SettingsStore: ObservableObject {
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
+        detailedResetCreditsEnabled = defaults.object(forKey: Keys.detailedResetCreditsEnabled) as? Bool ?? false
         let savedRotationThreshold = defaults.double(forKey: Keys.codexRotationThresholdRemainingPercent)
         codexRotationThresholdRemainingPercent = Self.clampedRotationThreshold(savedRotationThreshold > 0 ? savedRotationThreshold : 10)
         dailyTokenBudget = Self.clampedBudgetCount(defaults.integer(forKey: Keys.dailyTokenBudget))
@@ -230,6 +235,7 @@ final class SettingsStore: ObservableObject {
         static let useDarkAppearance = "useDarkAppearance"
         static let accountSortMode = "accountSortMode"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
+        static let detailedResetCreditsEnabled = "detailedResetCreditsEnabled"
         static let codexRotationThresholdRemainingPercent = "codexRotationThresholdRemainingPercent"
         static let dailyTokenBudget = "dailyTokenBudget"
         static let weeklyTokenBudget = "weeklyTokenBudget"

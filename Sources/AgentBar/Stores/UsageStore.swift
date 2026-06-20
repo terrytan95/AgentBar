@@ -20,6 +20,7 @@ final class UsageStore: ObservableObject {
     private let codexUsageReader: @Sendable () -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
+    private let codexAccountRemover: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
     private let manualCodexAppRestarter: @Sendable () -> Void
     private let codexAccountSwitchFailurePrompter: @Sendable (CodexAccountSwitchRecovery) -> Void
@@ -48,6 +49,9 @@ final class UsageStore: ObservableObject {
         codexAccountSwitcher: @escaping @Sendable (String) throws -> Void = { accountID in
             try CodexAccountSwitcher().switchActiveAccount(accountID: accountID)
         },
+        codexAccountRemover: @escaping @Sendable (String) throws -> Void = { accountID in
+            try CodexAccountRemover().removeAccount(accountID: accountID)
+        },
         automaticCodexRestarter: @escaping @Sendable () -> CodexAppRestartResult = {
             CodexAppRestarter().restartIfNoWorkIsRunning()
         },
@@ -67,6 +71,7 @@ final class UsageStore: ObservableObject {
         self.codexUsageReader = codexUsageReader
         self.claudeUsageReader = claudeUsageReader
         self.codexAccountSwitcher = codexAccountSwitcher
+        self.codexAccountRemover = codexAccountRemover
         self.automaticCodexRestarter = automaticCodexRestarter
         self.manualCodexAppRestarter = manualCodexAppRestarter
         self.codexAccountSwitchFailurePrompter = codexAccountSwitchFailurePrompter
@@ -247,6 +252,35 @@ final class UsageStore: ObservableObject {
 
     func switchActiveAccount(_ account: UsageAccount) {
         switchCodexAccount(account, restartMode: .manualForceCodexAppRestart)
+    }
+
+    func removeAccount(_ account: UsageAccount) {
+        guard account.service == .codex else {
+            lastError = AccountActionError.unsupportedService.localizedDescription
+            return
+        }
+        let remover = codexAccountRemover
+        lastError = nil
+        DispatchQueue.global(qos: .utility).async {
+            let result = Result {
+                try remover(account.id)
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if case let .failure(error) = result {
+                    self.lastError = error.localizedDescription.redactedForCredentialWords
+                    return
+                }
+                if self.manualCodexRotationOverrideAccountID == account.id {
+                    self.manualCodexRotationOverrideAccountID = nil
+                }
+                if self.pendingCodexSwitchRecovery?.accountID == account.id {
+                    self.pendingCodexSwitchRecovery = nil
+                }
+                self.accounts.removeAll { $0.service == .codex && $0.id == account.id }
+                self.refresh(force: true)
+            }
+        }
     }
 
     func evaluateAutomaticCodexRotation(now: Date = Date()) {

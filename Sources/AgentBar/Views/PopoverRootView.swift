@@ -192,7 +192,8 @@ struct PopoverRootView: View {
                         theme: store.settings.themeColor,
                         isSwitching: store.switchingAccountID == account.id,
                         onSwitch: { store.switchActiveAccount(account) },
-                        onLogin: { store.openLogin(for: account) }
+                        onLogin: { store.openLogin(for: account) },
+                        onRemove: { store.removeAccount(account) }
                     )
                 }
             }
@@ -449,6 +450,8 @@ struct AccountRowView: View {
     var isSwitching: Bool
     var onSwitch: () -> Void
     var onLogin: () -> Void
+    var onRemove: () -> Void
+    @State private var isConfirmingRemoval = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -463,41 +466,54 @@ struct AccountRowView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                if account.needsLogin {
-                    Button {
-                        onLogin()
-                    } label: {
-                        Label(L.text("login_account", language), systemImage: "person.crop.circle.badge.exclamationmark")
-                            .labelStyle(.titleAndIcon)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(.red)
-                    .pointingHandCursor()
-                } else if account.isActive {
-                    Text(L.text("current", language))
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(theme.primary, in: Capsule())
-                } else {
-                    Button {
-                        onSwitch()
-                    } label: {
-                        if isSwitching {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Label(L.text("use_account", language), systemImage: "arrow.triangle.2.circlepath")
+                HStack(spacing: 6) {
+                    if account.needsLogin {
+                        Button {
+                            onLogin()
+                        } label: {
+                            Label(L.text("login_account", language), systemImage: "person.crop.circle.badge.exclamationmark")
                                 .labelStyle(.titleAndIcon)
                         }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .tint(.red)
+                        .pointingHandCursor()
+                    } else if account.isActive {
+                        Text(L.text("current", language))
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(theme.primary, in: Capsule())
+                    } else {
+                        Button {
+                            onSwitch()
+                        } label: {
+                            if isSwitching {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Label(L.text("use_account", language), systemImage: "arrow.triangle.2.circlepath")
+                                    .labelStyle(.titleAndIcon)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(theme.primary)
+                        .disabled(isSwitching)
+                        .pointingHandCursor(enabled: !isSwitching)
                     }
-                    .buttonStyle(.bordered)
+
+                    Button(role: .destructive) {
+                        isConfirmingRemoval = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
                     .controlSize(.small)
-                    .tint(theme.primary)
-                    .disabled(isSwitching)
-                    .pointingHandCursor(enabled: !isSwitching)
+                    .foregroundStyle(.red)
+                    .help(L.text("remove_account", language))
+                    .pointingHandCursor()
                 }
             }
 
@@ -549,6 +565,13 @@ struct AccountRowView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(account.needsLogin ? Color.red.opacity(0.70) : Color.clear, lineWidth: 1.5)
+        }
+        .confirmationDialog(L.text("remove_account", language), isPresented: $isConfirmingRemoval) {
+            Button(L.text("remove_account", language), role: .destructive) {
+                onRemove()
+            }
+        } message: {
+            Text(L.text("remove_account_confirmation", language))
         }
     }
 

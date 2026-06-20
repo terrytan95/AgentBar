@@ -671,7 +671,7 @@ struct StatisticsView: View {
         } else {
             let rows = store.accounts.flatMap { account in
                 (account.resetCredits?.resets ?? []).enumerated().map { index, reset in
-                    ResetExpiryRowData(account: account.displayName, index: index + 1, expiresAt: reset.expiresAt)
+                    ResetExpiryRowData(account: account.displayNameWithWorkspace(language: store.language), index: index + 1, expiresAt: reset.expiresAt)
                 }
             }
             if rows.isEmpty {
@@ -1456,7 +1456,7 @@ private struct CurrentLimitSummaryStrip: View {
         HStack(spacing: 8) {
             SummaryChip(
                 title: localized("most_constrained"),
-                value: summary.mostConstrainedAccount?.displayName ?? "--",
+                value: summary.mostConstrainedAccount?.displayNameWithWorkspace(language: language) ?? "--",
                 color: theme.quotaColor(remaining: summary.mostConstrainedAccount?.mostConstrainedRemainingPercent)
             )
             SummaryChip(
@@ -1539,6 +1539,12 @@ private struct QuotaPressurePanel: View {
                     Text(recommendedAccount.displayName)
                         .font(.system(size: 12, weight: .bold))
                         .lineLimit(1)
+                    if let workspaceLine = recommendedAccount.workspaceLine(language: language) {
+                        Text(workspaceLine)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     if let resetCredits = recommendedAccount.resetCredits, resetCredits.hasAvailableCredits {
                         Text(resetCredits.summaryLine(language: language))
                             .font(.system(size: 9, weight: .semibold))
@@ -2047,6 +2053,12 @@ private struct AccountLimitGroupView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if let workspaceLine = account.workspaceLine(language: language) {
+                        Text(workspaceLine)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer()
                 if account.needsLogin {

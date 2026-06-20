@@ -7,12 +7,14 @@ final class UsageParsingTests: XCTestCase {
         let registry = """
         {
           "schema_version": 3,
-          "active_account_key": "acct-a",
+          "active_account_key": "user-a::workspace-a",
           "accounts": [
             {
-              "account_key": "acct-a",
+              "account_key": "user-a::workspace-a",
               "alias": "Work",
               "email": "person@example.com",
+              "account_name": "Team Workspace",
+              "chatgpt_account_id": "workspace-a",
               "plan": "team",
               "last_usage_at": 1781388220,
               "last_usage": {
@@ -41,6 +43,9 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts[0].displayName, "person@example.com")
         XCTAssertEqual(snapshot.accounts[0].username, "person@example.com")
         XCTAssertEqual(snapshot.accounts[0].maskedEmail, "p***@example.com")
+        XCTAssertEqual(snapshot.accounts[0].workspaceName, "Team Workspace")
+        XCTAssertEqual(snapshot.accounts[0].workspaceID, "workspace-a")
+        XCTAssertEqual(snapshot.accounts[0].workspaceLine(language: .english), "Workspace: Team Workspace · workspace-a")
         XCTAssertEqual(snapshot.accounts[0].fiveHourWindow?.usedPercent, 18)
         XCTAssertEqual(snapshot.accounts[0].weeklyWindow?.usedPercent, 51)
         XCTAssertEqual(snapshot.accounts[0].resetCredits?.availableCount, 2)
@@ -48,6 +53,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(snapshot.accounts[0].isActive)
         XCTAssertEqual(snapshot.accounts[1].displayName, "Personal")
         XCTAssertEqual(snapshot.accounts[1].username, "Personal")
+        XCTAssertEqual(snapshot.accounts[1].workspaceName, "Personal")
         XCTAssertFalse(snapshot.accounts[1].isActive)
         XCTAssertFalse(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("token"))
     }

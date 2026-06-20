@@ -79,7 +79,7 @@ struct StatisticsView: View {
         .padding(.horizontal, 12)
         .padding(.top, 42)
         .frame(maxHeight: .infinity, alignment: .top)
-        .glassPanel(cornerRadius: 0, interactive: false)
+        .agentBarPanel(cornerRadius: 0)
     }
 
     private func setTopTab(_ tab: DashboardTopTab) {
@@ -136,7 +136,7 @@ struct StatisticsView: View {
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.86)
         .tactilePlainButton(enabled: enabled)
-        .glassPanel(cornerRadius: 8, interactive: enabled)
+        .agentBarPanel(cornerRadius: 8)
     }
 
     private var usageContent: some View {
@@ -184,7 +184,7 @@ struct StatisticsView: View {
             .accessibilityLabel(Text(L.text("refresh", store.language)))
         }
         .tactilePlainButton()
-        .glassPanel(cornerRadius: 10, interactive: true)
+        .agentBarPanel(cornerRadius: 10)
         .help(L.text("refresh", store.language))
     }
 
@@ -289,7 +289,7 @@ struct StatisticsView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 30)
-            .glassPanel(cornerRadius: 12, interactive: true)
+            .agentBarPanel(cornerRadius: 12)
 
             dashboardRefreshButton
         }
@@ -776,7 +776,7 @@ private struct DashboardKPI: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
         .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
-        .dashboardPanel()
+        .agentBarPanel()
     }
 }
 
@@ -792,7 +792,7 @@ private struct Panel<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .dashboardPanel()
+        .agentBarPanel()
     }
 }
 
@@ -825,7 +825,7 @@ private struct ResizablePanel<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .dashboardPanel()
+        .agentBarPanel()
         .transaction { transaction in
             transaction.animation = nil
         }
@@ -1174,7 +1174,7 @@ private struct LoadingStatusPill: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 24)
-        .glassPanel(cornerRadius: 12, interactive: false)
+        .agentBarPanel(cornerRadius: 12)
     }
 }
 
@@ -1197,7 +1197,7 @@ private struct LoadingAccountPanel: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassPanel(cornerRadius: 14, interactive: true)
+        .agentBarPanel(cornerRadius: 14)
     }
 }
 
@@ -1827,7 +1827,7 @@ private struct SettingsGroup<Content: View>: View {
                 content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .dashboardPanel()
+            .agentBarPanel()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1873,6 +1873,34 @@ private struct BudgetIntegerField: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct CodexRotationThresholdControl: View {
+    @Binding var threshold: Double
+    var isEnabled: Bool
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField(
+                L.text("codex_rotation_threshold", language),
+                value: $threshold,
+                format: .number.precision(.fractionLength(0))
+            )
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .frame(width: 58)
+
+            Text("%")
+                .foregroundStyle(.secondary)
+
+            Stepper("", value: $threshold, in: 1...100, step: 1)
+                .labelsHidden()
+        }
+        .disabled(!isEnabled)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(L.text("codex_rotation_threshold", language))
     }
 }
 
@@ -1949,18 +1977,6 @@ private struct ModelBreakdownRow: Identifiable {
     var cost: Decimal?
     var isHeader: Bool
     var dividerAfter: Bool
-}
-
-private extension View {
-    func dashboardPanel() -> some View {
-        glassPanel(cornerRadius: 12, interactive: true)
-    }
-
-    @ViewBuilder
-    func glassPanel(cornerRadius: CGFloat, interactive: Bool) -> some View {
-        self
-            .agentBarPanel(cornerRadius: cornerRadius)
-    }
 }
 
 private extension UsageRange {

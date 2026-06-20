@@ -115,7 +115,7 @@ struct AuditView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
         .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
-        .auditCard()
+        .agentBarPanel()
     }
 
     @ViewBuilder
@@ -233,7 +233,7 @@ struct AuditView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .auditCard()
+        .agentBarPanel()
     }
 
     private var budgetStatusForReport: BudgetStatus? {
@@ -324,11 +324,5 @@ private struct EmptyAuditMessage: View {
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, minHeight: 72, alignment: .center)
-    }
-}
-
-private extension View {
-    func auditCard() -> some View {
-        agentBarPanel()
     }
 }

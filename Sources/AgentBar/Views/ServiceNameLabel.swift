@@ -20,20 +20,3 @@ struct OpenAILogoMark: View {
         .accessibilityHidden(true)
     }
 }
-
-struct ServiceNameLabel: View {
-    var service: UsageService
-    var title: String
-    var logoSize: CGFloat = 10
-    var spacing: CGFloat = 5
-
-    var body: some View {
-        HStack(spacing: spacing) {
-            if service == .codex {
-                OpenAILogoMark(size: logoSize)
-            }
-            Text(title)
-        }
-        .lineLimit(1)
-    }
-}

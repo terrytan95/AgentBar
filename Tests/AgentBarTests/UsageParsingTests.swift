@@ -255,6 +255,63 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(String(data: data, encoding: .utf8)?.contains("secret-access-token") ?? true)
     }
 
+    func testCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registryURL = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"person@example.com"}]}
+        """.data(using: .utf8)!.write(to: registryURL)
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"secret-access-token","account_id":"chatgpt-account-id"}}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-a.auth.json"))
+
+        let urlRecorder = UsageAPIURLRecorder()
+        let syncer = CodexUsageAPISyncer(
+            homeDirectory: temp,
+            usageClient: { request, _ in
+                urlRecorder.record(request.url?.absoluteString ?? "")
+                if request.url == CodexUsageAPISyncer.resetCreditsEndpoint {
+                    XCTAssertEqual(request.value(forHTTPHeaderField: "originator"), "Codex Desktop")
+                    return CodexUsageAPIResponse(
+                        statusCode: 200,
+                        data: """
+                        {
+                          "available_count": 2,
+                          "credits": [
+                            {"id":"a","status":"available","expires_at":"2026-07-12T18:38:00Z"},
+                            {"id":"b","status":"redeemed","expires_at":"2026-07-13T18:38:00Z"},
+                            {"id":"c","status":"available","expires_at":"2026-07-18T15:16:00Z"}
+                          ]
+                        }
+                        """.data(using: .utf8)!
+                    )
+                }
+                return CodexUsageAPIResponse(
+                    statusCode: 200,
+                    data: """
+                    {"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}},"rate_limit_reset_credits":{"available_count":2}}
+                    """.data(using: .utf8)!
+                )
+            },
+            detailedResetCreditsEnabled: true
+        )
+
+        XCTAssertEqual(syncer.refreshUsage(), .success)
+        XCTAssertEqual(urlRecorder.urls, [
+            "https://chatgpt.com/backend-api/wham/usage",
+            "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
+        ])
+        let usage = try XCTUnwrap(registryAccount(from: registryURL)["last_usage"] as? [String: Any])
+        let resetCredits = try XCTUnwrap(usage["reset_credits"] as? [String: Any])
+        XCTAssertEqual(resetCredits["available_count"] as? Int, 2)
+        let resets = try XCTUnwrap(resetCredits["resets"] as? [[String: Any]])
+        XCTAssertEqual(resets.count, 2)
+        XCTAssertEqual(resets.map { $0["expires_at"] as? Double }, [1_783_881_480, 1_784_387_760])
+    }
+
     func testCodexUsageAPISyncerPersists401AndClearsItAfterSuccess() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -1063,6 +1120,23 @@ final class UsageParsingTests: XCTestCase {
         func record(_ request: URLRequest) {
             lock.lock()
             self.request = request
+            lock.unlock()
+        }
+    }
+
+    private final class UsageAPIURLRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var recordedURLs: [String] = []
+
+        var urls: [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedURLs
+        }
+
+        func record(_ url: String) {
+            lock.lock()
+            recordedURLs.append(url)
             lock.unlock()
         }
     }

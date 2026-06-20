@@ -62,6 +62,10 @@ struct StatisticsView: View {
                     topTab = .usage
                     viewMode = .overview
                 }
+                sidebarItem("Resets", systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
+                    topTab = .usage
+                    viewMode = .resets
+                }
                 sidebarItem("Audit", systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
                     topTab = .usage
                     viewMode = .audit
@@ -145,6 +149,8 @@ struct StatisticsView: View {
                 switch viewMode {
                 case .overview:
                     dashboardContent
+                case .resets:
+                    resetsContent
                 case .audit:
                     AuditView(
                         store: store,
@@ -294,6 +300,50 @@ struct StatisticsView: View {
             dashboardRefreshButton
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var resetsContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Resets")
+                        .font(.system(size: 20, weight: .bold))
+                    Text("Banked credits, expiry warnings, and the spend call.")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle(isOn: $settings.detailedResetCreditsEnabled) {
+                    Label("Expiry dates", systemImage: settings.detailedResetCreditsEnabled ? "hourglass.circle.fill" : "hourglass")
+                }
+                .toggleStyle(.button)
+                .help("Opt in to a read-only reset-credit expiry check using local Codex auth")
+                .onChange(of: settings.detailedResetCreditsEnabled) { _, enabled in
+                    if enabled {
+                        store.refresh(force: true, showManualFeedback: true)
+                    }
+                }
+                dashboardRefreshButton
+            }
+
+            HStack(spacing: 8) {
+                SummaryChip(title: "Resets", value: "\(totalResetCreditsCount)", color: settings.themeColor.primary)
+                SummaryChip(title: "Next expiry", value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry))
+                SummaryChip(title: "5H left", value: DisplayFormatters.percentString(store.activeAccount?.fiveHourWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.fiveHourWindow?.remainingPercent))
+                SummaryChip(title: "Weekly left", value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.weeklyWindow?.remainingPercent))
+            }
+
+            ResetAdvicePanel(advice: resetSpendAdvice, theme: settings.themeColor)
+
+            HStack(alignment: .top, spacing: 14) {
+                Panel(title: "Expiry watch") {
+                    resetExpiryRows
+                }
+                Panel(title: "Current windows") {
+                    currentLimitsRows
+                }
+            }
+        }
     }
 
     private var settingsContent: some View {
@@ -595,6 +645,46 @@ struct StatisticsView: View {
         store.accounts.reduce(0) { $0 + ($1.resetCredits?.visibleCount ?? 0) }
     }
 
+    private var nextResetExpiry: Date? {
+        store.accounts
+            .flatMap { $0.resetCredits?.resets ?? [] }
+            .compactMap(\.expiresAt)
+            .filter { $0 > Date() }
+            .sorted()
+            .first
+    }
+
+    private var resetSpendAdvice: ResetSpendAdvice {
+        ResetSpendAdvice.make(
+            fiveHour: store.activeAccount?.fiveHourWindow,
+            weekly: store.activeAccount?.weeklyWindow,
+            resetCount: totalResetCreditsCount,
+            nextExpiry: nextResetExpiry
+        )
+    }
+
+    @ViewBuilder
+    private var resetExpiryRows: some View {
+        if !settings.detailedResetCreditsEnabled {
+            EmptyPanelMessage("Turn on Expiry dates to fetch detailed reset-credit expiry times.")
+        } else {
+            let rows = store.accounts.flatMap { account in
+                (account.resetCredits?.resets ?? []).enumerated().map { index, reset in
+                    ResetExpiryRowData(account: account.displayName, index: index + 1, expiresAt: reset.expiresAt)
+                }
+            }
+            if rows.isEmpty {
+                EmptyPanelMessage(totalResetCreditsCount > 0 ? "No detailed expiry dates returned yet." : "No banked resets found.")
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(rows) { row in
+                        ResetExpiryRow(row: row, language: store.language, theme: settings.themeColor)
+                    }
+                }
+            }
+        }
+    }
+
     private var quotaPressure: QuotaPressureInsight {
         UsageInsights.quotaPressure(
             accounts: store.accounts,
@@ -720,6 +810,14 @@ struct StatisticsView: View {
         if percent < 35 { return .orange }
         return fallback
     }
+
+    private func resetExpiryColor(_ date: Date?) -> Color {
+        guard let date else { return .secondary }
+        let seconds = date.timeIntervalSinceNow
+        if seconds <= 86_400 { return .red }
+        if seconds <= 3 * 86_400 { return .orange }
+        return settings.themeColor.primary
+    }
 }
 
 enum DashboardTopTab: String, Hashable {
@@ -729,7 +827,84 @@ enum DashboardTopTab: String, Hashable {
 
 private enum DashboardViewMode: Hashable {
     case overview
+    case resets
     case audit
+}
+
+private struct ResetSpendAdvice {
+    var title: String
+    var message: String
+    var detail: String
+    var systemImage: String
+    var color: Color
+
+    static func make(fiveHour: UsageWindow?, weekly: UsageWindow?, resetCount: Int, nextExpiry: Date?, now: Date = Date()) -> ResetSpendAdvice {
+        if resetCount > 0, let nextExpiry, nextExpiry.timeIntervalSince(now) <= 86_400 {
+            return ResetSpendAdvice(title: "Use it or lose it", message: "A banked reset expires today. If useful work is queued, spend it before it disappears.", detail: "Expiry warning", systemImage: "exclamationmark.octagon.fill", color: .red)
+        }
+        guard let weekly else {
+            return ResetSpendAdvice(title: "Waiting on meters", message: "Reset stash is visible, but Codex usage windows are not loaded yet.", detail: "Refresh after Codex signs in", systemImage: "questionmark.circle", color: .secondary)
+        }
+        let weeklyRemaining = weekly.remainingPercent
+        let weeklyReset = weekly.resetsAt?.timeIntervalSince(now)
+        if resetCount == 0 {
+            return ResetSpendAdvice(title: "No reset cushion", message: "No banked reset is available, so keep an eye on the weekly meter.", detail: DisplayFormatters.percentString(weeklyRemaining) + " weekly left", systemImage: "exclamationmark.triangle.fill", color: .secondary)
+        }
+        if let fiveHour, let fiveReset = fiveHour.resetsAt?.timeIntervalSince(now), fiveHour.remainingPercent <= 12, weeklyRemaining >= 25, fiveReset <= 90 * 60 {
+            return ResetSpendAdvice(title: "Let the 5H tank refill", message: "Weekly room is still decent and the short window is close. Save the reset.", detail: "5H resets \(DisplayFormatters.relativeString(for: fiveHour.resetsAt ?? now))", systemImage: "hourglass", color: .blue)
+        }
+        if let fiveHour, fiveHour.remainingPercent <= 12, weeklyRemaining >= 50 {
+            return ResetSpendAdvice(title: "Deadline call", message: "The short window is tight but weekly runway is healthy. Spend a reset only if real work is blocked.", detail: "5H nearly empty", systemImage: "bolt.badge.clock", color: .orange)
+        }
+        if let weeklyReset, resetCount >= 2, weeklyRemaining <= 15, weeklyReset >= 4 * 86_400 {
+            return ResetSpendAdvice(title: "Go burn some tokens", message: "You have resets banked, weekly room is thin, and refresh is days away.", detail: DisplayFormatters.percentString(weeklyRemaining) + " weekly left", systemImage: "bolt.fill", color: .green)
+        }
+        if let weeklyReset, weeklyRemaining <= 20, weeklyReset >= 2 * 86_400 {
+            return ResetSpendAdvice(title: "Green light, with brakes", message: "If Codex blocks real work, spending a reset makes sense. Do not burn it just to tidy the meter.", detail: DisplayFormatters.relativeString(for: weekly.resetsAt ?? now) + " to weekly reset", systemImage: "bolt.badge.clock", color: .orange)
+        }
+        if let weeklyReset, weeklyRemaining >= 35, weeklyReset <= 3 * 86_400 {
+            return ResetSpendAdvice(title: "Hold that reset", message: "Weekly room is healthy and the next refresh is close.", detail: DisplayFormatters.percentString(weeklyRemaining) + " weekly left", systemImage: "shield.fill", color: .blue)
+        }
+        return ResetSpendAdvice(title: "Cruise mode", message: "Keep working. Re-check before a big run.", detail: DisplayFormatters.percentString(weeklyRemaining) + " weekly left", systemImage: "gauge.with.dots.needle.50percent", color: .cyan)
+    }
+}
+
+private struct ResetAdvicePanel: View {
+    var advice: ResetSpendAdvice
+    var theme: AppThemeColor
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: advice.systemImage)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(advice.color)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(advice.title)
+                        .font(.system(size: 15, weight: .bold))
+                    Text(advice.detail)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(advice.color, in: Capsule())
+                }
+                Text(advice.message)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(advice.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(advice.color.opacity(0.22), lineWidth: 0.5)
+        }
+    }
 }
 
 private struct DashboardKPI: View {
@@ -1676,6 +1851,72 @@ private struct BudgetStatusRow: View {
     private func percentText(_ fraction: Double?) -> String {
         guard let fraction else { return "--" }
         return "\(Int((fraction * 100).rounded()))%"
+    }
+}
+
+private struct ResetExpiryRowData: Identifiable {
+    var account: String
+    var index: Int
+    var expiresAt: Date?
+
+    var id: String { "\(account)-\(index)-\(expiresAt?.timeIntervalSince1970 ?? 0)" }
+}
+
+private struct ResetExpiryRow: View {
+    var row: ResetExpiryRowData
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: iconName)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(row.account) · Reset \(row.index)")
+                    .font(.system(size: 12, weight: .bold))
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Text(badge)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var detail: String {
+        guard let expiresAt = row.expiresAt else { return "Expiry date unavailable" }
+        return "\(DisplayFormatters.shortDateTimeString(for: expiresAt, language: language)) · \(DisplayFormatters.relativeString(for: expiresAt))"
+    }
+
+    private var badge: String {
+        guard let expiresAt = row.expiresAt else { return "Unknown" }
+        let seconds = expiresAt.timeIntervalSinceNow
+        if seconds <= 0 { return "Expired" }
+        if seconds <= 86_400 { return "Today" }
+        if seconds <= 3 * 86_400 { return "Soon" }
+        if seconds <= 7 * 86_400 { return "This week" }
+        return "Available"
+    }
+
+    private var iconName: String {
+        badge == "Expired" || badge == "Today" ? "exclamationmark.octagon.fill" : "checkmark.seal.fill"
+    }
+
+    private var color: Color {
+        guard let expiresAt = row.expiresAt else { return .secondary }
+        let seconds = expiresAt.timeIntervalSinceNow
+        if seconds <= 86_400 { return .red }
+        if seconds <= 3 * 86_400 { return .orange }
+        return theme.primary
     }
 }
 

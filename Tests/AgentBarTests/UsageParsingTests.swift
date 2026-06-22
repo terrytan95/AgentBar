@@ -58,6 +58,50 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("token"))
     }
 
+    func testCodexRegistryParsesMultipleWorkspacesForOneAccount() throws {
+        let registry = """
+        {
+          "schema_version": 3,
+          "active_account_key": "acct-business",
+          "accounts": [
+            {
+              "account_key": "acct-business",
+              "email": "person@example.com",
+              "workspace_name": "Core Team",
+              "workspace_id": "core-123456",
+              "workspace_names": ["Fresh Invite"],
+              "workspaces": [
+                {"name": "Client Team", "id": "client-ab"},
+                {"workspace_name": "Core Team", "workspace_id": "core-123456"}
+              ],
+              "invites": [
+                {"organization_name": "Partner Space", "chatgpt_account_id": "partner-id"}
+              ]
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CodexUsageReader.parseRegistry(data: registry, now: Date(timeIntervalSince1970: 1_781_388_300))
+        let account = try XCTUnwrap(snapshot.accounts.first)
+
+        XCTAssertEqual(account.workspaceName, "Core Team")
+        XCTAssertEqual(account.workspaceID, "core-123456")
+        XCTAssertEqual(account.workspaces.count, 4)
+        XCTAssertEqual(account.workspaceDisplayValues, [
+            "Core Team · core-123456",
+            "Fresh Invite",
+            "Client Team · client-ab",
+            "Partner Space · partner-id"
+        ])
+        XCTAssertEqual(account.workspaceLines(language: .english, limit: 3), [
+            "Workspaces: Core Team · core-123456",
+            "Fresh Invite",
+            "Client Team · client-ab",
+            "+1 more"
+        ])
+    }
+
     func testCodexRegistryFlagsAccountsThatNeedLoginAgain() throws {
         let registry = """
         {

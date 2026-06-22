@@ -101,8 +101,9 @@ struct CodexUsageReader {
         let accounts = registry.accounts.map { raw in
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
             let displayName = username ?? "Codex Account"
-            let workspaceName = firstNonEmptyOptional([raw.workspaceName, raw.accountName, raw.organizationName])
-            let workspaceID = firstNonEmptyOptional([raw.workspaceID, raw.chatGPTAccountID, raw.accountKey.codexWorkspaceID])
+            let workspaces = raw.usageWorkspaces
+            let workspaceName = workspaces.first?.name
+            let workspaceID = workspaces.first?.workspaceID
             let primary = raw.lastUsage?.primary.map {
                 UsageWindow(kind: .fiveHour, usedPercent: $0.usedPercent, windowMinutes: $0.windowMinutes, resetsAt: epochDate($0.resetsAt))
             }
@@ -133,7 +134,8 @@ struct CodexUsageReader {
                 isActive: raw.accountKey == registry.activeAccountKey,
                 loginWarning: loginWarning,
                 workspaceName: workspaceName,
-                workspaceID: workspaceID
+                workspaceID: workspaceID,
+                workspaces: workspaces
             )
         }
 
@@ -318,6 +320,13 @@ private struct CodexRegistryAccount: Decodable {
     var workspaceID: String?
     var workspaceName: String?
     var organizationName: String?
+    var workspaceNames: [String]
+    var workspaceIDs: [String]
+    var organizationNames: [String]
+    var workspaces: [CodexWorkspaceCandidate]
+    var organizations: [CodexWorkspaceCandidate]
+    var invites: [CodexWorkspaceCandidate]
+    var chatGPTAccounts: [CodexWorkspaceCandidate]
     var plan: String?
     var lastUsage: CodexLastUsage?
     var lastUsageAt: Double?
@@ -331,11 +340,41 @@ private struct CodexRegistryAccount: Decodable {
         case chatGPTAccountID = "chatgpt_account_id"
         case workspaceID = "workspace_id"
         case workspaceName = "workspace_name"
+        case workspaceIDs = "workspace_ids"
+        case workspaceNames = "workspace_names"
         case organizationName = "organization_name"
+        case organizationNames = "organization_names"
+        case workspaces
+        case organizations
+        case invites
+        case chatGPTAccounts = "chatgpt_accounts"
         case plan
         case lastUsage = "last_usage"
         case lastUsageAt = "last_usage_at"
         case authError = "agentbar_auth_error"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        accountKey = try container.decode(String.self, forKey: .accountKey)
+        accountName = try container.decodeIfPresent(String.self, forKey: .accountName)
+        alias = try container.decodeIfPresent(String.self, forKey: .alias)
+        email = try container.decodeIfPresent(String.self, forKey: .email)
+        chatGPTAccountID = try container.decodeIfPresent(String.self, forKey: .chatGPTAccountID)
+        workspaceID = try container.decodeIfPresent(String.self, forKey: .workspaceID)
+        workspaceName = try container.decodeIfPresent(String.self, forKey: .workspaceName)
+        organizationName = try container.decodeIfPresent(String.self, forKey: .organizationName)
+        workspaceNames = (try? container.decodeIfPresent([String].self, forKey: .workspaceNames)) ?? []
+        workspaceIDs = (try? container.decodeIfPresent([String].self, forKey: .workspaceIDs)) ?? []
+        organizationNames = (try? container.decodeIfPresent([String].self, forKey: .organizationNames)) ?? []
+        workspaces = (try? container.decodeIfPresent([CodexWorkspaceCandidate].self, forKey: .workspaces)) ?? []
+        organizations = (try? container.decodeIfPresent([CodexWorkspaceCandidate].self, forKey: .organizations)) ?? []
+        invites = (try? container.decodeIfPresent([CodexWorkspaceCandidate].self, forKey: .invites)) ?? []
+        chatGPTAccounts = (try? container.decodeIfPresent([CodexWorkspaceCandidate].self, forKey: .chatGPTAccounts)) ?? []
+        plan = try container.decodeIfPresent(String.self, forKey: .plan)
+        lastUsage = try container.decodeIfPresent(CodexLastUsage.self, forKey: .lastUsage)
+        lastUsageAt = try container.decodeIfPresent(Double.self, forKey: .lastUsageAt)
+        authError = try container.decodeIfPresent(CodexAuthError.self, forKey: .authError)
     }
 
     func hasForcedLogoutWarning(authModifiedAt: Date? = nil) -> Bool {
@@ -348,6 +387,61 @@ private struct CodexRegistryAccount: Decodable {
             return true
         }
         return plan == "401" || lastUsage?.planType == "401"
+    }
+
+    var usageWorkspaces: [UsageWorkspace] {
+        let scalar = UsageWorkspace(
+            name: firstNonEmptyOptional([workspaceName, accountName, organizationName]),
+            workspaceID: firstNonEmptyOptional([workspaceID, chatGPTAccountID, accountKey.codexWorkspaceID])
+        )
+        let named = workspaceNames.map { UsageWorkspace(name: $0, workspaceID: nil) }
+        let identified = workspaceIDs.map { UsageWorkspace(name: nil, workspaceID: $0) }
+        let organizationNamed = organizationNames.map { UsageWorkspace(name: $0, workspaceID: nil) }
+        let candidates = workspaces + organizations + invites + chatGPTAccounts
+        return ([scalar] + named + identified + organizationNamed + candidates.map(\.usageWorkspace)).dedupedWorkspaces()
+    }
+}
+
+private struct CodexWorkspaceCandidate: Decodable {
+    var name: String?
+    var workspaceID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case displayName = "display_name"
+        case title
+        case workspaceName = "workspace_name"
+        case organizationName = "organization_name"
+        case id
+        case workspaceID = "workspace_id"
+        case accountID = "account_id"
+        case chatGPTAccountID = "chatgpt_account_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        if let value = try? decoder.singleValueContainer().decode(String.self) {
+            name = value
+            workspaceID = nil
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = firstNonEmptyOptional([
+            try container.decodeIfPresent(String.self, forKey: .name),
+            try container.decodeIfPresent(String.self, forKey: .displayName),
+            try container.decodeIfPresent(String.self, forKey: .title),
+            try container.decodeIfPresent(String.self, forKey: .workspaceName),
+            try container.decodeIfPresent(String.self, forKey: .organizationName)
+        ])
+        workspaceID = firstNonEmptyOptional([
+            try container.decodeIfPresent(String.self, forKey: .workspaceID),
+            try container.decodeIfPresent(String.self, forKey: .accountID),
+            try container.decodeIfPresent(String.self, forKey: .chatGPTAccountID),
+            try container.decodeIfPresent(String.self, forKey: .id)
+        ])
+    }
+
+    var usageWorkspace: UsageWorkspace {
+        UsageWorkspace(name: name, workspaceID: workspaceID)
     }
 }
 
@@ -615,6 +709,20 @@ private func firstNonEmptyOptional(_ values: [String?]) -> String? {
         guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return value
     }.first
+}
+
+private extension Array where Element == UsageWorkspace {
+    func dedupedWorkspaces() -> [UsageWorkspace] {
+        var seen = Set<String>()
+        return compactMap { workspace in
+            let name = workspace.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let workspaceID = workspace.workspaceID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard name?.isEmpty == false || workspaceID?.isEmpty == false else { return nil }
+            let key = "\(name?.lowercased() ?? "")|\(workspaceID?.lowercased() ?? "")"
+            guard seen.insert(key).inserted else { return nil }
+            return UsageWorkspace(name: name, workspaceID: workspaceID)
+        }
+    }
 }
 
 private func maskEmail(_ email: String?) -> String? {

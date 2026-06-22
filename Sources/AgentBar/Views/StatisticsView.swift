@@ -1539,8 +1539,8 @@ private struct QuotaPressurePanel: View {
                     Text(recommendedAccount.displayName)
                         .font(.system(size: 12, weight: .bold))
                         .lineLimit(1)
-                    if let workspaceLine = recommendedAccount.workspaceLine(language: language) {
-                        Text(workspaceLine)
+                    ForEach(recommendedAccount.workspaceLines(language: language), id: \.self) { line in
+                        Text(line)
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -2053,8 +2053,8 @@ private struct AccountLimitGroupView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if let workspaceLine = account.workspaceLine(language: language) {
-                        Text(workspaceLine)
+                    ForEach(account.workspaceLines(language: language), id: \.self) { line in
+                        Text(line)
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

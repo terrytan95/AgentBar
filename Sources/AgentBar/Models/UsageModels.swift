@@ -116,6 +116,22 @@ enum UsageAccountLoginWarning: String, Codable, Equatable, Sendable {
     case unreadableReset
 }
 
+struct UsageWorkspace: Codable, Equatable, Sendable {
+    var name: String?
+    var workspaceID: String?
+
+    var displayValue: String? {
+        let name = name.trimmedNonEmpty
+        let id = workspaceID.trimmedNonEmpty.map(Self.shortWorkspaceID)
+        let value = [name, id].compactMap { $0 }.joined(separator: " · ")
+        return value.isEmpty ? nil : value
+    }
+
+    private static func shortWorkspaceID(_ id: String) -> String {
+        id.count > 12 ? String(id.prefix(8)) : id
+    }
+}
+
 struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var service: UsageService
@@ -135,6 +151,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var loginWarning: UsageAccountLoginWarning? = nil
     var workspaceName: String? = nil
     var workspaceID: String? = nil
+    var workspaces: [UsageWorkspace] = []
 
     var mostConstrainedRemainingPercent: Double? {
         [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]
@@ -154,17 +171,30 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     }
 
     var workspaceDisplayValue: String? {
-        let name = workspaceName.trimmedNonEmpty
-        let id = workspaceID.trimmedNonEmpty.map(Self.shortWorkspaceID)
-        if name == displayName {
-            return id ?? name
-        }
-        let value = [name, id].compactMap { $0 }.joined(separator: " · ")
-        return value.isEmpty ? nil : value
+        workspaceDisplayValues.first
+    }
+
+    var workspaceDisplayValues: [String] {
+        let values = visibleWorkspaces.compactMap(\.displayValue)
+        return values.isEmpty ? [] : values
     }
 
     func workspaceLine(language: AppLanguage) -> String? {
-        workspaceDisplayValue.map { "\(L.text("workspace", language)): \($0)" }
+        workspaceLines(language: language).first
+    }
+
+    func workspaceLines(language: AppLanguage, limit: Int = 3) -> [String] {
+        let values = Array(workspaceDisplayValues.prefix(limit))
+        guard !values.isEmpty else { return [] }
+        let label = workspaceDisplayValues.count > 1 ? L.text("workspaces", language) : L.text("workspace", language)
+        var lines = values.enumerated().map { index, value in
+            index == 0 ? "\(label): \(value)" : value
+        }
+        let hidden = workspaceDisplayValues.count - values.count
+        if hidden > 0 {
+            lines.append("+\(hidden) \(L.text("more", language))")
+        }
+        return lines
     }
 
     func displayNameWithWorkspace(language: AppLanguage) -> String {
@@ -199,8 +229,10 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    private static func shortWorkspaceID(_ id: String) -> String {
-        id.count > 12 ? String(id.prefix(8)) : id
+    private var visibleWorkspaces: [UsageWorkspace] {
+        if !workspaces.isEmpty { return workspaces }
+        let legacy = UsageWorkspace(name: workspaceName, workspaceID: workspaceID)
+        return legacy.displayValue == nil ? [] : [legacy]
     }
 }
 

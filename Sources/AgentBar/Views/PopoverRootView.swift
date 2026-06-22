@@ -464,8 +464,8 @@ struct AccountRowView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if let workspaceLine = account.workspaceLine(language: language) {
-                        Text(workspaceLine)
+                    ForEach(account.workspaceLines(language: language), id: \.self) { line in
+                        Text(line)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

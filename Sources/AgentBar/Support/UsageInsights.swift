@@ -182,7 +182,7 @@ enum UsageInsights {
     ) -> TopUsageBreakdown {
         let usable = points.filter { $0.date <= now }
         return TopUsageBreakdown(
-            sessions: topRows(grouped: usable, limit: limit) { $0.sessionID ?? "Unknown session" },
+            sessions: topRows(grouped: usable, limit: limit) { $0.sessionTitle ?? $0.sessionID ?? "Unknown session" },
             days: topRows(grouped: usable, limit: limit) { DisplayFormatters.shortDayString(for: calendar.startOfDay(for: $0.date)) },
             models: topRows(grouped: usable, limit: limit) { $0.model },
             projects: topRows(grouped: usable, limit: limit) { $0.projectName ?? "Other" }

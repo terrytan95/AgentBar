@@ -162,6 +162,7 @@ struct CodexUsageReader {
         var currentCumulativeResetAt: Date?
         var previousCumulativeUsage: TokenTotals?
         var previousCumulativeResetAt: Date?
+        var currentSessionTitle: String?
         let decoder = JSONDecoder()
         let dateParser = CodexTimestampParser()
 
@@ -174,6 +175,7 @@ struct CodexUsageReader {
             let eventDate = parsedEventDate ?? .distantPast
             let sessionID = event.sessionID ?? fallbackSessionID
             let projectName = payload.projectName ?? fallbackProjectName
+            currentSessionTitle = currentSessionTitle ?? payload.sessionTitleCandidate
             if let resetAt = payload.rateLimits?.primary?.resetDate ?? payload.rateLimits?.secondary?.resetDate {
                 currentCumulativeResetAt = resetAt
             }
@@ -198,6 +200,7 @@ struct CodexUsageReader {
                         tokens: pointUsage,
                         estimatedCostUSD: Pricing.cost(model: model, tokens: pointUsage),
                         sessionID: sessionID,
+                        sessionTitle: currentSessionTitle,
                         projectName: projectName
                     )
                 )
@@ -303,6 +306,22 @@ struct CodexUsageReader {
         guard let activeAccountActivatedAt else { return true }
         guard let latestRateLimitAt else { return false }
         return latestRateLimitAt >= activeAccountActivatedAt
+    }
+
+    fileprivate static func sessionTitle(from message: String?) -> String? {
+        let lines = message?
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        guard !lines.isEmpty else { return nil }
+        if let requestIndex = lines.firstIndex(where: { $0.localizedCaseInsensitiveContains("My request for Codex") }) {
+            return lines.dropFirst(requestIndex + 1).first(where: isSessionTitleLine)
+        }
+        return lines.first(where: isSessionTitleLine)
+    }
+
+    private static func isSessionTitleLine(_ line: String) -> Bool {
+        !line.hasPrefix("#") && !line.hasPrefix("<image") && !line.hasPrefix("!")
     }
 }
 
@@ -674,18 +693,26 @@ private struct CodexSessionPayload: Decodable {
     var rateLimits: CodexRateLimits?
     var resetCredits: CodexResetCredits?
     var cwd: String?
+    var message: String?
+    var title: String?
 
     enum CodingKeys: String, CodingKey {
         case info
         case rateLimits = "rate_limits"
         case resetCredits = "rate_limit_reset_credits"
         case cwd
+        case message
+        case title
     }
 
     var projectName: String? {
         let value = cwd?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let value, !value.isEmpty else { return nil }
         return URL(fileURLWithPath: value).lastPathComponent
+    }
+
+    var sessionTitleCandidate: String? {
+        firstNonEmptyOptional([title, CodexUsageReader.sessionTitle(from: message)])
     }
 }
 

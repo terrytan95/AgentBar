@@ -131,15 +131,15 @@ final class UsageInsightsTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         let top = UsageInsights.topUsage(
             points: [
-                point(total: 1_000, minutesAgo: 10, now: now, model: "gpt-5", sessionID: "session-a", projectName: "AgentBar"),
-                point(total: 500, minutesAgo: 20, now: now, model: "gpt-5", sessionID: "session-a", projectName: "AgentBar"),
+                point(total: 1_000, minutesAgo: 10, now: now, model: "gpt-5", sessionID: "session-a", sessionTitle: "Fix high CPU usage", projectName: "AgentBar"),
+                point(total: 500, minutesAgo: 20, now: now, model: "gpt-5", sessionID: "session-a", sessionTitle: "Fix high CPU usage", projectName: "AgentBar"),
                 point(total: 800, minutesAgo: 30, now: now, model: "gpt-5-mini", sessionID: "session-b", projectName: "Other")
             ],
             now: now,
             calendar: Calendar(identifier: .gregorian)
         )
 
-        XCTAssertEqual(top.sessions.first?.label, "session-a")
+        XCTAssertEqual(top.sessions.first?.label, "Fix high CPU usage")
         XCTAssertEqual(top.sessions.first?.tokens, 1_500)
         XCTAssertEqual(top.projects.first?.label, "AgentBar")
         XCTAssertEqual(top.models.first?.label, "gpt-5")
@@ -296,6 +296,7 @@ final class UsageInsightsTests: XCTestCase {
         now: Date,
         model: String = "codex-local",
         sessionID: String? = nil,
+        sessionTitle: String? = nil,
         projectName: String? = nil
     ) -> UsagePoint {
         UsagePoint(
@@ -305,6 +306,7 @@ final class UsageInsightsTests: XCTestCase {
             tokens: TokenTotals(input: total / 2, cachedInput: 0, output: total / 2, reasoningOutput: 0, total: total),
             estimatedCostUSD: nil,
             sessionID: sessionID,
+            sessionTitle: sessionTitle,
             projectName: projectName
         )
     }

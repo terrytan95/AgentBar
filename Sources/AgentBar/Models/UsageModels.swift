@@ -302,6 +302,7 @@ struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var tokens: TokenTotals
     var estimatedCostUSD: Decimal?
     var sessionID: String? = nil
+    var sessionTitle: String? = nil
     var projectName: String? = nil
 }
 

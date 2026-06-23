@@ -109,6 +109,74 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(health.rows.map(\.service), [.claudeCode, .codex])
     }
 
+    func testQuotaETAUsesRecentTokenVelocity() throws {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let account = account(id: "active", name: "active@example.com", fiveHourUsed: 90, weeklyUsed: 20, now: now, active: true)
+        let eta = UsageInsights.quotaETA(
+            account: account,
+            points: [
+                point(total: 400, minutesAgo: 10, now: now),
+                point(total: 200, minutesAgo: 35, now: now),
+                point(total: 600, minutesAgo: 55, now: now)
+            ],
+            now: now
+        )
+
+        XCTAssertEqual(try XCTUnwrap(eta.windows.first { $0.minutes == 15 }?.tokens), 400)
+        XCTAssertEqual(try XCTUnwrap(eta.windows.first { $0.minutes == 30 }?.minutesUntilFiveHourExhaustion), 10, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(eta.windows.first { $0.minutes == 60 }?.minutesUntilFiveHourExhaustion), 6.667, accuracy: 0.001)
+    }
+
+    func testTopUsageBreakdownGroupsSessionsProjectsDaysAndModels() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let top = UsageInsights.topUsage(
+            points: [
+                point(total: 1_000, minutesAgo: 10, now: now, model: "gpt-5", sessionID: "session-a", projectName: "AgentBar"),
+                point(total: 500, minutesAgo: 20, now: now, model: "gpt-5", sessionID: "session-a", projectName: "AgentBar"),
+                point(total: 800, minutesAgo: 30, now: now, model: "gpt-5-mini", sessionID: "session-b", projectName: "Other")
+            ],
+            now: now,
+            calendar: Calendar(identifier: .gregorian)
+        )
+
+        XCTAssertEqual(top.sessions.first?.label, "session-a")
+        XCTAssertEqual(top.sessions.first?.tokens, 1_500)
+        XCTAssertEqual(top.projects.first?.label, "AgentBar")
+        XCTAssertEqual(top.models.first?.label, "gpt-5")
+        XCTAssertEqual(top.days.first?.tokens, 2_300)
+    }
+
+    func testRapidUsageAlertFlagsTenMinuteSpikeAgainstToday() throws {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let alert = UsageInsights.rapidUsageAlert(
+            points: [
+                point(total: 6_000, minutesAgo: 5, now: now),
+                point(total: 4_000, minutesAgo: 20, now: now)
+            ],
+            now: now,
+            calendar: Calendar(identifier: .gregorian)
+        )
+
+        XCTAssertEqual(try XCTUnwrap(alert).recentTokens, 6_000)
+        XCTAssertEqual(try XCTUnwrap(alert).todayShare, 0.6, accuracy: 0.001)
+    }
+
+    func testSwitchRecommendationExplainsWhyAlternativeIsBetter() throws {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let active = account(id: "active", name: "active@example.com", fiveHourUsed: 96, weeklyUsed: 20, now: now, active: true)
+        let better = account(id: "better", name: "better@example.com", fiveHourUsed: 32, weeklyUsed: 10, now: now, active: false)
+        let pressure = UsageInsights.quotaPressure(
+            accounts: [active, better],
+            points: [point(total: 4_000, minutesAgo: 15, now: now)],
+            rotationThresholdRemainingPercent: 10,
+            autoRotationEnabled: true,
+            now: now
+        )
+
+        XCTAssertTrue(try XCTUnwrap(pressure.recommendationReason).contains("active 5H 4%"))
+        XCTAssertTrue(try XCTUnwrap(pressure.recommendationReason).contains("better@example.com 5H 68%"))
+    }
+
     func testPopoverRecommendationSuggestsBestAccountWhenActiveQuotaIsCritical() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         let active = account(id: "active", name: "active@example.com", fiveHourUsed: 98, weeklyUsed: 30, now: now, active: true)
@@ -132,6 +200,7 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(recommendation.actionTitle, "Use better@example.com")
         XCTAssertTrue(recommendation.title.contains("Switch"))
         XCTAssertTrue(recommendation.detail.contains("active@example.com"))
+        XCTAssertTrue(recommendation.detail.contains("5H 2%"))
     }
 
     func testPopoverRecommendationPrioritizesAndExplainsResetCreditAccount() {
@@ -221,13 +290,22 @@ final class UsageInsightsTests: XCTestCase {
         )
     }
 
-    private func point(total: Int, minutesAgo: Int, now: Date) -> UsagePoint {
+    private func point(
+        total: Int,
+        minutesAgo: Int,
+        now: Date,
+        model: String = "codex-local",
+        sessionID: String? = nil,
+        projectName: String? = nil
+    ) -> UsagePoint {
         UsagePoint(
             service: .codex,
-            model: "codex-local",
+            model: model,
             date: now.addingTimeInterval(TimeInterval(-minutesAgo * 60)),
             tokens: TokenTotals(input: total / 2, cachedInput: 0, output: total / 2, reasoningOutput: 0, total: total),
-            estimatedCostUSD: nil
+            estimatedCostUSD: nil,
+            sessionID: sessionID,
+            projectName: projectName
         )
     }
 }

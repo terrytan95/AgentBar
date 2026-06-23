@@ -164,6 +164,10 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    var rapidUsageAlert: RapidUsageAlert? {
+        UsageInsights.rapidUsageAlert(points: points)
+    }
+
     var securityNotes: [String] {
         snapshots.values.flatMap(\.securityNotes)
     }
@@ -326,7 +330,7 @@ final class UsageStore: ObservableObject {
     }
 
     private var budgetWarningPrefix: String {
-        hasBudgetWarning ? "! " : ""
+        (hasBudgetWarning || rapidUsageAlert != nil) ? "! " : ""
     }
 
     private func switchCodexAccount(_ account: UsageAccount, restartMode: CodexSwitchRestartMode) {

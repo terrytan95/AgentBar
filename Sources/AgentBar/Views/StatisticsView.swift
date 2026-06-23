@@ -220,6 +220,10 @@ struct StatisticsView: View {
 
             QuotaPressurePanel(pressure: quotaPressure, language: store.language, theme: settings.themeColor)
 
+            if let quotaETA {
+                QuotaETAPanel(eta: quotaETA, language: store.language, theme: settings.themeColor)
+            }
+
             Panel(title: "\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))") {
                 DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
                     .frame(height: 206)
@@ -230,6 +234,10 @@ struct StatisticsView: View {
                         LegendItem(title: "Claude", color: settings.themeColor.secondary)
                     }
                 }
+            }
+
+            if let rapidUsageAlert {
+                RapidUsageAlertPanel(alert: rapidUsageAlert, language: store.language, theme: settings.themeColor)
             }
 
             if !usageAnomalies.isEmpty {
@@ -243,6 +251,9 @@ struct StatisticsView: View {
                     }
                     Panel(title: L.text("by_model", store.language)) {
                         modelRows
+                    }
+                    Panel(title: usageLocalized("top_usage")) {
+                        TopUsagePanel(breakdown: topUsage, language: store.language, theme: settings.themeColor)
                     }
                     if hasConfiguredBudgets {
                         Panel(title: budgetLocalized("budgets")) {
@@ -695,6 +706,19 @@ struct StatisticsView: View {
         )
     }
 
+    private var quotaETA: QuotaETA? {
+        guard let account = store.activeAccount else { return nil }
+        return UsageInsights.quotaETA(account: account, points: filteredPoints)
+    }
+
+    private var topUsage: TopUsageBreakdown {
+        UsageInsights.topUsage(points: filteredPoints)
+    }
+
+    private var rapidUsageAlert: RapidUsageAlert? {
+        UsageInsights.rapidUsageAlert(points: filteredPoints)
+    }
+
     private var usageAnomalies: [UsageAnomaly] {
         UsageInsights.usageAnomalies(points: filteredPoints)
     }
@@ -740,6 +764,14 @@ struct StatisticsView: View {
         switch (key, store.language) {
         case ("data_source_health", .chinese): "数据源健康"
         case ("data_source_health", _): "Data source health"
+        default: key
+        }
+    }
+
+    private func usageLocalized(_ key: String) -> String {
+        switch (key, store.language) {
+        case ("top_usage", .chinese): "高消耗定位"
+        case ("top_usage", _): "Top usage"
         default: key
         }
     }
@@ -1595,10 +1627,29 @@ private struct QuotaPressurePanel: View {
         let active = pressure.activeAccount?.displayName ?? "--"
         let projected = pressure.projectedFiveHourExhaustion.map { DisplayFormatters.relativeString(for: $0, language: language) }
         let rotation = pressure.shouldTriggerRotation ? localized("rotation_ready") : localized("rotation_standby")
+        if pressure.recommendationReason != nil, pressure.severity != .ok {
+            return recommendationReason
+        }
         if let projected {
             return "\(active) · \(localized("five_hour_exhausts")) \(projected) · \(rotation)"
         }
         return "\(active) · \(localized("five_hour_healthy")) · \(rotation)"
+    }
+
+    private var recommendationReason: String {
+        guard let active = pressure.activeAccount, let recommended = pressure.recommendedAccount else {
+            return pressure.recommendationReason ?? ""
+        }
+        let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
+        let activeWeekly = DisplayFormatters.percentString(active.weeklyWindow?.remainingPercent)
+        let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
+        let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
+        switch language {
+        case .chinese:
+            return "当前 5H \(activeFive)，本周 \(activeWeekly)；\(recommended.displayName) 5H \(recommendedFive)，本周 \(recommendedWeekly)"
+        case .english:
+            return pressure.recommendationReason ?? "active 5H \(activeFive), weekly \(activeWeekly); \(recommended.displayName) 5H \(recommendedFive), weekly \(recommendedWeekly)"
+        }
     }
 
     private func localized(_ key: String) -> String {
@@ -1615,6 +1666,184 @@ private struct QuotaPressurePanel: View {
         case ("five_hour_healthy", _): "5H quota is healthy"
         case ("rotation_ready", _): "rotation will trigger"
         case ("rotation_standby", _): "rotation on standby"
+        default: key
+        }
+    }
+}
+
+private struct QuotaETAPanel: View {
+    var eta: QuotaETA
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        Panel(title: localized("quota_eta")) {
+            HStack(spacing: 10) {
+                ForEach(eta.windows) { window in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text("\(window.minutes)m")
+                                .font(.system(size: 11, weight: .bold))
+                            Spacer()
+                            Text(DisplayFormatters.compactTokenString(window.tokens, language: language))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Divider()
+                        etaLine(title: "5H", minutes: window.minutesUntilFiveHourExhaustion, color: theme.primary)
+                        etaLine(title: "WK", minutes: window.minutesUntilWeeklyExhaustion, color: theme.tertiary)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func etaLine(title: String, minutes: Double?, color: Color) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(color)
+            Spacer()
+            Text(durationText(minutes))
+                .font(.system(size: 12, weight: .bold))
+                .monospacedDigit()
+        }
+    }
+
+    private func durationText(_ minutes: Double?) -> String {
+        guard let minutes else { return "--" }
+        if minutes < 1 { return localized("now") }
+        if minutes < 60 { return "\(Int(ceil(minutes)))m" }
+        let whole = Int(ceil(minutes))
+        return "\(whole / 60)h \(whole % 60)m"
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("quota_eta", .chinese): "额度 ETA"
+        case ("now", .chinese): "现在"
+        case ("quota_eta", _): "Quota ETA"
+        case ("now", _): "now"
+        default: key
+        }
+    }
+}
+
+private struct RapidUsageAlertPanel: View {
+    var alert: RapidUsageAlert
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bolt.trianglebadge.exclamationmark.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.orange)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(localized("rapid_burn"))
+                    .font(.system(size: 13, weight: .bold))
+                Text(detail)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text("\(Int((alert.todayShare * 100).rounded()))%")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(theme.primary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.orange.opacity(0.22), lineWidth: 0.5)
+        )
+    }
+
+    private var detail: String {
+        let recent = DisplayFormatters.compactTokenString(alert.recentTokens, language: language)
+        let total = DisplayFormatters.compactTokenString(alert.todayTokens, language: language)
+        return switch language {
+        case .chinese: "最近 10 分钟 \(recent) / 今日 \(total) tokens"
+        case .english: "\(recent) of \(total) tokens in the last 10 minutes"
+        }
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("rapid_burn", .chinese): "快速消耗提醒"
+        case ("rapid_burn", _): "Rapid usage burn"
+        default: key
+        }
+    }
+}
+
+private struct TopUsagePanel: View {
+    var breakdown: TopUsageBreakdown
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        if breakdown.sessions.isEmpty && breakdown.projects.isEmpty && breakdown.days.isEmpty && breakdown.models.isEmpty {
+            EmptyPanelMessage(L.text("no_usage_data", language))
+        } else {
+            VStack(spacing: 12) {
+                topSection(title: localized("sessions"), rows: breakdown.sessions, color: theme.primary)
+                topSection(title: localized("projects"), rows: breakdown.projects, color: theme.tertiary)
+                topSection(title: localized("days"), rows: breakdown.days, color: theme.secondary)
+                topSection(title: localized("models"), rows: breakdown.models, color: theme.primary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func topSection(title: String, rows: [TopUsageRow], color: Color) -> some View {
+        if rows.isEmpty {
+            EmptyPanelMessage(L.text("no_usage_data", language))
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                ForEach(rows.prefix(3)) { row in
+                    HStack(spacing: 8) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(color)
+                            .frame(width: 7, height: 7)
+                        Text(row.label)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
+                            .font(.system(size: 12, weight: .bold))
+                            .monospacedDigit()
+                        Text("\(Int((row.share * 100).rounded()))%")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 34, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("sessions", .chinese): "会话"
+        case ("projects", .chinese): "项目"
+        case ("days", .chinese): "日期"
+        case ("models", .chinese): "模型"
+        case ("sessions", _): "Sessions"
+        case ("projects", _): "Projects"
+        case ("days", _): "Days"
+        case ("models", _): "Models"
         default: key
         }
     }

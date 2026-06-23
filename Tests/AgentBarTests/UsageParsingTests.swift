@@ -201,6 +201,17 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestResetCredits?.resets.first?.expiresAt, Date(timeIntervalSince1970: 1_782_000_000))
     }
 
+    func testCodexSessionJsonlCarriesSessionAndProjectMetadata() throws {
+        let jsonl = """
+        {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","session_id":"session-1","payload":{"cwd":"/Users/terrytan/Desktop/Coding/AgentBar","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0,"total_tokens":15}}}}
+        """.data(using: .utf8)!
+
+        let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl)
+
+        XCTAssertEqual(metrics.points.first?.sessionID, "session-1")
+        XCTAssertEqual(metrics.points.first?.projectName, "AgentBar")
+    }
+
     func testCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-14T02:30:00.000Z","payload":{"info":{"total_token_usage":{"input_tokens":80,"cached_input_tokens":10,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100}},"rate_limits":{"primary":{"used_percent":90,"window_minutes":300,"resets_at":1781488800},"secondary":{"used_percent":40,"window_minutes":10080,"resets_at":1781900000}}}}
@@ -917,6 +928,36 @@ final class UsageParsingTests: XCTestCase {
                     date: Date(),
                     tokens: TokenTotals(input: 600, cachedInput: 0, output: 400, reasoningOutput: 0, total: 1_000),
                     estimatedCostUSD: Decimal(string: "2.75")
+                )
+            ]
+        )
+
+        XCTAssertTrue(store.menuBarTitle.hasPrefix("! "))
+    }
+
+    @MainActor
+    func testRapidUsageAlertWarnsInMenuBarTitle() {
+        let now = Date()
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UsageStore(settings: SettingsStore(defaults: defaults), codexUsageSynchronizer: { .success })
+        store.applyTestData(
+            accounts: [testAccount(id: "active", name: "active@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)],
+            points: [
+                UsagePoint(
+                    service: .codex,
+                    model: "codex-local",
+                    date: now.addingTimeInterval(-5 * 60),
+                    tokens: TokenTotals(input: 3_000, cachedInput: 0, output: 3_000, reasoningOutput: 0, total: 6_000),
+                    estimatedCostUSD: nil
+                ),
+                UsagePoint(
+                    service: .codex,
+                    model: "codex-local",
+                    date: now.addingTimeInterval(-20 * 60),
+                    tokens: TokenTotals(input: 2_000, cachedInput: 0, output: 2_000, reasoningOutput: 0, total: 4_000),
+                    estimatedCostUSD: nil
                 )
             ]
         )

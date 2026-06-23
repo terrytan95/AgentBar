@@ -301,6 +301,8 @@ struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var date: Date
     var tokens: TokenTotals
     var estimatedCostUSD: Decimal?
+    var sessionID: String? = nil
+    var projectName: String? = nil
 }
 
 enum UsageRange: String, CaseIterable, Identifiable, Sendable {

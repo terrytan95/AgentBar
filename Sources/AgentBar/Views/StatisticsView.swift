@@ -1794,7 +1794,7 @@ private struct TopUsagePanel: View {
             EmptyPanelMessage(L.text("no_usage_data", language))
         } else {
             VStack(spacing: 12) {
-                topSection(title: localized("sessions"), rows: breakdown.sessions, color: theme.primary)
+                topSection(title: localized("sessions"), rows: breakdown.sessions, color: theme.primary, showsLastUsedAt: true)
                 topSection(title: localized("projects"), rows: breakdown.projects, color: theme.tertiary)
                 topSection(title: localized("days"), rows: breakdown.days, color: theme.secondary)
                 topSection(title: localized("models"), rows: breakdown.models, color: theme.primary)
@@ -1803,7 +1803,7 @@ private struct TopUsagePanel: View {
     }
 
     @ViewBuilder
-    private func topSection(title: String, rows: [TopUsageRow], color: Color) -> some View {
+    private func topSection(title: String, rows: [TopUsageRow], color: Color, showsLastUsedAt: Bool = false) -> some View {
         if rows.isEmpty {
             EmptyPanelMessage(L.text("no_usage_data", language))
         } else {
@@ -1817,9 +1817,17 @@ private struct TopUsagePanel: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(color)
                             .frame(width: 7, height: 7)
-                        Text(row.label)
-                            .font(.system(size: 12, weight: .semibold))
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(row.label)
+                                .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1)
+                            if showsLastUsedAt, let lastUsedAt = row.lastUsedAt {
+                                Text("\(localized("latest")) \(DisplayFormatters.relativeString(for: lastUsedAt, language: language))")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
                         Spacer()
                         Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
                             .font(.system(size: 12, weight: .bold))
@@ -1840,10 +1848,12 @@ private struct TopUsagePanel: View {
         case ("projects", .chinese): "项目"
         case ("days", .chinese): "日期"
         case ("models", .chinese): "模型"
+        case ("latest", .chinese): "最新"
         case ("sessions", _): "Sessions"
         case ("projects", _): "Projects"
         case ("days", _): "Days"
         case ("models", _): "Models"
+        case ("latest", _): "Latest"
         default: key
         }
     }

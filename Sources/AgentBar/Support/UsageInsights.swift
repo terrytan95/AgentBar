@@ -61,6 +61,7 @@ struct TopUsageRow: Equatable, Identifiable, Sendable {
     var label: String
     var tokens: Int
     var share: Double
+    var lastUsedAt: Date?
 }
 
 struct RapidUsageAlert: Equatable, Sendable {
@@ -376,7 +377,8 @@ enum UsageInsights {
                 TopUsageRow(
                     label: label,
                     tokens: points.reduce(0) { $0 + $1.tokens.total },
-                    share: Double(points.reduce(0) { $0 + $1.tokens.total }) / Double(total)
+                    share: Double(points.reduce(0) { $0 + $1.tokens.total }) / Double(total),
+                    lastUsedAt: points.map(\.date).max()
                 )
             }
             .sorted {

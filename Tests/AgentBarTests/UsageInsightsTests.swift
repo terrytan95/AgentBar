@@ -141,6 +141,7 @@ final class UsageInsightsTests: XCTestCase {
 
         XCTAssertEqual(top.sessions.first?.label, "Fix high CPU usage")
         XCTAssertEqual(top.sessions.first?.tokens, 1_500)
+        XCTAssertEqual(top.sessions.first?.lastUsedAt, now.addingTimeInterval(-10 * 60))
         XCTAssertEqual(top.projects.first?.label, "AgentBar")
         XCTAssertEqual(top.models.first?.label, "gpt-5")
         XCTAssertEqual(top.days.first?.tokens, 2_300)

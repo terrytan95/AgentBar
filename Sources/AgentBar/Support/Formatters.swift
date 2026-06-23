@@ -92,6 +92,13 @@ enum DisplayFormatters {
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
+
+    static func shortDayString(for date: Date, language: AppLanguage = .english) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter.string(from: date)
+    }
 }
 
 extension String {

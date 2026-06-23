@@ -151,7 +151,7 @@ struct CodexUsageReader {
         return (snapshot, epochMillisecondsDate(registry.activeAccountActivatedAtMs))
     }
 
-    static func parseSessionJsonl(data: Data) throws -> CodexSessionMetrics {
+    static func parseSessionJsonl(data: Data, sessionID fallbackSessionID: String? = nil, projectName fallbackProjectName: String? = nil) throws -> CodexSessionMetrics {
         var eventCount = 0
         var latestTotal = TokenTotals.zero
         var points: [UsagePoint] = []
@@ -172,6 +172,8 @@ struct CodexUsageReader {
             guard let payload = event.payload else { continue }
             let parsedEventDate = event.parsedDate(using: dateParser)
             let eventDate = parsedEventDate ?? .distantPast
+            let sessionID = event.sessionID ?? fallbackSessionID
+            let projectName = payload.projectName ?? fallbackProjectName
             if let resetAt = payload.rateLimits?.primary?.resetDate ?? payload.rateLimits?.secondary?.resetDate {
                 currentCumulativeResetAt = resetAt
             }
@@ -194,7 +196,9 @@ struct CodexUsageReader {
                         model: model,
                         date: eventDate,
                         tokens: pointUsage,
-                        estimatedCostUSD: Pricing.cost(model: model, tokens: pointUsage)
+                        estimatedCostUSD: Pricing.cost(model: model, tokens: pointUsage),
+                        sessionID: sessionID,
+                        projectName: projectName
                     )
                 )
             }
@@ -265,7 +269,10 @@ struct CodexUsageReader {
                 metrics = cachedMetrics
             } else {
                 guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
-                      let parsedMetrics = try? Self.parseSessionJsonl(data: data)
+                      let parsedMetrics = try? Self.parseSessionJsonl(
+                        data: data,
+                        sessionID: fileURL.deletingPathExtension().lastPathComponent
+                      )
                 else { continue }
                 metrics = parsedMetrics
                 Self.sessionMetricsCache.store(metrics, for: path, signature: signature)
@@ -565,7 +572,14 @@ private struct CodexRateWindow: Decodable {
 
 private struct CodexSessionEvent: Decodable {
     var timestamp: String?
+    var sessionID: String?
     var payload: CodexSessionPayload?
+
+    enum CodingKeys: String, CodingKey {
+        case timestamp
+        case sessionID = "session_id"
+        case payload
+    }
 
     func parsedDate(using parser: CodexTimestampParser) -> Date? {
         guard let timestamp else { return nil }
@@ -659,11 +673,19 @@ private struct CodexSessionPayload: Decodable {
     var info: CodexInfo?
     var rateLimits: CodexRateLimits?
     var resetCredits: CodexResetCredits?
+    var cwd: String?
 
     enum CodingKeys: String, CodingKey {
         case info
         case rateLimits = "rate_limits"
         case resetCredits = "rate_limit_reset_credits"
+        case cwd
+    }
+
+    var projectName: String? {
+        let value = cwd?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value, !value.isEmpty else { return nil }
+        return URL(fileURLWithPath: value).lastPathComponent
     }
 }
 

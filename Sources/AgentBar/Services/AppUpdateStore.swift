@@ -14,17 +14,20 @@ final class AppUpdateStore: ObservableObject {
     private let defaults: UserDefaults
     private let fileManager: FileManager
     private let session: URLSession
+    private let updatesRootOverride: URL?
     private var automaticCheckTimer: Timer?
     private var isChecking = false
 
     init(
         defaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        updatesRootOverride: URL? = nil
     ) {
         self.defaults = defaults
         self.fileManager = fileManager
         self.session = session
+        self.updatesRootOverride = updatesRootOverride
         restorePendingDownload()
     }
 
@@ -167,6 +170,10 @@ final class AppUpdateStore: ObservableObject {
     }
 
     private func updatesRootDirectory() throws -> URL {
+        if let updatesRootOverride {
+            try fileManager.createDirectory(at: updatesRootOverride, withIntermediateDirectories: true)
+            return updatesRootOverride
+        }
         let appSupport = try fileManager.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,

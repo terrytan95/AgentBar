@@ -17,6 +17,7 @@ struct QuotaPressureInsight: Equatable, Sendable {
     var severity: InsightSeverity
     var activeAccount: UsageAccount?
     var recommendedAccount: UsageAccount?
+    var recommendationReason: String? = nil
     var projectedFiveHourExhaustion: Date?
     var projectedWeeklyExhaustion: Date?
     var shouldTriggerRotation: Bool
@@ -34,6 +35,38 @@ struct UsageAnomaly: Equatable, Identifiable, Sendable {
     var tokens: Int
     var baselineTokens: Int
     var multiple: Double
+}
+
+struct QuotaETA: Equatable, Sendable {
+    var windows: [QuotaETAWindow]
+}
+
+struct QuotaETAWindow: Equatable, Identifiable, Sendable {
+    var id: Int { minutes }
+    var minutes: Int
+    var tokens: Int
+    var minutesUntilFiveHourExhaustion: Double?
+    var minutesUntilWeeklyExhaustion: Double?
+}
+
+struct TopUsageBreakdown: Equatable, Sendable {
+    var sessions: [TopUsageRow]
+    var days: [TopUsageRow]
+    var models: [TopUsageRow]
+    var projects: [TopUsageRow]
+}
+
+struct TopUsageRow: Equatable, Identifiable, Sendable {
+    var id: String { label }
+    var label: String
+    var tokens: Int
+    var share: Double
+}
+
+struct RapidUsageAlert: Equatable, Sendable {
+    var recentTokens: Int
+    var todayTokens: Int
+    var todayShare: Double
 }
 
 struct BudgetStatus: Equatable, Sendable {
@@ -106,10 +139,70 @@ enum UsageInsights {
             severity: severity,
             activeAccount: active,
             recommendedAccount: bestAlternative,
+            recommendationReason: switchReason(active: active, recommended: bestAlternative),
             projectedFiveHourExhaustion: shouldProject ? projectedExhaustion(window: active?.fiveHourWindow, now: now) : nil,
             projectedWeeklyExhaustion: shouldProject ? projectedExhaustion(window: active?.weeklyWindow, now: now) : nil,
             shouldTriggerRotation: autoRotationEnabled && (fiveHourRemaining ?? 100) <= rotationThresholdRemainingPercent
         )
+    }
+
+    static func quotaETA(account: UsageAccount, points: [UsagePoint], now: Date = Date()) -> QuotaETA {
+        let codexPoints = points.filter { $0.service == account.service && $0.date <= now }
+        let fiveHourWindowTokens = tokens(in: codexPoints, window: account.fiveHourWindow, now: now)
+        let weeklyWindowTokens = tokens(in: codexPoints, window: account.weeklyWindow, now: now)
+        let windows = [15, 30, 60].map { minutes in
+            let recentTokens = codexPoints
+                .filter { now.timeIntervalSince($0.date) <= TimeInterval(minutes * 60) }
+                .reduce(0) { $0 + $1.tokens.total }
+            return QuotaETAWindow(
+                minutes: minutes,
+                tokens: recentTokens,
+                minutesUntilFiveHourExhaustion: etaMinutes(
+                    recentTokens: recentTokens,
+                    recentMinutes: minutes,
+                    window: account.fiveHourWindow,
+                    windowTokens: fiveHourWindowTokens
+                ),
+                minutesUntilWeeklyExhaustion: etaMinutes(
+                    recentTokens: recentTokens,
+                    recentMinutes: minutes,
+                    window: account.weeklyWindow,
+                    windowTokens: weeklyWindowTokens
+                )
+            )
+        }
+        return QuotaETA(windows: windows)
+    }
+
+    static func topUsage(
+        points: [UsagePoint],
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        limit: Int = 3
+    ) -> TopUsageBreakdown {
+        let usable = points.filter { $0.date <= now }
+        return TopUsageBreakdown(
+            sessions: topRows(grouped: usable, limit: limit) { $0.sessionID ?? "Unknown session" },
+            days: topRows(grouped: usable, limit: limit) { DisplayFormatters.shortDayString(for: calendar.startOfDay(for: $0.date)) },
+            models: topRows(grouped: usable, limit: limit) { $0.model },
+            projects: topRows(grouped: usable, limit: limit) { $0.projectName ?? "Other" }
+        )
+    }
+
+    static func rapidUsageAlert(
+        points: [UsagePoint],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> RapidUsageAlert? {
+        let todayPoints = points.filter { calendar.isDate($0.date, inSameDayAs: now) }
+        let todayTokens = todayPoints.reduce(0) { $0 + $1.tokens.total }
+        let recentTokens = todayPoints
+            .filter { now.timeIntervalSince($0.date) <= 10 * 60 }
+            .reduce(0) { $0 + $1.tokens.total }
+        guard todayTokens > 0 else { return nil }
+        let share = Double(recentTokens) / Double(todayTokens)
+        guard recentTokens >= 2_000, share >= 0.4 else { return nil }
+        return RapidUsageAlert(recentTokens: recentTokens, todayTokens: todayTokens, todayShare: share)
     }
 
     static func usageAnomalies(
@@ -235,5 +328,62 @@ enum UsageInsights {
             return min(projected, resetsAt)
         }
         return projected
+    }
+
+    private static func switchReason(active: UsageAccount?, recommended: UsageAccount?) -> String? {
+        guard let active, let recommended else { return nil }
+        let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
+        let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
+        let activeWeekly = DisplayFormatters.percentString(active.weeklyWindow?.remainingPercent)
+        let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
+        let reset = recommended.fiveHourWindow?.resetsAt.map { ", resets \(DisplayFormatters.relativeString(for: $0, language: .english))" } ?? ""
+        return "active 5H \(activeFive), weekly \(activeWeekly); \(recommended.displayName) 5H \(recommendedFive), weekly \(recommendedWeekly)\(reset)"
+    }
+
+    private static func tokens(in points: [UsagePoint], window: UsageWindow?, now: Date) -> Int {
+        guard let window else { return 0 }
+        let start = now.addingTimeInterval(TimeInterval(-window.windowMinutes * 60))
+        return points
+            .filter { $0.date >= start && $0.date <= now }
+            .reduce(0) { $0 + $1.tokens.total }
+    }
+
+    private static func etaMinutes(
+        recentTokens: Int,
+        recentMinutes: Int,
+        window: UsageWindow?,
+        windowTokens: Int
+    ) -> Double? {
+        guard let window,
+              recentTokens > 0,
+              recentMinutes > 0,
+              windowTokens > 0,
+              window.usedPercent > 0,
+              window.remainingPercent > 0
+        else { return nil }
+        let remainingTokens = Double(windowTokens) * window.remainingPercent / window.usedPercent
+        return remainingTokens / (Double(recentTokens) / Double(recentMinutes))
+    }
+
+    private static func topRows(
+        grouped points: [UsagePoint],
+        limit: Int,
+        key: (UsagePoint) -> String
+    ) -> [TopUsageRow] {
+        let total = max(1, points.reduce(0) { $0 + $1.tokens.total })
+        return Dictionary(grouping: points, by: key)
+            .map { label, points in
+                TopUsageRow(
+                    label: label,
+                    tokens: points.reduce(0) { $0 + $1.tokens.total },
+                    share: Double(points.reduce(0) { $0 + $1.tokens.total }) / Double(total)
+                )
+            }
+            .sorted {
+                if $0.tokens != $1.tokens { return $0.tokens > $1.tokens }
+                return $0.label < $1.label
+            }
+            .prefix(limit)
+            .map { $0 }
     }
 }

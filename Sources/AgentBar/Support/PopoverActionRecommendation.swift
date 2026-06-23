@@ -84,17 +84,21 @@ struct PopoverActionRecommendation: Equatable {
         switch language {
         case .english:
             let activeName = active?.displayName ?? "Current account"
-            let remaining = DisplayFormatters.percentString(active?.mostConstrainedRemainingPercent)
-            let recommendedRemaining = DisplayFormatters.percentString(recommended.mostConstrainedRemainingPercent)
+            let activeFive = DisplayFormatters.percentString(active?.fiveHourWindow?.remainingPercent)
+            let activeWeekly = DisplayFormatters.percentString(active?.weeklyWindow?.remainingPercent)
+            let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
+            let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
             let resetDetail = resetCreditDetail(for: recommended, language: language)
-            return "\(activeName) is at \(remaining). \(recommended.displayName) has \(recommendedRemaining) remaining."
+            return "\(activeName) 5H \(activeFive), WK \(activeWeekly). \(recommended.displayName) 5H \(recommendedFive), WK \(recommendedWeekly)."
                 + resetDetail
         case .chinese:
             let activeName = active?.displayName ?? "当前账号"
-            let remaining = DisplayFormatters.percentString(active?.mostConstrainedRemainingPercent)
-            let recommendedRemaining = DisplayFormatters.percentString(recommended.mostConstrainedRemainingPercent)
+            let activeFive = DisplayFormatters.percentString(active?.fiveHourWindow?.remainingPercent)
+            let activeWeekly = DisplayFormatters.percentString(active?.weeklyWindow?.remainingPercent)
+            let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
+            let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
             let resetDetail = resetCreditDetail(for: recommended, language: language)
-            return "\(activeName) 剩余 \(remaining)。\(recommended.displayName) 还有 \(recommendedRemaining)。"
+            return "\(activeName) 5H \(activeFive)，本周 \(activeWeekly)。\(recommended.displayName) 5H \(recommendedFive)，本周 \(recommendedWeekly)。"
                 + resetDetail
         }
     }

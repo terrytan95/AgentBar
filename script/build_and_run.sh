@@ -5,8 +5,8 @@ MODE="${1:-run}"
 APP_NAME="AgentBar"
 BUNDLE_ID="com.terrytan.AgentBar"
 MIN_SYSTEM_VERSION="14.0"
-APP_VERSION="1.2.2"
-APP_BUILD="136"
+APP_VERSION="1.2.3"
+APP_BUILD="137"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -27,6 +27,10 @@ if [ "$MODE" = "--package" ] || [ "$MODE" = "package" ]; then
 fi
 
 SWIFT_BUILD_ARGS=(-c "$BUILD_CONFIGURATION")
+if [ -n "${AGENTBAR_SWIFT_BUILD_EXTRA_ARGS:-}" ]; then
+  IFS=' ' read -r -a EXTRA_SWIFT_BUILD_ARGS <<< "$AGENTBAR_SWIFT_BUILD_EXTRA_ARGS"
+  SWIFT_BUILD_ARGS+=("${EXTRA_SWIFT_BUILD_ARGS[@]}")
+fi
 swift build "${SWIFT_BUILD_ARGS[@]}"
 BUILD_BINARY="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)/$APP_NAME"
 

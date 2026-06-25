@@ -263,7 +263,7 @@ final class UsageStore: ObservableObject {
     }
 
     func sortedAccounts(_ accounts: [UsageAccount]? = nil) -> [UsageAccount] {
-        (accounts ?? self.accounts).sorted(using: settings.accountSortMode)
+        (accounts ?? self.accounts).groupedByIdentity().sorted(using: settings.accountSortMode)
     }
 
     func switchActiveAccount(_ account: UsageAccount) {

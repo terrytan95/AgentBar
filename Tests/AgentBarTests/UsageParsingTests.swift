@@ -102,6 +102,32 @@ final class UsageParsingTests: XCTestCase {
         ])
     }
 
+    func testAccountsWithSameIdentityGroupWorkspaceDisplays() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        var core = testAccount(id: "person::core", name: "person@example.com", fiveHourUsed: 18, weeklyUsed: 51, now: now)
+        core.workspaceName = "Core Team"
+        core.workspaceID = "core-123456"
+        core.workspaces = [UsageWorkspace(name: "Core Team", workspaceID: "core-123456")]
+        core.isActive = true
+
+        var client = testAccount(id: "person::client", name: "person@example.com", fiveHourUsed: 18, weeklyUsed: 51, now: now)
+        client.workspaceName = "Client Team"
+        client.workspaceID = "client-ab"
+        client.workspaces = [UsageWorkspace(name: "Client Team", workspaceID: "client-ab")]
+
+        let grouped = [client, core].groupedByIdentity().sortedByActiveThenName()
+
+        XCTAssertEqual(grouped.map(\.id), ["person::core"])
+        XCTAssertEqual(grouped.first?.workspaceDisplayValues, [
+            "Core Team · core-123456",
+            "Client Team · client-ab"
+        ])
+        XCTAssertEqual(grouped.first?.workspaceLines(language: .english), [
+            "Workspaces: Core Team · core-123456",
+            "Client Team · client-ab"
+        ])
+    }
+
     func testCodexRegistryFlagsAccountsThatNeedLoginAgain() throws {
         let registry = """
         {

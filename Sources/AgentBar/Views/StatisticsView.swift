@@ -562,12 +562,16 @@ struct StatisticsView: View {
         store.points
     }
 
+    private var displayAccounts: [UsageAccount] {
+        store.accounts.groupedByIdentity()
+    }
+
     private var codexAccounts: [UsageAccount] {
-        store.accounts.filter { $0.service == .codex }
+        displayAccounts.filter { $0.service == .codex }
     }
 
     private var claudeAccounts: [UsageAccount] {
-        store.accounts.filter { $0.service == .claudeCode }
+        displayAccounts.filter { $0.service == .claudeCode }
     }
 
     private var hasClaudeData: Bool {
@@ -686,11 +690,11 @@ struct StatisticsView: View {
     }
 
     private var totalResetCreditsCount: Int {
-        store.accounts.reduce(0) { $0 + ($1.resetCredits?.visibleCount ?? 0) }
+        displayAccounts.reduce(0) { $0 + ($1.resetCredits?.visibleCount ?? 0) }
     }
 
     private var nextResetExpiry: Date? {
-        store.accounts
+        displayAccounts
             .flatMap { $0.resetCredits?.resets ?? [] }
             .compactMap(\.expiresAt)
             .filter { $0 > Date() }
@@ -713,7 +717,7 @@ struct StatisticsView: View {
         if !settings.detailedResetCreditsEnabled {
             EmptyPanelMessage(L.text("enable_expiry_dates", store.language))
         } else {
-            let rows = store.accounts.flatMap { account in
+            let rows = displayAccounts.flatMap { account in
                 (account.resetCredits?.resets ?? []).enumerated().map { index, reset in
                     ResetExpiryRowData(account: account.displayNameWithWorkspace(language: store.language), index: index + 1, expiresAt: reset.expiresAt)
                 }
@@ -732,7 +736,7 @@ struct StatisticsView: View {
 
     private var quotaPressure: QuotaPressureInsight {
         UsageInsights.quotaPressure(
-            accounts: store.accounts,
+            accounts: displayAccounts,
             points: filteredPoints,
             rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
             autoRotationEnabled: settings.autoCodexAccountRotationEnabled
@@ -773,7 +777,7 @@ struct StatisticsView: View {
     }
 
     private var accountHealthCenter: AccountHealthCenter {
-        UsageInsights.accountHealthCenter(accounts: store.accounts, dataSourceHealth: dataSourceHealth, language: store.language)
+        UsageInsights.accountHealthCenter(accounts: displayAccounts, dataSourceHealth: dataSourceHealth, language: store.language)
     }
 
     private func openHealthLogin(_ accountID: String) {
@@ -841,7 +845,7 @@ struct StatisticsView: View {
     }
 
     private var currentLimitAccounts: [UsageAccount] {
-        store.accounts.filter { account in
+        displayAccounts.filter { account in
             account.fiveHourWindow != nil ||
                 account.weeklyWindow != nil ||
                 account.resetCredits?.hasAvailableCredits == true

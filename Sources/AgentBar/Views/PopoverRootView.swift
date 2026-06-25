@@ -129,9 +129,13 @@ struct PopoverRootView: View {
         UsageInsights.dataSourceHealth(snapshots: store.snapshots)
     }
 
+    private var displayAccounts: [UsageAccount] {
+        store.accounts.groupedByIdentity()
+    }
+
     private var quotaPressure: QuotaPressureInsight {
         UsageInsights.quotaPressure(
-            accounts: store.accounts,
+            accounts: displayAccounts,
             points: store.points,
             rotationThresholdRemainingPercent: store.settings.codexRotationThresholdRemainingPercent,
             autoRotationEnabled: store.settings.autoCodexAccountRotationEnabled

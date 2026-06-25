@@ -562,16 +562,12 @@ struct StatisticsView: View {
         store.points
     }
 
-    private var displayAccounts: [UsageAccount] {
-        store.accounts.groupedByIdentity()
-    }
-
     private var codexAccounts: [UsageAccount] {
-        displayAccounts.filter { $0.service == .codex }
+        store.accounts.filter { $0.service == .codex }
     }
 
     private var claudeAccounts: [UsageAccount] {
-        displayAccounts.filter { $0.service == .claudeCode }
+        store.accounts.filter { $0.service == .claudeCode }
     }
 
     private var hasClaudeData: Bool {
@@ -675,8 +671,8 @@ struct StatisticsView: View {
                 )
 
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(accounts) { account in
-                        AccountLimitGroupView(account: account, language: store.language, theme: settings.themeColor) {
+                    ForEach(currentLimitDisplayGroups) { group in
+                        AccountLimitDisplayGroupView(group: group, language: store.language, theme: settings.themeColor) { account in
                             store.openLogin(for: account)
                         }
                     }
@@ -690,11 +686,11 @@ struct StatisticsView: View {
     }
 
     private var totalResetCreditsCount: Int {
-        displayAccounts.reduce(0) { $0 + ($1.resetCredits?.visibleCount ?? 0) }
+        store.accounts.reduce(0) { $0 + ($1.resetCredits?.visibleCount ?? 0) }
     }
 
     private var nextResetExpiry: Date? {
-        displayAccounts
+        store.accounts
             .flatMap { $0.resetCredits?.resets ?? [] }
             .compactMap(\.expiresAt)
             .filter { $0 > Date() }
@@ -717,17 +713,13 @@ struct StatisticsView: View {
         if !settings.detailedResetCreditsEnabled {
             EmptyPanelMessage(L.text("enable_expiry_dates", store.language))
         } else {
-            let rows = displayAccounts.flatMap { account in
-                (account.resetCredits?.resets ?? []).enumerated().map { index, reset in
-                    ResetExpiryRowData(account: account.displayNameWithWorkspace(language: store.language), index: index + 1, expiresAt: reset.expiresAt)
-                }
-            }
-            if rows.isEmpty {
+            let groups = resetExpiryDisplayGroups
+            if groups.isEmpty {
                 EmptyPanelMessage(totalResetCreditsCount > 0 ? L.text("no_detailed_expiry_dates", store.language) : L.text("no_banked_resets", store.language))
             } else {
                 VStack(spacing: 8) {
-                    ForEach(rows) { row in
-                        ResetExpiryRow(row: row, language: store.language, theme: settings.themeColor)
+                    ForEach(groups) { group in
+                        ResetExpiryDisplayGroupView(group: group, language: store.language, theme: settings.themeColor)
                     }
                 }
             }
@@ -736,7 +728,7 @@ struct StatisticsView: View {
 
     private var quotaPressure: QuotaPressureInsight {
         UsageInsights.quotaPressure(
-            accounts: displayAccounts,
+            accounts: store.accounts,
             points: filteredPoints,
             rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
             autoRotationEnabled: settings.autoCodexAccountRotationEnabled
@@ -777,7 +769,7 @@ struct StatisticsView: View {
     }
 
     private var accountHealthCenter: AccountHealthCenter {
-        UsageInsights.accountHealthCenter(accounts: displayAccounts, dataSourceHealth: dataSourceHealth, language: store.language)
+        UsageInsights.accountHealthCenter(accounts: store.accounts, dataSourceHealth: dataSourceHealth, language: store.language)
     }
 
     private func openHealthLogin(_ accountID: String) {
@@ -845,12 +837,22 @@ struct StatisticsView: View {
     }
 
     private var currentLimitAccounts: [UsageAccount] {
-        displayAccounts.filter { account in
+        store.accounts.filter { account in
             account.fiveHourWindow != nil ||
                 account.weeklyWindow != nil ||
                 account.resetCredits?.hasAvailableCredits == true
         }
         .sorted(using: settings.accountSortMode)
+    }
+
+    private var currentLimitDisplayGroups: [UsageAccountDisplayGroup] {
+        currentLimitAccounts.displayGroupsByIdentity(sortMode: settings.accountSortMode)
+    }
+
+    private var resetExpiryDisplayGroups: [UsageAccountDisplayGroup] {
+        store.accounts
+            .filter { !($0.resetCredits?.resets ?? []).isEmpty }
+            .displayGroupsByIdentity(sortMode: settings.accountSortMode)
     }
 
     @ViewBuilder
@@ -2501,6 +2503,48 @@ private struct ResetExpiryRow: View {
     }
 }
 
+private struct ResetExpiryDisplayGroupView: View {
+    var group: UsageAccountDisplayGroup
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        if group.isGrouped {
+            VStack(alignment: .leading, spacing: 6) {
+                displayGroupHeader
+                ForEach(group.accounts) { account in
+                    ForEach(rows(for: account)) { row in
+                        ResetExpiryRow(row: row, language: language, theme: theme)
+                            .padding(.leading, 12)
+                    }
+                }
+            }
+        } else if let account = group.accounts.first {
+            ForEach(rows(for: account)) { row in
+                ResetExpiryRow(row: row, language: language, theme: theme)
+            }
+        }
+    }
+
+    private var displayGroupHeader: some View {
+        HStack(spacing: 6) {
+            Text(group.title)
+                .font(.system(size: 11, weight: .bold))
+                .lineLimit(1)
+            Text("\(group.accounts.count) \(L.text("workspaces", language))")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.leading, 2)
+    }
+
+    private func rows(for account: UsageAccount) -> [ResetExpiryRowData] {
+        (account.resetCredits?.resets ?? []).enumerated().map { index, reset in
+            ResetExpiryRowData(account: account.displayNameWithWorkspace(language: language), index: index + 1, expiresAt: reset.expiresAt)
+        }
+    }
+}
+
 private struct SummaryChip: View {
     var title: String
     var value: String
@@ -2527,6 +2571,43 @@ private struct SummaryChip: View {
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct AccountLimitDisplayGroupView: View {
+    var group: UsageAccountDisplayGroup
+    var language: AppLanguage
+    var theme: AppThemeColor
+    var onLogin: (UsageAccount) -> Void
+
+    var body: some View {
+        if group.isGrouped {
+            VStack(alignment: .leading, spacing: 6) {
+                displayGroupHeader
+                ForEach(group.accounts) { account in
+                    AccountLimitGroupView(account: account, language: language, theme: theme) {
+                        onLogin(account)
+                    }
+                    .padding(.leading, 12)
+                }
+            }
+        } else if let account = group.accounts.first {
+            AccountLimitGroupView(account: account, language: language, theme: theme) {
+                onLogin(account)
+            }
+        }
+    }
+
+    private var displayGroupHeader: some View {
+        HStack(spacing: 6) {
+            Text(group.title)
+                .font(.system(size: 11, weight: .bold))
+                .lineLimit(1)
+            Text("\(group.accounts.count) \(L.text("workspaces", language))")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.leading, 2)
     }
 }
 

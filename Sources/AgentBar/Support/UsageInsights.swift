@@ -70,6 +70,42 @@ struct RapidUsageAlert: Equatable, Sendable {
     var todayShare: Double
 }
 
+struct WorkSessionPlan: Equatable, Sendable {
+    var activeAccountName: String
+    var recommendedAccount: UsageAccount?
+    var bestWindow: QuotaETAWindow
+    var minutesUntilFiveHourExhaustion: Double?
+    var minutesUntilWeeklyExhaustion: Double?
+}
+
+struct SessionDrilldown: Equatable, Sendable {
+    var id: String
+    var title: String
+    var projectName: String?
+    var totalTokens: Int
+    var estimatedCostUSD: Decimal?
+    var lastUsedAt: Date?
+    var models: [TopUsageRow]
+}
+
+struct AccountHealthCenter: Equatable, Sendable {
+    struct Row: Equatable, Identifiable, Sendable {
+        enum Kind: Equatable, Sendable {
+            case login
+            case dataSource
+        }
+
+        var id: String
+        var kind: Kind
+        var title: String
+        var detail: String
+        var accountID: String?
+        var severity: InsightSeverity
+    }
+
+    var rows: [Row]
+}
+
 struct BudgetStatus: Equatable, Sendable {
     var tokenUsageFraction: Double?
     var costUsageFraction: Double?
@@ -175,6 +211,28 @@ enum UsageInsights {
         return QuotaETA(windows: windows)
     }
 
+    static func workSessionPlan(
+        activeAccount: UsageAccount?,
+        points: [UsagePoint],
+        pressure: QuotaPressureInsight,
+        now: Date = Date()
+    ) -> WorkSessionPlan? {
+        guard let activeAccount else { return nil }
+        let eta = quotaETA(account: activeAccount, points: points, now: now)
+        guard let best = eta.windows.first(where: { $0.minutes == 30 && $0.tokens > 0 })
+            ?? eta.windows.first(where: { $0.tokens > 0 })
+            ?? eta.windows.first
+        else { return nil }
+
+        return WorkSessionPlan(
+            activeAccountName: activeAccount.displayName,
+            recommendedAccount: pressure.recommendedAccount,
+            bestWindow: best,
+            minutesUntilFiveHourExhaustion: best.minutesUntilFiveHourExhaustion,
+            minutesUntilWeeklyExhaustion: best.minutesUntilWeeklyExhaustion
+        )
+    }
+
     static func topUsage(
         points: [UsagePoint],
         now: Date = Date(),
@@ -187,6 +245,24 @@ enum UsageInsights {
             days: topRows(grouped: usable, limit: limit) { DisplayFormatters.shortDayString(for: calendar.startOfDay(for: $0.date)) },
             models: topRows(grouped: usable, limit: limit) { $0.model },
             projects: topRows(grouped: usable, limit: limit) { $0.projectName ?? "Other" }
+        )
+    }
+
+    static func sessionDrilldown(for session: String, points: [UsagePoint]) -> SessionDrilldown? {
+        let matching = points.filter { point in
+            point.sessionTitle == session || point.sessionID == session
+        }
+        guard !matching.isEmpty else { return nil }
+        let total = matching.reduce(0) { $0 + $1.tokens.total }
+        let costs = matching.compactMap(\.estimatedCostUSD)
+        return SessionDrilldown(
+            id: matching.first?.sessionID ?? session,
+            title: matching.first?.sessionTitle ?? matching.first?.sessionID ?? session,
+            projectName: matching.compactMap(\.projectName).first,
+            totalTokens: total,
+            estimatedCostUSD: costs.isEmpty ? nil : costs.reduce(Decimal(0), +),
+            lastUsedAt: matching.map(\.date).max(),
+            models: topRows(grouped: matching, limit: 6) { $0.model }
         )
     }
 
@@ -302,6 +378,38 @@ enum UsageInsights {
             liveCount: rows.filter { $0.status == .live }.count,
             issueCount: rows.filter { $0.status != .live }.count
         )
+    }
+
+    static func accountHealthCenter(
+        accounts: [UsageAccount],
+        dataSourceHealth: DataSourceHealthSummary,
+        language: AppLanguage
+    ) -> AccountHealthCenter {
+        let loginRows = accounts
+            .filter(\.needsLogin)
+            .map { account in
+                AccountHealthCenter.Row(
+                    id: "login-\(account.id)",
+                    kind: .login,
+                    title: account.displayName,
+                    detail: account.loginWarningLine(language: language) ?? "",
+                    accountID: account.id,
+                    severity: .warning
+                )
+            }
+        let sourceRows = dataSourceHealth.rows
+            .filter { $0.status != .live }
+            .map { row in
+                AccountHealthCenter.Row(
+                    id: "source-\(row.service.rawValue)",
+                    kind: .dataSource,
+                    title: row.service.rawValue,
+                    detail: row.note?.redactedForCredentialWords ?? row.status.label(language: language),
+                    accountID: nil,
+                    severity: row.status == .error ? .critical : .warning
+                )
+            }
+        return AccountHealthCenter(rows: loginRows + sourceRows)
     }
 
     private static func severity(for remaining: Double?) -> InsightSeverity {

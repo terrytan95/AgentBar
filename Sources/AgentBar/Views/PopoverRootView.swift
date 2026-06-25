@@ -108,6 +108,7 @@ struct PopoverRootView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     recommendationSection
+                    workSessionSection
                     quickSummarySection
                     accountSection
                 }
@@ -142,6 +143,14 @@ struct PopoverRootView: View {
             pressure: quotaPressure,
             dataSourceHealth: dataSourceHealth,
             language: store.language
+        )
+    }
+
+    private var workSessionPlan: WorkSessionPlan? {
+        UsageInsights.workSessionPlan(
+            activeAccount: store.activeAccount,
+            points: store.points,
+            pressure: quotaPressure
         )
     }
 
@@ -209,6 +218,13 @@ struct PopoverRootView: View {
             isWorking: isRecommendationActionWorking
         ) {
             performRecommendationAction(recommendation.action)
+        }
+    }
+
+    @ViewBuilder
+    private var workSessionSection: some View {
+        if let workSessionPlan {
+            PopoverWorkSessionPanel(plan: workSessionPlan, language: store.language, theme: store.settings.themeColor)
         }
     }
 
@@ -439,6 +455,89 @@ struct PopoverRecommendationPanel: View {
         case .ok: theme.primary
         case .warning: .orange
         case .critical: .red
+        }
+    }
+}
+
+struct PopoverWorkSessionPanel: View {
+    var plan: WorkSessionPlan
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Label(localized("planner"), systemImage: "timer")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Text("\(plan.bestWindow.minutes)m")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(theme.primary)
+                    .monospacedDigit()
+            }
+
+            HStack(spacing: 8) {
+                plannerMetric("5H", minutes: plan.minutesUntilFiveHourExhaustion, color: theme.primary)
+                plannerMetric("WK", minutes: plan.minutesUntilWeeklyExhaustion, color: theme.tertiary)
+            }
+
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(theme.primary.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    private func plannerMetric(_ title: String, minutes: Double?, color: Color) -> some View {
+        HStack {
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(color)
+            Spacer()
+            Text(durationText(minutes))
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var detail: String {
+        let recommended = plan.recommendedAccount?.displayName ?? localized("stay")
+        switch language {
+        case .chinese:
+            return "\(plan.activeAccountName) 当前速度下可用时间；建议账号：\(recommended)"
+        case .english:
+            return "\(plan.activeAccountName) at current speed; recommended account: \(recommended)"
+        }
+    }
+
+    private func durationText(_ minutes: Double?) -> String {
+        guard let minutes else { return "--" }
+        if minutes < 1 { return localized("now") }
+        if minutes < 60 { return "\(Int(ceil(minutes)))m" }
+        let whole = Int(ceil(minutes))
+        return "\(whole / 60)h \(whole % 60)m"
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("planner", .chinese): "工作会话规划"
+        case ("stay", .chinese): "继续当前账号"
+        case ("now", .chinese): "现在"
+        case ("planner", _): "Work session planner"
+        case ("stay", _): "stay on current"
+        case ("now", _): "now"
+        default: key
         }
     }
 }

@@ -344,6 +344,43 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(String(data: data, encoding: .utf8)?.contains("secret-access-token") ?? true)
     }
 
+    func testCodexUsageAPISyncerRefreshesOnlyActiveAccount() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registryURL = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"active@example.com"},{"account_key":"acct-b","email":"other@example.com"}]}
+        """.data(using: .utf8)!.write(to: registryURL)
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"active-token","account_id":"active-chatgpt-id"}}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-a.auth.json"))
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"other-token","account_id":"other-chatgpt-id"}}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-b.auth.json"))
+
+        let requestRecorder = UsageAPIRequestRecorder()
+        let syncer = CodexUsageAPISyncer(
+            homeDirectory: temp,
+            usageClient: { request, _ in
+                requestRecorder.record(request)
+                return CodexUsageAPIResponse(
+                    statusCode: 200,
+                    data: #"{"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}}}"#.data(using: .utf8)!
+                )
+            }
+        )
+
+        XCTAssertEqual(syncer.refreshUsage(), .success)
+        XCTAssertEqual(requestRecorder.requestCount, 1)
+        XCTAssertEqual(requestRecorder.accountID, "active-chatgpt-id")
+        let accounts = try registryAccounts(from: registryURL)
+        XCTAssertNotNil(accounts.first { $0["account_key"] as? String == "acct-a" }?["last_usage"])
+        XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["last_usage"])
+        XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["agentbar_auth_error"])
+    }
+
     func testCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -408,7 +445,7 @@ final class UsageParsingTests: XCTestCase {
         try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
         let registryURL = accountDir.appending(path: "registry.json")
         try """
-        {"schema_version":3,"accounts":[{"account_key":"acct-a","email":"person@example.com"}]}
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"person@example.com"}]}
         """.data(using: .utf8)!.write(to: registryURL)
         try """
         {"auth_mode":"chatgpt","tokens":{"access_token":"secret-access-token","account_id":"chatgpt-account-id"}}
@@ -1197,10 +1234,13 @@ final class UsageParsingTests: XCTestCase {
     }
 
     private func registryAccount(from url: URL) throws -> [String: Any] {
+        try XCTUnwrap(registryAccounts(from: url).first)
+    }
+
+    private func registryAccounts(from url: URL) throws -> [[String: Any]] {
         let data = try Data(contentsOf: url)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let accounts = try XCTUnwrap(json["accounts"] as? [[String: Any]])
-        return try XCTUnwrap(accounts.first)
+        return try XCTUnwrap(json["accounts"] as? [[String: Any]])
     }
 
     private final class RefreshOrderRecorder: @unchecked Sendable {
@@ -1223,6 +1263,13 @@ final class UsageParsingTests: XCTestCase {
     private final class UsageAPIRequestRecorder: @unchecked Sendable {
         private let lock = NSLock()
         private var request: URLRequest?
+        private var count = 0
+
+        var requestCount: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return count
+        }
 
         var authorization: String? {
             lock.lock()
@@ -1239,6 +1286,7 @@ final class UsageParsingTests: XCTestCase {
         func record(_ request: URLRequest) {
             lock.lock()
             self.request = request
+            count += 1
             lock.unlock()
         }
     }

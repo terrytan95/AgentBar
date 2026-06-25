@@ -127,6 +127,35 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(eta.windows.first { $0.minutes == 60 }?.minutesUntilFiveHourExhaustion), 6.667, accuracy: 0.001)
     }
 
+    func testWorkSessionPlanUsesRecentVelocityAndRecommendedAccount() throws {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let active = account(id: "active", name: "active@example.com", fiveHourUsed: 90, weeklyUsed: 20, now: now, active: true)
+        let better = account(id: "better", name: "better@example.com", fiveHourUsed: 20, weeklyUsed: 10, now: now, active: false)
+        let pressure = UsageInsights.quotaPressure(
+            accounts: [active, better],
+            points: [point(total: 400, minutesAgo: 10, now: now)],
+            rotationThresholdRemainingPercent: 10,
+            autoRotationEnabled: true,
+            now: now
+        )
+
+        let plan = try XCTUnwrap(UsageInsights.workSessionPlan(
+            activeAccount: active,
+            points: [
+                point(total: 400, minutesAgo: 10, now: now),
+                point(total: 200, minutesAgo: 35, now: now),
+                point(total: 600, minutesAgo: 55, now: now)
+            ],
+            pressure: pressure,
+            now: now
+        ))
+
+        XCTAssertEqual(plan.activeAccountName, "active@example.com")
+        XCTAssertEqual(plan.recommendedAccount?.id, "better")
+        XCTAssertEqual(plan.bestWindow.minutes, 30)
+        XCTAssertEqual(plan.minutesUntilFiveHourExhaustion ?? 0, 10, accuracy: 0.001)
+    }
+
     func testTopUsageBreakdownGroupsSessionsProjectsDaysAndModels() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         let top = UsageInsights.topUsage(
@@ -145,6 +174,52 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(top.projects.first?.label, "AgentBar")
         XCTAssertEqual(top.models.first?.label, "gpt-5")
         XCTAssertEqual(top.days.first?.tokens, 2_300)
+    }
+
+    func testSessionDrilldownAggregatesSelectedSessionByModelAndProject() throws {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let detail = try XCTUnwrap(UsageInsights.sessionDrilldown(
+            for: "session-a",
+            points: [
+                point(total: 1_000, minutesAgo: 10, now: now, model: "gpt-5", sessionID: "session-a", sessionTitle: "Fix high CPU usage", projectName: "AgentBar", cost: "0.30"),
+                point(total: 500, minutesAgo: 20, now: now, model: "gpt-5-mini", sessionID: "session-a", sessionTitle: "Fix high CPU usage", projectName: "AgentBar", cost: "0.10"),
+                point(total: 800, minutesAgo: 30, now: now, model: "gpt-5", sessionID: "session-b", projectName: "Other", cost: "0.20")
+            ]
+        ))
+
+        XCTAssertEqual(detail.title, "Fix high CPU usage")
+        XCTAssertEqual(detail.projectName, "AgentBar")
+        XCTAssertEqual(detail.totalTokens, 1_500)
+        XCTAssertEqual(detail.estimatedCostUSD, Decimal(string: "0.40"))
+        XCTAssertEqual(detail.models.map(\.label), ["gpt-5", "gpt-5-mini"])
+        XCTAssertEqual(detail.models.map(\.tokens), [1_000, 500])
+    }
+
+    func testAccountHealthCenterCombinesAccountAndDataSourceProblems() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        var locked = account(id: "locked", name: "locked@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now, active: false)
+        locked.loginWarning = .forcedLogout
+        let health = UsageInsights.accountHealthCenter(
+            accounts: [locked],
+            dataSourceHealth: DataSourceHealthSummary(
+                rows: [
+                    DataSourceHealthSummary.Row(
+                        service: .codex,
+                        status: .needsAuthorization,
+                        note: "Codex usage API sync failed",
+                        refreshedAt: now
+                    )
+                ],
+                liveCount: 0,
+                issueCount: 1
+            ),
+            language: .english
+        )
+
+        XCTAssertEqual(health.rows.map(\.kind), [.login, .dataSource])
+        XCTAssertEqual(health.rows.first?.accountID, "locked")
+        XCTAssertTrue(health.rows.first?.title.contains("locked@example.com") == true)
+        XCTAssertTrue(health.rows.last?.detail.contains("Codex usage API sync failed") == true)
     }
 
     func testRapidUsageAlertFlagsTenMinuteSpikeAgainstToday() throws {
@@ -298,14 +373,15 @@ final class UsageInsightsTests: XCTestCase {
         model: String = "codex-local",
         sessionID: String? = nil,
         sessionTitle: String? = nil,
-        projectName: String? = nil
+        projectName: String? = nil,
+        cost: String? = nil
     ) -> UsagePoint {
         UsagePoint(
             service: .codex,
             model: model,
             date: now.addingTimeInterval(TimeInterval(-minutesAgo * 60)),
             tokens: TokenTotals(input: total / 2, cachedInput: 0, output: total / 2, reasoningOutput: 0, total: total),
-            estimatedCostUSD: nil,
+            estimatedCostUSD: cost.map { NSDecimalNumber(string: $0).decimalValue },
             sessionID: sessionID,
             sessionTitle: sessionTitle,
             projectName: projectName

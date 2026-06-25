@@ -7,6 +7,7 @@ struct StatisticsView: View {
     @ObservedObject private var updates: AppUpdateStore
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
+    @State private var selectedSessionLabel: String?
 
     private static let dashboardContentTopPadding: CGFloat = 12
     private static let dashboardContentBottomPadding: CGFloat = 26
@@ -253,7 +254,17 @@ struct StatisticsView: View {
                         modelRows
                     }
                     Panel(title: usageLocalized("top_usage")) {
-                        TopUsagePanel(breakdown: topUsage, language: store.language, theme: settings.themeColor)
+                        TopUsagePanel(
+                            breakdown: topUsage,
+                            selectedSessionLabel: selectedSessionLabel,
+                            language: store.language,
+                            theme: settings.themeColor
+                        ) { label in
+                            selectedSessionLabel = label
+                        }
+                    }
+                    Panel(title: usageLocalized("session_drilldown")) {
+                        SessionDrilldownPanel(detail: selectedSessionDetail, language: store.language, theme: settings.themeColor)
                     }
                     if hasConfiguredBudgets {
                         Panel(title: budgetLocalized("budgets")) {
@@ -267,6 +278,16 @@ struct StatisticsView: View {
                     }
                     Panel(title: dataSourceLocalized("data_source_health")) {
                         DataSourceHealthPanel(health: dataSourceHealth, language: store.language, theme: settings.themeColor)
+                    }
+                    Panel(title: healthLocalized("account_health")) {
+                        AccountHealthCenterPanel(
+                            health: accountHealthCenter,
+                            language: store.language,
+                            theme: settings.themeColor,
+                            onLogin: openHealthLogin,
+                            onRemove: removeHealthAccount,
+                            onRefresh: { store.refresh(force: true, showManualFeedback: true) }
+                        )
                     }
                 }
                 .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
@@ -398,6 +419,18 @@ struct StatisticsView: View {
                     )
                     .settingsControl(width: SettingsControlLayout.widePickerWidth)
                 }
+            }
+
+            SettingsGroup(title: healthLocalized("account_health"), subtitle: healthLocalized("account_health_subtitle")) {
+                AccountHealthCenterPanel(
+                    health: accountHealthCenter,
+                    language: store.language,
+                    theme: settings.themeColor,
+                    onLogin: openHealthLogin,
+                    onRemove: removeHealthAccount,
+                    onRefresh: { store.refresh(force: true, showManualFeedback: true) }
+                )
+                .padding(12)
             }
 
             SettingsGroup(title: L.text("menu_bar", store.language), subtitle: L.text("menu_bar_settings_subtitle", store.language)) {
@@ -715,6 +748,11 @@ struct StatisticsView: View {
         UsageInsights.topUsage(points: filteredPoints)
     }
 
+    private var selectedSessionDetail: SessionDrilldown? {
+        let label = selectedSessionLabel ?? topUsage.sessions.first?.label
+        return label.flatMap { UsageInsights.sessionDrilldown(for: $0, points: filteredPoints) }
+    }
+
     private var rapidUsageAlert: RapidUsageAlert? {
         UsageInsights.rapidUsageAlert(points: filteredPoints)
     }
@@ -732,6 +770,20 @@ struct StatisticsView: View {
 
     private var dataSourceHealth: DataSourceHealthSummary {
         UsageInsights.dataSourceHealth(snapshots: store.snapshots)
+    }
+
+    private var accountHealthCenter: AccountHealthCenter {
+        UsageInsights.accountHealthCenter(accounts: store.accounts, dataSourceHealth: dataSourceHealth, language: store.language)
+    }
+
+    private func openHealthLogin(_ accountID: String) {
+        guard let account = store.accounts.first(where: { $0.id == accountID }) else { return }
+        store.openLogin(for: account)
+    }
+
+    private func removeHealthAccount(_ accountID: String) {
+        guard let account = store.accounts.first(where: { $0.id == accountID }) else { return }
+        store.removeAccount(account)
     }
 
     private func budgetLocalized(_ key: String) -> String {
@@ -771,7 +823,19 @@ struct StatisticsView: View {
     private func usageLocalized(_ key: String) -> String {
         switch (key, store.language) {
         case ("top_usage", .chinese): "高消耗定位"
+        case ("session_drilldown", .chinese): "会话明细"
         case ("top_usage", _): "Top usage"
+        case ("session_drilldown", _): "Session drilldown"
+        default: key
+        }
+    }
+
+    private func healthLocalized(_ key: String) -> String {
+        switch (key, store.language) {
+        case ("account_health", .chinese): "账号健康"
+        case ("account_health_subtitle", .chinese): "集中处理重新登录、数据源异常和无效账号。"
+        case ("account_health", _): "Account health"
+        case ("account_health_subtitle", _): "Handle relogin, source issues, and stale accounts in one place."
         default: key
         }
     }
@@ -1786,15 +1850,17 @@ private struct RapidUsageAlertPanel: View {
 
 private struct TopUsagePanel: View {
     var breakdown: TopUsageBreakdown
+    var selectedSessionLabel: String?
     var language: AppLanguage
     var theme: AppThemeColor
+    var onSelectSession: (String) -> Void
 
     var body: some View {
         if breakdown.sessions.isEmpty && breakdown.projects.isEmpty && breakdown.days.isEmpty && breakdown.models.isEmpty {
             EmptyPanelMessage(L.text("no_usage_data", language))
         } else {
             VStack(spacing: 12) {
-                topSection(title: localized("sessions"), rows: breakdown.sessions, color: theme.primary, showsLastUsedAt: true)
+                topSection(title: localized("sessions"), rows: breakdown.sessions, color: theme.primary, showsLastUsedAt: true, isSelectable: true)
                 topSection(title: localized("projects"), rows: breakdown.projects, color: theme.tertiary)
                 topSection(title: localized("days"), rows: breakdown.days, color: theme.secondary)
                 topSection(title: localized("models"), rows: breakdown.models, color: theme.primary)
@@ -1803,7 +1869,7 @@ private struct TopUsagePanel: View {
     }
 
     @ViewBuilder
-    private func topSection(title: String, rows: [TopUsageRow], color: Color, showsLastUsedAt: Bool = false) -> some View {
+    private func topSection(title: String, rows: [TopUsageRow], color: Color, showsLastUsedAt: Bool = false, isSelectable: Bool = false) -> some View {
         if rows.isEmpty {
             EmptyPanelMessage(L.text("no_usage_data", language))
         } else {
@@ -1813,33 +1879,50 @@ private struct TopUsagePanel: View {
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
                 ForEach(rows.prefix(3)) { row in
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(color)
-                            .frame(width: 7, height: 7)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(row.label)
-                                .font(.system(size: 12, weight: .semibold))
-                                .lineLimit(1)
-                            if showsLastUsedAt, let lastUsedAt = row.lastUsedAt {
-                                Text("\(localized("latest")) \(DisplayFormatters.relativeString(for: lastUsedAt, language: language))")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
+                    Button {
+                        if isSelectable {
+                            onSelectSession(row.label)
                         }
-                        Spacer()
-                        Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
-                            .font(.system(size: 12, weight: .bold))
-                            .monospacedDigit()
-                        Text("\(Int((row.share * 100).rounded()))%")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 34, alignment: .trailing)
+                    } label: {
+                        topRow(row, color: color, showsLastUsedAt: showsLastUsedAt, isSelected: isSelectable && selectedSessionLabel == row.label)
                     }
+                    .buttonStyle(.plain)
+                    .disabled(!isSelectable)
+                    .pointingHandCursor(enabled: isSelectable)
                 }
             }
         }
+    }
+
+    private func topRow(_ row: TopUsageRow, color: Color, showsLastUsedAt: Bool, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(color)
+                .frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(row.label)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                if showsLastUsedAt, let lastUsedAt = row.lastUsedAt {
+                    Text("\(localized("latest")) \(DisplayFormatters.relativeString(for: lastUsedAt, language: language))")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
+                .font(.system(size: 12, weight: .bold))
+                .monospacedDigit()
+            Text("\(Int((row.share * 100).rounded()))%")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 34, alignment: .trailing)
+        }
+        .padding(.horizontal, isSelected ? 7 : 0)
+        .padding(.vertical, isSelected ? 5 : 0)
+        .background(isSelected ? color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .contentShape(Rectangle())
     }
 
     private func localized(_ key: String) -> String {
@@ -1854,6 +1937,184 @@ private struct TopUsagePanel: View {
         case ("days", _): "Days"
         case ("models", _): "Models"
         case ("latest", _): "Latest"
+        default: key
+        }
+    }
+}
+
+private struct SessionDrilldownPanel: View {
+    var detail: SessionDrilldown?
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        if let detail {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(detail.title)
+                            .font(.system(size: 13, weight: .bold))
+                            .lineLimit(1)
+                        Text(subtitle(for: detail))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(DisplayFormatters.compactTokenString(detail.totalTokens, language: language))
+                            .font(.system(size: 14, weight: .bold))
+                            .monospacedDigit()
+                        Text(detail.estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                ForEach(detail.models) { row in
+                    HStack(spacing: 8) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(theme.primary)
+                            .frame(width: 7, height: 7)
+                        Text(row.label)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
+                            .font(.system(size: 12, weight: .bold))
+                            .monospacedDigit()
+                        Text("\(Int((row.share * 100).rounded()))%")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 34, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+        } else {
+            EmptyPanelMessage(localized("select_session"))
+        }
+    }
+
+    private func subtitle(for detail: SessionDrilldown) -> String {
+        let project = detail.projectName ?? localized("unknown_project")
+        let latest = detail.lastUsedAt.map { DisplayFormatters.relativeString(for: $0, language: language) } ?? "--"
+        return "\(project) · \(localized("latest")) \(latest)"
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("select_session", .chinese): "选择一个高消耗会话查看模型分布。"
+        case ("unknown_project", .chinese): "未知项目"
+        case ("latest", .chinese): "最新"
+        case ("select_session", _): "Select a top session to inspect model usage."
+        case ("unknown_project", _): "Unknown project"
+        case ("latest", _): "Latest"
+        default: key
+        }
+    }
+}
+
+private struct AccountHealthCenterPanel: View {
+    var health: AccountHealthCenter
+    var language: AppLanguage
+    var theme: AppThemeColor
+    var onLogin: (String) -> Void
+    var onRemove: (String) -> Void
+    var onRefresh: () -> Void
+
+    var body: some View {
+        if health.rows.isEmpty {
+            EmptyPanelMessage(localized("healthy"))
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(health.rows) { row in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: iconName(for: row))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(color(for: row))
+                            .frame(width: 16)
+                            .padding(.top, 3)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.title)
+                                .font(.system(size: 12, weight: .bold))
+                                .lineLimit(1)
+                            Text(row.detail)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                        actions(for: row)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func actions(for row: AccountHealthCenter.Row) -> some View {
+        switch row.kind {
+        case .login:
+            if let accountID = row.accountID {
+                HStack(spacing: 6) {
+                    Button(localized("login")) {
+                        onLogin(accountID)
+                    }
+                    .controlSize(.small)
+                    .pointingHandCursor()
+                    Button(role: .destructive) {
+                        onRemove(accountID)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .foregroundStyle(.red)
+                    .help(localized("remove"))
+                    .pointingHandCursor()
+                }
+            }
+        case .dataSource:
+            Button(localized("refresh")) {
+                onRefresh()
+            }
+            .controlSize(.small)
+            .pointingHandCursor()
+        }
+    }
+
+    private func iconName(for row: AccountHealthCenter.Row) -> String {
+        switch row.kind {
+        case .login: "person.crop.circle.badge.exclamationmark"
+        case .dataSource: "externaldrive.badge.exclamationmark"
+        }
+    }
+
+    private func color(for row: AccountHealthCenter.Row) -> Color {
+        switch row.severity {
+        case .critical: .red
+        case .warning: .orange
+        case .ok: theme.primary
+        }
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("healthy", .chinese): "账号和数据源暂无需要处理的问题。"
+        case ("login", .chinese): "登录"
+        case ("remove", .chinese): "删除账号"
+        case ("refresh", .chinese): "刷新"
+        case ("healthy", _): "No account or source issue needs action."
+        case ("login", _): "Login"
+        case ("remove", _): "Remove account"
+        case ("refresh", _): "Refresh"
         default: key
         }
     }

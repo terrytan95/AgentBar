@@ -64,11 +64,17 @@ struct CodexUsageAPISyncer {
         }
 
         let activeAccountKey = registry["active_account_key"] as? String
+        guard let activeAccountIndex = accounts.firstIndex(where: { account in
+            (account["account_key"] as? String) == activeAccountKey
+        }) else {
+            return .unavailable("No active ChatGPT account was available for usage refresh.")
+        }
+
         var attempted = 0
         var updated = false
         var lastFailure: CodexUsageSyncResult?
 
-        for index in accounts.indices {
+        for index in [activeAccountIndex] {
             if let authMode = accounts[index]["auth_mode"] as? String,
                authMode.localizedCaseInsensitiveCompare("apikey") == .orderedSame {
                 continue

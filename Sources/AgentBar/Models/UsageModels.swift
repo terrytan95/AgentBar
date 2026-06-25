@@ -229,10 +229,20 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    fileprivate var visibleWorkspaces: [UsageWorkspace] {
+    private var visibleWorkspaces: [UsageWorkspace] {
         if !workspaces.isEmpty { return workspaces }
         let legacy = UsageWorkspace(name: workspaceName, workspaceID: workspaceID)
         return legacy.displayValue == nil ? [] : [legacy]
+    }
+}
+
+struct UsageAccountDisplayGroup: Equatable, Identifiable, Sendable {
+    var id: String
+    var title: String
+    var accounts: [UsageAccount]
+
+    var isGrouped: Bool {
+        accounts.count > 1
     }
 }
 
@@ -244,35 +254,6 @@ private extension Optional where Wrapped == String {
 }
 
 extension Array where Element == UsageAccount {
-    func groupedByIdentity() -> [UsageAccount] {
-        var groups: [String: [UsageAccount]] = [:]
-        var orderedKeys: [String] = []
-        for account in self {
-            let key = account.identityGroupKey
-            if groups[key] == nil {
-                orderedKeys.append(key)
-                groups[key] = []
-            }
-            groups[key]?.append(account)
-        }
-
-        return orderedKeys.compactMap { key in
-            guard let group = groups[key], let first = group.first else { return nil }
-            var account = group.first(where: \.isActive) ?? first
-            var seenWorkspaces: Set<String> = []
-            account.workspaces = ([account] + group.filter { $0 != account })
-                .flatMap(\.visibleWorkspaces)
-                .filter { workspace in
-                    guard let value = workspace.displayValue?.lowercased(), !seenWorkspaces.contains(value) else { return false }
-                    seenWorkspaces.insert(value)
-                    return true
-                }
-            account.workspaceName = account.workspaces.first?.name
-            account.workspaceID = account.workspaces.first?.workspaceID
-            return account
-        }
-    }
-
     func sortedByActiveThenName() -> [UsageAccount] {
         sorted { lhs, rhs in
             if lhs.isActive != rhs.isActive {
@@ -305,6 +286,24 @@ extension Array where Element == UsageAccount {
             case .alphabetical:
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
+        }
+    }
+
+    func displayGroupsByIdentity(sortMode: AccountSortMode) -> [UsageAccountDisplayGroup] {
+        var groups: [String: [UsageAccount]] = [:]
+        var orderedKeys: [String] = []
+        for account in sorted(using: sortMode) {
+            let key = account.identityGroupKey
+            if groups[key] == nil {
+                orderedKeys.append(key)
+                groups[key] = []
+            }
+            groups[key]?.append(account)
+        }
+
+        return orderedKeys.compactMap { key in
+            guard let accounts = groups[key], let first = accounts.first else { return nil }
+            return UsageAccountDisplayGroup(id: key, title: first.displayName, accounts: accounts)
         }
     }
 }

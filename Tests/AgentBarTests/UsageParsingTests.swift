@@ -102,7 +102,7 @@ final class UsageParsingTests: XCTestCase {
         ])
     }
 
-    func testAccountsWithSameIdentityGroupWorkspaceDisplays() {
+    func testAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         var core = testAccount(id: "person::core", name: "person@example.com", fiveHourUsed: 18, weeklyUsed: 51, now: now)
         core.workspaceName = "Core Team"
@@ -115,15 +115,13 @@ final class UsageParsingTests: XCTestCase {
         client.workspaceID = "client-ab"
         client.workspaces = [UsageWorkspace(name: "Client Team", workspaceID: "client-ab")]
 
-        let grouped = [client, core].groupedByIdentity().sortedByActiveThenName()
+        let groups = [client, core].displayGroupsByIdentity(sortMode: .activeFirst)
 
-        XCTAssertEqual(grouped.map(\.id), ["person::core"])
-        XCTAssertEqual(grouped.first?.workspaceDisplayValues, [
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.title, "person@example.com")
+        XCTAssertEqual(groups.first?.accounts.map(\.id), ["person::core", "person::client"])
+        XCTAssertEqual(groups.first?.accounts.map(\.workspaceDisplayValue), [
             "Core Team · core-123456",
-            "Client Team · client-ab"
-        ])
-        XCTAssertEqual(grouped.first?.workspaceLines(language: .english), [
-            "Workspaces: Core Team · core-123456",
             "Client Team · client-ab"
         ])
     }
@@ -1003,6 +1001,7 @@ final class UsageParsingTests: XCTestCase {
     @MainActor
     func testRapidUsageAlertWarnsInMenuBarTitle() {
         let now = Date()
+        let recentPointDate = max(now.addingTimeInterval(-60), Calendar.current.startOfDay(for: now))
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1013,14 +1012,14 @@ final class UsageParsingTests: XCTestCase {
                 UsagePoint(
                     service: .codex,
                     model: "codex-local",
-                    date: now.addingTimeInterval(-5 * 60),
+                    date: recentPointDate,
                     tokens: TokenTotals(input: 3_000, cachedInput: 0, output: 3_000, reasoningOutput: 0, total: 6_000),
                     estimatedCostUSD: nil
                 ),
                 UsagePoint(
                     service: .codex,
                     model: "codex-local",
-                    date: now.addingTimeInterval(-20 * 60),
+                    date: now,
                     tokens: TokenTotals(input: 2_000, cachedInput: 0, output: 2_000, reasoningOutput: 0, total: 4_000),
                     estimatedCostUSD: nil
                 )

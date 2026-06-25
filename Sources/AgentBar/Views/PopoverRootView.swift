@@ -129,13 +129,9 @@ struct PopoverRootView: View {
         UsageInsights.dataSourceHealth(snapshots: store.snapshots)
     }
 
-    private var displayAccounts: [UsageAccount] {
-        store.accounts.groupedByIdentity()
-    }
-
     private var quotaPressure: QuotaPressureInsight {
         UsageInsights.quotaPressure(
-            accounts: displayAccounts,
+            accounts: store.accounts,
             points: store.points,
             rotationThresholdRemainingPercent: store.settings.codexRotationThresholdRemainingPercent,
             autoRotationEnabled: store.settings.autoCodexAccountRotationEnabled
@@ -198,15 +194,15 @@ struct PopoverRootView: View {
             if store.isLoadingAccountInformation && store.accounts.isEmpty {
                 PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
             } else {
-                ForEach(store.sortedAccounts()) { account in
-                    AccountRowView(
-                        account: account,
+                ForEach(store.accountDisplayGroups()) { group in
+                    PopoverAccountDisplayGroupView(
+                        group: group,
                         language: store.language,
                         theme: store.settings.themeColor,
-                        isSwitching: store.switchingAccountID == account.id,
-                        onSwitch: { store.switchActiveAccount(account) },
-                        onLogin: { store.openLogin(for: account) },
-                        onRemove: { store.removeAccount(account) }
+                        switchingAccountID: store.switchingAccountID,
+                        onSwitch: store.switchActiveAccount,
+                        onLogin: { account in store.openLogin(for: account) },
+                        onRemove: store.removeAccount
                     )
                 }
             }
@@ -318,6 +314,55 @@ struct PopoverRootView: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+struct PopoverAccountDisplayGroupView: View {
+    var group: UsageAccountDisplayGroup
+    var language: AppLanguage
+    var theme: AppThemeColor
+    var switchingAccountID: String?
+    var onSwitch: (UsageAccount) -> Void
+    var onLogin: (UsageAccount) -> Void
+    var onRemove: (UsageAccount) -> Void
+
+    var body: some View {
+        if group.isGrouped {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(group.title)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                    Text("\(group.accounts.count) \(L.text("workspaces", language))")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 2)
+
+                ForEach(group.accounts) { account in
+                    AccountRowView(
+                        account: account,
+                        language: language,
+                        theme: theme,
+                        isSwitching: switchingAccountID == account.id,
+                        onSwitch: { onSwitch(account) },
+                        onLogin: { onLogin(account) },
+                        onRemove: { onRemove(account) }
+                    )
+                    .padding(.leading, 12)
+                }
+            }
+        } else if let account = group.accounts.first {
+            AccountRowView(
+                account: account,
+                language: language,
+                theme: theme,
+                isSwitching: switchingAccountID == account.id,
+                onSwitch: { onSwitch(account) },
+                onLogin: { onLogin(account) },
+                onRemove: { onRemove(account) }
+            )
+        }
     }
 }
 

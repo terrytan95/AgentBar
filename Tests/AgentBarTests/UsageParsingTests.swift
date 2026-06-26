@@ -1082,6 +1082,28 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(allChange.costPercent)
     }
 
+    func testUsageRangeIntervalsDriveStatisticsAndAuditFiltering() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
+        let currentStart = calendar.date(byAdding: .day, value: -7, to: now)!
+        let previousStart = currentStart.addingTimeInterval(-7 * 24 * 60 * 60)
+        let points = [
+            UsagePoint(service: .codex, model: "codex-local", date: now, tokens: TokenTotals(input: 60, cachedInput: 0, output: 40, reasoningOutput: 0, total: 100), estimatedCostUSD: nil),
+            UsagePoint(service: .codex, model: "codex-local", date: currentStart.addingTimeInterval(60), tokens: TokenTotals(input: 30, cachedInput: 0, output: 20, reasoningOutput: 0, total: 50), estimatedCostUSD: nil),
+            UsagePoint(service: .codex, model: "codex-local", date: previousStart.addingTimeInterval(60), tokens: TokenTotals(input: 10, cachedInput: 0, output: 10, reasoningOutput: 0, total: 20), estimatedCostUSD: nil)
+        ]
+
+        let current = try XCTUnwrap(UsageRange.last7Days.dateInterval(now: now, calendar: calendar))
+        let previous = try XCTUnwrap(UsageRange.last7Days.previousDateInterval(currentInterval: current, calendar: calendar))
+
+        XCTAssertEqual(points.filter { current.contains($0.date) }.map(\.tokens.total).reduce(0, +), 150)
+        XCTAssertEqual(points.filter { previous.contains($0.date) }.map(\.tokens.total).reduce(0, +), 20)
+        XCTAssertEqual(UsageStatistics.summarize(points: points, range: .last7Days, now: now, calendar: calendar).totalTokens, 150)
+        XCTAssertEqual(UsageAuditReporter.filteredPoints(points: points, range: .last7Days, now: now, calendar: calendar).map(\.tokens.total).reduce(0, +), 150)
+        XCTAssertEqual(UsageAuditReporter.rangeComparison(points: points, range: .last7Days, now: now, calendar: calendar)?.previousTokens, 20)
+    }
+
     func testChangePercentFormattingShowsDirectionAndMissingBaseline() {
         XCTAssertEqual(DisplayFormatters.changePercentString(50), "↑ 50.0%")
         XCTAssertEqual(DisplayFormatters.changePercentString(-25.26), "↓ 25.3%")

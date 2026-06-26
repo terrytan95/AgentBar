@@ -374,6 +374,60 @@ enum UsageRange: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+extension UsageRange {
+    func dateInterval(
+        now: Date,
+        calendar: Calendar,
+        customStart: Date? = nil,
+        customEnd: Date? = nil
+    ) -> DateInterval? {
+        switch self {
+        case .today:
+            return calendar.dateInterval(of: .day, for: now)
+        case .yesterday:
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: now) else { return nil }
+            return calendar.dateInterval(of: .day, for: yesterday)
+        case .thisWeek:
+            return calendar.dateInterval(of: .weekOfYear, for: now)
+        case .thisMonth:
+            return calendar.dateInterval(of: .month, for: now)
+        case .thisYear:
+            return calendar.dateInterval(of: .year, for: now)
+        case .last7Days:
+            guard let start = calendar.date(byAdding: .day, value: -7, to: now) else { return nil }
+            return DateInterval(start: start, end: now.addingTimeInterval(1))
+        case .last30Days:
+            guard let start = calendar.date(byAdding: .day, value: -30, to: now) else { return nil }
+            return DateInterval(start: start, end: now.addingTimeInterval(1))
+        case .all:
+            return nil
+        case .custom:
+            guard let customStart, let customEnd else { return nil }
+            return DateInterval(start: customStart, end: customEnd)
+        }
+    }
+
+    func previousDateInterval(currentInterval: DateInterval, calendar: Calendar) -> DateInterval? {
+        switch self {
+        case .all:
+            return nil
+        case .thisWeek:
+            guard let start = calendar.date(byAdding: .weekOfYear, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .thisMonth:
+            guard let start = calendar.date(byAdding: .month, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .thisYear:
+            guard let start = calendar.date(byAdding: .year, value: -1, to: currentInterval.start) else { return nil }
+            return DateInterval(start: start, end: currentInterval.start)
+        case .today, .yesterday, .last7Days, .last30Days, .custom:
+            let duration = currentInterval.duration
+            guard duration > 0 else { return nil }
+            return DateInterval(start: currentInterval.start.addingTimeInterval(-duration), end: currentInterval.start)
+        }
+    }
+}
+
 struct UsageSummary: Equatable, Sendable {
     var totalTokens: Int
     var inputTokens: Int

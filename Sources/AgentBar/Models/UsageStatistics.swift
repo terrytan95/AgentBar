@@ -9,7 +9,7 @@ enum UsageStatistics {
         customStart: Date? = nil,
         customEnd: Date? = nil
     ) -> UsageSummary {
-        let interval = dateInterval(for: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd)
+        let interval = range.dateInterval(now: now, calendar: calendar, customStart: customStart, customEnd: customEnd)
         let filtered = points.filter { point in
             guard let interval else { return true }
             return interval.contains(point.date)
@@ -26,8 +26,8 @@ enum UsageStatistics {
         customEnd: Date? = nil
     ) -> UsagePeriodChange {
         guard
-            let currentInterval = dateInterval(for: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd),
-            let previousInterval = previousDateInterval(for: range, currentInterval: currentInterval, calendar: calendar)
+            let currentInterval = range.dateInterval(now: now, calendar: calendar, customStart: customStart, customEnd: customEnd),
+            let previousInterval = range.previousDateInterval(currentInterval: currentInterval, calendar: calendar)
         else {
             return UsagePeriodChange(tokenPercent: nil, costPercent: nil)
         }
@@ -63,26 +63,6 @@ enum UsageStatistics {
         )
     }
 
-    private static func previousDateInterval(for range: UsageRange, currentInterval: DateInterval, calendar: Calendar) -> DateInterval? {
-        switch range {
-        case .all:
-            return nil
-        case .thisWeek:
-            guard let start = calendar.date(byAdding: .weekOfYear, value: -1, to: currentInterval.start) else { return nil }
-            return DateInterval(start: start, end: currentInterval.start)
-        case .thisMonth:
-            guard let start = calendar.date(byAdding: .month, value: -1, to: currentInterval.start) else { return nil }
-            return DateInterval(start: start, end: currentInterval.start)
-        case .thisYear:
-            guard let start = calendar.date(byAdding: .year, value: -1, to: currentInterval.start) else { return nil }
-            return DateInterval(start: start, end: currentInterval.start)
-        case .today, .yesterday, .last7Days, .last30Days, .custom:
-            let duration = currentInterval.duration
-            guard duration > 0 else { return nil }
-            return DateInterval(start: currentInterval.start.addingTimeInterval(-duration), end: currentInterval.start)
-        }
-    }
-
     private static func percentChange(current: Int, previous: Int) -> Double? {
         guard previous > 0 else { return nil }
         return (Double(current - previous) / Double(previous)) * 100
@@ -94,39 +74,6 @@ enum UsageStatistics {
         let previousValue = NSDecimalNumber(decimal: previous).doubleValue
         guard previousValue > 0 else { return nil }
         return ((currentValue - previousValue) / previousValue) * 100
-    }
-
-    private static func dateInterval(
-        for range: UsageRange,
-        now: Date,
-        calendar: Calendar,
-        customStart: Date?,
-        customEnd: Date?
-    ) -> DateInterval? {
-        switch range {
-        case .today:
-            return calendar.dateInterval(of: .day, for: now)
-        case .yesterday:
-            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: now) else { return nil }
-            return calendar.dateInterval(of: .day, for: yesterday)
-        case .thisWeek:
-            return calendar.dateInterval(of: .weekOfYear, for: now)
-        case .thisMonth:
-            return calendar.dateInterval(of: .month, for: now)
-        case .thisYear:
-            return calendar.dateInterval(of: .year, for: now)
-        case .last7Days:
-            guard let start = calendar.date(byAdding: .day, value: -7, to: now) else { return nil }
-            return DateInterval(start: start, end: now.addingTimeInterval(1))
-        case .last30Days:
-            guard let start = calendar.date(byAdding: .day, value: -30, to: now) else { return nil }
-            return DateInterval(start: start, end: now.addingTimeInterval(1))
-        case .all:
-            return nil
-        case .custom:
-            guard let customStart, let customEnd else { return nil }
-            return DateInterval(start: customStart, end: customEnd)
-        }
     }
 
     private static func makeDailyBars(points: [UsagePoint], calendar: Calendar) -> [DailyUsageBar] {

@@ -582,6 +582,65 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(store.menuBarTitle, "5H 92%  WK 45%")
     }
 
+    func testUsageRefreshOrchestratorSyncsBeforeReadersAndMergesSnapshots() {
+        let recorder = RefreshOrderRecorder()
+        let now = Date()
+        let codexAccount = testAccount(id: "codex", name: "codex@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)
+        let claudePoint = UsagePoint(
+            service: .claudeCode,
+            model: "claude-opus",
+            date: now,
+            tokens: TokenTotals(input: 10, cachedInput: 0, output: 15, reasoningOutput: 0, total: 25),
+            estimatedCostUSD: nil
+        )
+        let orchestrator = UsageRefreshOrchestrator(
+            codexUsageSynchronizer: {
+                recorder.record("sync")
+                return .failed("expired token")
+            },
+            codexDetailedResetCreditsSynchronizer: {
+                recorder.record("detailed-sync")
+                return .success
+            },
+            codexUsageReader: {
+                XCTAssertEqual(recorder.events, ["sync"])
+                recorder.record("codex-read")
+                return UsageSnapshot(
+                    service: .codex,
+                    status: .live,
+                    accounts: [codexAccount],
+                    points: [],
+                    securityNotes: [],
+                    refreshedAt: now,
+                    pricingFingerprint: Pricing.fingerprint
+                )
+            },
+            claudeUsageReader: {
+                XCTAssertEqual(recorder.events, ["sync", "codex-read"])
+                recorder.record("claude-read")
+                return UsageSnapshot(
+                    service: .claudeCode,
+                    status: .live,
+                    accounts: [],
+                    points: [claudePoint],
+                    securityNotes: [],
+                    refreshedAt: now,
+                    pricingFingerprint: Pricing.fingerprint
+                )
+            }
+        )
+
+        let result = orchestrator.refresh(detailedResetCreditsEnabled: false)
+
+        XCTAssertEqual(recorder.events, ["sync", "codex-read", "claude-read"])
+        XCTAssertEqual(result.snapshots[.codex]?.securityNotes, [
+            "Codex usage API sync failed: expired token; using local registry and session cache."
+        ])
+        XCTAssertEqual(result.snapshots[.claudeCode]?.points, [claudePoint])
+        XCTAssertEqual(result.accounts.map(\.id), ["codex"])
+        XCTAssertEqual(result.points, [claudePoint])
+    }
+
     @MainActor
     func testDarkThemeSettingPersistsAndToneColorCopyIsLocalized() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"

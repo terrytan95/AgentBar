@@ -38,6 +38,17 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(refreshInterval, forKey: Keys.refreshInterval) }
     }
 
+    @Published var quotaCapacityHistoryInterval: TimeInterval {
+        didSet {
+            let clamped = Self.clampedQuotaCapacityHistoryInterval(quotaCapacityHistoryInterval)
+            if clamped != quotaCapacityHistoryInterval {
+                quotaCapacityHistoryInterval = clamped
+                return
+            }
+            defaults.set(clamped, forKey: Keys.quotaCapacityHistoryInterval)
+        }
+    }
+
     @Published var launchAtLogin: Bool {
         didSet {
             defaults.set(launchAtLogin, forKey: Keys.launchAtLogin)
@@ -157,6 +168,8 @@ final class SettingsStore: ObservableObject {
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? .english
         let savedInterval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = savedInterval >= 30 ? savedInterval : 60
+        let savedHistoryInterval = defaults.double(forKey: Keys.quotaCapacityHistoryInterval)
+        quotaCapacityHistoryInterval = Self.clampedQuotaCapacityHistoryInterval(savedHistoryInterval > 0 ? savedHistoryInterval : 3_600)
         launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
         if !defaults.bool(forKey: Keys.didMigrateActiveAccountMenuBarDefault) {
             defaults.set(MenuBarDisplayMode.activeAccountWindows.rawValue, forKey: Keys.menuBarDisplayMode)
@@ -209,6 +222,10 @@ final class SettingsStore: ObservableObject {
         max(0, value)
     }
 
+    static func clampedQuotaCapacityHistoryInterval(_ value: TimeInterval) -> TimeInterval {
+        max(300, value)
+    }
+
     private func applyLoginItemPreference() {
         do {
             if launchAtLogin {
@@ -226,6 +243,7 @@ final class SettingsStore: ObservableObject {
     private enum Keys {
         static let language = "language"
         static let refreshInterval = "refreshInterval"
+        static let quotaCapacityHistoryInterval = "quotaCapacityHistoryInterval"
         static let launchAtLogin = "launchAtLogin"
         static let menuBarDisplayMode = "menuBarDisplayMode"
         static let showCodexInMenuBar = "showCodexInMenuBar"

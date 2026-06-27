@@ -45,6 +45,7 @@ final class UsageParsingTests: XCTestCase {
         checkMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows()
         checkBudgetSettingsPersistAndWarnInMenuBarTitle()
         checkRapidUsageAlertWarnsInMenuBarTitle()
+        checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta()
         checkStatisticsBucketsAggregateExpectedRanges()
         checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod()
         checkPeriodChangeHasNoPercentWithoutComparableBaseline()
@@ -1194,6 +1195,43 @@ final class UsageParsingTests: XCTestCase {
         )
 
         XCTAssertTrue(store.menuBarTitle.hasPrefix("! "))
+    }
+
+    private func checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta() {
+        let firstDate = Date(timeIntervalSince1970: 1_781_388_300)
+        let secondDate = firstDate.addingTimeInterval(3_600)
+        var firstAccount = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: firstDate)
+        firstAccount.isActive = true
+        var secondAccount = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 15, weeklyUsed: 22, now: firstDate)
+        secondAccount.isActive = true
+        let points = [
+            UsagePoint(
+                service: .codex,
+                model: "codex-local",
+                date: firstDate.addingTimeInterval(1_800),
+                tokens: TokenTotals(input: 600, cachedInput: 0, output: 400, reasoningOutput: 0, total: 1_000),
+                estimatedCostUSD: nil
+            )
+        ]
+
+        let first = QuotaCapacityHistory(samples: []).appendingSample(
+            account: firstAccount,
+            points: [],
+            now: firstDate,
+            minimumInterval: 3_600
+        )
+        let second = first.appendingSample(
+            account: secondAccount,
+            points: points,
+            now: secondDate,
+            minimumInterval: 3_600
+        )
+
+        XCTAssertEqual(second.samples.count, 2)
+        XCTAssertNil(second.samples[0].estimatedFiveHourTotalTokens)
+        XCTAssertEqual(second.samples[1].tokensSincePreviousSample, 1_000)
+        XCTAssertEqual(second.samples[1].estimatedFiveHourTotalTokens, 20_000)
+        XCTAssertEqual(second.samples[1].estimatedWeeklyTotalTokens, 50_000)
     }
 
     private func checkStatisticsBucketsAggregateExpectedRanges() {

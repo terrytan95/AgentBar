@@ -228,6 +228,10 @@ struct StatisticsView: View {
                 QuotaETAPanel(eta: quotaETA, language: store.language, theme: settings.themeColor)
             }
 
+            Panel(title: quotaCapacityLocalized("quota_capacity_history")) {
+                QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language, theme: settings.themeColor)
+            }
+
             Panel(title: "\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))") {
                 HStack {
                     Spacer()
@@ -496,6 +500,17 @@ struct StatisticsView: View {
                         Text("60s").tag(TimeInterval(60))
                         Text("5m").tag(TimeInterval(300))
                         Text("10m").tag(TimeInterval(600))
+                    }
+                    .labelsHidden()
+                    .settingsControl(width: SettingsControlLayout.compactPickerWidth)
+                }
+                SettingsRow(title: quotaCapacityLocalized("quota_capacity_frequency"), subtitle: quotaCapacityLocalized("quota_capacity_frequency_subtitle")) {
+                    Picker("", selection: $settings.quotaCapacityHistoryInterval) {
+                        Text("15m").tag(TimeInterval(900))
+                        Text("30m").tag(TimeInterval(1_800))
+                        Text("1h").tag(TimeInterval(3_600))
+                        Text("2h").tag(TimeInterval(7_200))
+                        Text("6h").tag(TimeInterval(21_600))
                     }
                     .labelsHidden()
                     .settingsControl(width: SettingsControlLayout.compactPickerWidth)
@@ -853,6 +868,18 @@ struct StatisticsView: View {
         case ("account_health_subtitle", .chinese): "集中处理重新登录、数据源异常和无效账号。"
         case ("account_health", _): "Account health"
         case ("account_health_subtitle", _): "Handle relogin, source issues, and stale accounts in one place."
+        default: key
+        }
+    }
+
+    private func quotaCapacityLocalized(_ key: String) -> String {
+        switch (key, store.language) {
+        case ("quota_capacity_history", .chinese): "额度容量估算"
+        case ("quota_capacity_frequency", .chinese): "额度容量采样频率"
+        case ("quota_capacity_frequency_subtitle", .chinese): "按此间隔记录 5H/本周额度推算历史。"
+        case ("quota_capacity_history", _): "Quota capacity estimate"
+        case ("quota_capacity_frequency", _): "Quota capacity sampling"
+        case ("quota_capacity_frequency_subtitle", _): "Record estimated 5H and weekly capacity history on this cadence."
         default: key
         }
     }
@@ -1930,6 +1957,170 @@ private struct QuotaETAPanel: View {
         case ("now", _): "now"
         default: key
         }
+    }
+}
+
+private struct QuotaCapacityHistoryPanel: View {
+    var history: QuotaCapacityHistory
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    private var chartSamples: [QuotaCapacitySample] {
+        Array(history.samples.suffix(48))
+    }
+
+    var body: some View {
+        if chartSamples.contains(where: { $0.estimatedFiveHourTotalTokens != nil || $0.estimatedWeeklyTotalTokens != nil }) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    SummaryChip(
+                        title: "5H",
+                        value: tokenText(history.latestEstimate?.estimatedFiveHourTotalTokens),
+                        color: theme.primary
+                    )
+                    SummaryChip(
+                        title: localized("weekly"),
+                        value: tokenText(history.latestEstimate?.estimatedWeeklyTotalTokens),
+                        color: theme.tertiary
+                    )
+                    SummaryChip(
+                        title: localized("samples"),
+                        value: "\(history.samples.count)",
+                        color: theme.secondary
+                    )
+                }
+
+                QuotaCapacityLineChart(samples: chartSamples, language: language, theme: theme)
+                    .frame(height: 188)
+
+                HStack(spacing: 14) {
+                    Spacer()
+                    LegendItem(title: "5H", color: theme.primary)
+                    LegendItem(title: localized("weekly"), color: theme.tertiary)
+                }
+            }
+        } else {
+            EmptyPanelMessage(localized("waiting"))
+        }
+    }
+
+    private func tokenText(_ value: Int?) -> String {
+        value.map { DisplayFormatters.compactTokenString($0, language: language) } ?? "--"
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("weekly", .chinese): "本周"
+        case ("samples", .chinese): "样本"
+        case ("waiting", .chinese): "等待至少两次同一额度窗口内的采样和 token 消耗后生成估算。"
+        case ("weekly", _): "Weekly"
+        case ("samples", _): "Samples"
+        case ("waiting", _): "Waiting for two samples in the same quota window with token usage."
+        default: key
+        }
+    }
+}
+
+private struct QuotaCapacityLineChart: View {
+    var samples: [QuotaCapacitySample]
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    private var maxValue: Int {
+        max(1, samples.flatMap { [$0.estimatedFiveHourTotalTokens, $0.estimatedWeeklyTotalTokens].compactMap { $0 } }.max() ?? 1)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let axisWidth: CGFloat = 52
+            let labelHeight: CGFloat = 22
+            let plotSize = CGSize(width: max(1, proxy.size.width - axisWidth), height: max(1, proxy.size.height - labelHeight))
+
+            VStack(spacing: 4) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    VStack(alignment: .trailing) {
+                        Text(tokenText(maxValue))
+                        Spacer()
+                        Text(tokenText(maxValue / 2))
+                        Spacer()
+                        Text("0")
+                    }
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: axisWidth - 8, height: plotSize.height)
+
+                    ZStack {
+                        VStack {
+                            Divider()
+                            Spacer()
+                            Divider()
+                            Spacer()
+                            Divider()
+                        }
+                        .opacity(0.45)
+
+                        line(for: \.estimatedFiveHourTotalTokens, color: theme.primary, in: plotSize)
+                        line(for: \.estimatedWeeklyTotalTokens, color: theme.tertiary, in: plotSize)
+                    }
+                    .frame(width: plotSize.width, height: plotSize.height)
+                }
+
+                HStack {
+                    Text(dateText(samples.first?.capturedAt))
+                    Spacer()
+                    Text(dateText(samples.last?.capturedAt))
+                }
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.leading, axisWidth)
+            }
+        }
+    }
+
+    private func line(for keyPath: KeyPath<QuotaCapacitySample, Int?>, color: Color, in size: CGSize) -> some View {
+        let points = plottedPoints(for: keyPath, in: size)
+        return ZStack {
+            Path { path in
+                for (index, point) in points.enumerated() {
+                    if index == 0 {
+                        path.move(to: point)
+                    } else {
+                        path.addLine(to: point)
+                    }
+                }
+            }
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+
+            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                Circle()
+                    .fill(color)
+                    .frame(width: 5, height: 5)
+                    .position(point)
+            }
+        }
+    }
+
+    private func plottedPoints(for keyPath: KeyPath<QuotaCapacitySample, Int?>, in size: CGSize) -> [CGPoint] {
+        guard !samples.isEmpty else { return [] }
+        let xDivisor = CGFloat(max(1, samples.count - 1))
+        return samples.enumerated().compactMap { index, sample in
+            guard let value = sample[keyPath: keyPath] else { return nil }
+            let x = CGFloat(index) / xDivisor * size.width
+            let y = size.height - (CGFloat(value) / CGFloat(maxValue) * size.height)
+            return CGPoint(x: x, y: y)
+        }
+    }
+
+    private func tokenText(_ value: Int) -> String {
+        DisplayFormatters.compactTokenString(value, language: language)
+    }
+
+    private func dateText(_ date: Date?) -> String {
+        guard let date else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.setLocalizedDateFormatFromTemplate("MMM d HH")
+        return formatter.string(from: date)
     }
 }
 

@@ -7,6 +7,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var snapshots: [UsageService: UsageSnapshot] = [:]
     @Published private(set) var accounts: [UsageAccount] = []
     @Published private(set) var points: [UsagePoint] = []
+    @Published private(set) var quotaCapacityHistory: QuotaCapacityHistory
     @Published private(set) var isRefreshing = false
     @Published private(set) var isManualRefreshFeedbackVisible = false
     @Published private(set) var hasLoadedAccountInformation = false
@@ -24,6 +25,7 @@ final class UsageStore: ObservableObject {
     private let manualCodexAppRestarter: @Sendable () -> Void
     private let codexAccountSwitchFailurePrompter: @Sendable (CodexAccountSwitchRecovery) -> Void
     private let codexAccountRecoveryLoginLauncher: @Sendable (String, String) -> Void
+    private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
     private var accountRemovalObserver: NSObjectProtocol?
     private var refreshInFlight = false
@@ -63,9 +65,12 @@ final class UsageStore: ObservableObject {
         },
         codexAccountRecoveryLoginLauncher: @escaping @Sendable (String, String) -> Void = { accountID, accountLabel in
             AccountLoginLauncher.openCodexRecoveryLogin(accountID: accountID, accountLabel: accountLabel)
-        }
+        },
+        quotaCapacityHistoryStore: QuotaCapacityHistoryStore = QuotaCapacityHistoryStore()
     ) {
         self.settings = settings
+        self.quotaCapacityHistoryStore = quotaCapacityHistoryStore
+        quotaCapacityHistory = quotaCapacityHistoryStore.load()
         let codexUsageSource = CodexUsageSource(
             codexUsageSynchronizer: codexUsageSynchronizer,
             codexDetailedResetCreditsSynchronizer: codexDetailedResetCreditsSynchronizer,
@@ -232,6 +237,7 @@ final class UsageStore: ObservableObject {
                 self.snapshots = refreshed.snapshots
                 self.accounts = refreshed.accounts
                 self.points = refreshed.points
+                self.recordQuotaCapacitySample()
                 self.hasLoadedAccountInformation = true
                 self.isRefreshing = false
                 self.refreshInFlight = false
@@ -444,6 +450,18 @@ final class UsageStore: ObservableObject {
         refreshInFlight = false
         refreshQueued = false
         manualRefreshQueued = false
+    }
+
+    func recordQuotaCapacitySample(now: Date = Date()) {
+        let history = quotaCapacityHistory.appendingSample(
+            account: activeAccount,
+            points: points,
+            now: now,
+            minimumInterval: settings.quotaCapacityHistoryInterval
+        )
+        guard history != quotaCapacityHistory else { return }
+        quotaCapacityHistory = history
+        quotaCapacityHistoryStore.save(history)
     }
 
     private struct PendingCodexSwitchRecovery {

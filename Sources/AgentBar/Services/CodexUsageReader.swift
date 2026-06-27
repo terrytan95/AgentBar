@@ -17,7 +17,8 @@ struct CodexUsageReader {
 
     func read() -> UsageSnapshot {
         let now = Date()
-        let registryURL = homeDirectory.appending(path: ".codex/accounts/registry.json")
+        let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
+        let registryURL = storage.registryURL
         var accounts: [UsageAccount] = []
         var points: [UsagePoint] = []
         var activeAccountActivatedAt: Date?
@@ -30,7 +31,7 @@ struct CodexUsageReader {
             data: data,
             now: now,
             authSnapshotModifiedAt: { accountKey in
-                let authURL = Self.accountAuthURL(for: accountKey, homeDirectory: homeDirectory)
+                let authURL = storage.accountAuthURL(for: accountKey)
                 guard let attributes = try? fileManager.attributesOfItem(atPath: authURL.path) else { return nil }
                 return attributes[.modificationDate] as? Date
             }
@@ -292,11 +293,6 @@ struct CodexUsageReader {
         sessionMetricsCache.removeAll()
     }
 
-    private static func accountAuthURL(for accountKey: String, homeDirectory: URL) -> URL {
-        let fileKey = accountKey.needsCodexAccountFilenameEncoding ? accountKey.codexAccountFileKey : accountKey
-        return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
-    }
-
     private static func canUseSessionRateLimits(
         for account: UsageAccount,
         activeAccountActivatedAt: Date?,
@@ -509,20 +505,6 @@ private struct CodexAuthError: Decodable {
 }
 
 private extension String {
-    var needsCodexAccountFilenameEncoding: Bool {
-        guard !isEmpty, self != ".", self != ".." else { return true }
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
-        return unicodeScalars.contains { !allowed.contains($0) }
-    }
-
-    var codexAccountFileKey: String {
-        Data(utf8)
-            .base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-
     var codexWorkspaceID: String? {
         guard let delimiter = range(of: "::") else { return nil }
         let value = self[delimiter.upperBound...]

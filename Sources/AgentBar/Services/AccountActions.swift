@@ -31,9 +31,10 @@ struct CodexAccountSwitcher {
     var fileManager: FileManager = .default
 
     func switchActiveAccount(accountID: String) throws {
-        let registryURL = homeDirectory.appending(path: ".codex/accounts/registry.json")
-        let accountSnapshotURL = accountSnapshotURL(for: accountID)
-        let activeAuthURL = homeDirectory.appending(path: ".codex/auth.json")
+        let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
+        let registryURL = storage.registryURL
+        let accountSnapshotURL = storage.accountAuthURL(for: accountID)
+        let activeAuthURL = storage.activeAuthURL
         guard fileManager.fileExists(atPath: registryURL.path) else {
             throw AccountActionError.missingRegistry
         }
@@ -74,11 +75,6 @@ struct CodexAccountSwitcher {
         }
     }
 
-    private func accountSnapshotURL(for accountID: String) -> URL {
-        let fileKey = accountID.needsCodexAccountFilenameEncoding ? accountID.codexAccountFileKey : accountID
-        return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
-    }
-
     private func restoreAuth(_ previousAuth: Data?, to activeAuthURL: URL, permissions: Any?) {
         if let previousAuth {
             try? previousAuth.write(to: activeAuthURL, options: [.atomic])
@@ -96,9 +92,10 @@ struct CodexAccountRemover {
     var fileManager: FileManager = .default
 
     func removeAccount(accountID: String) throws {
-        let registryURL = homeDirectory.appending(path: ".codex/accounts/registry.json")
-        let accountSnapshotURL = accountSnapshotURL(for: accountID)
-        let activeAuthURL = homeDirectory.appending(path: ".codex/auth.json")
+        let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
+        let registryURL = storage.registryURL
+        let accountSnapshotURL = storage.accountAuthURL(for: accountID)
+        let activeAuthURL = storage.activeAuthURL
         guard fileManager.fileExists(atPath: registryURL.path) else {
             throw AccountActionError.missingRegistry
         }
@@ -132,27 +129,6 @@ struct CodexAccountRemover {
         if wasActive, fileManager.fileExists(atPath: activeAuthURL.path) {
             try fileManager.removeItem(at: activeAuthURL)
         }
-    }
-
-    private func accountSnapshotURL(for accountID: String) -> URL {
-        let fileKey = accountID.needsCodexAccountFilenameEncoding ? accountID.codexAccountFileKey : accountID
-        return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
-    }
-}
-
-private extension String {
-    var needsCodexAccountFilenameEncoding: Bool {
-        guard !isEmpty, self != ".", self != ".." else { return true }
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
-        return unicodeScalars.contains { !allowed.contains($0) }
-    }
-
-    var codexAccountFileKey: String {
-        Data(utf8)
-            .base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
     }
 }
 
@@ -201,8 +177,8 @@ enum AccountLoginLauncher {
     }
 
     static func codexRecoveryLoginCommand(accountID: String) -> String {
-        let fileKey = accountID.needsCodexAccountFilenameEncoding ? accountID.codexAccountFileKey : accountID
-        return #"codex login && mkdir -p "$HOME/.codex/accounts" && cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/\#(fileKey).auth.json""#
+        CodexAccountStorage(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
+            .recoveryLoginCommand(accountID: accountID)
     }
 
     private static func openTerminal(command: String) {

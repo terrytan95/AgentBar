@@ -55,7 +55,8 @@ struct CodexUsageAPISyncer {
     }
 
     func refreshUsage() -> CodexUsageSyncResult {
-        let registryURL = homeDirectory.appending(path: ".codex/accounts/registry.json")
+        let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
+        let registryURL = storage.registryURL
         guard let data = try? Data(contentsOf: registryURL),
               var registry = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               var accounts = registry["accounts"] as? [[String: Any]]
@@ -84,8 +85,8 @@ struct CodexUsageAPISyncer {
             else {
                 continue
             }
-            let accountSnapshotURL = accountAuthURL(for: accountKey)
-            let authURL = preferredAuthURL(for: accountKey, activeAccountKey: activeAccountKey, accountSnapshotURL: accountSnapshotURL)
+            let accountSnapshotURL = storage.accountAuthURL(for: accountKey)
+            let authURL = preferredAuthURL(for: accountKey, activeAccountKey: activeAccountKey, accountSnapshotURL: accountSnapshotURL, storage: storage)
             guard let authData = try? Data(contentsOf: authURL),
                   let authInfo = Self.parseAuthInfo(data: authData)
             else {
@@ -158,7 +159,7 @@ struct CodexUsageAPISyncer {
         if updated {
             registry["accounts"] = accounts
             do {
-                try writeRegistry(registry, to: registryURL)
+                try storage.writeRegistry(registry)
             } catch {
                 return .failed(error.localizedDescription)
             }
@@ -167,14 +168,9 @@ struct CodexUsageAPISyncer {
         return lastFailure ?? .success
     }
 
-    private func accountAuthURL(for accountKey: String) -> URL {
-        let fileKey = accountKey.needsCodexAccountFilenameEncoding ? accountKey.codexAccountFileKey : accountKey
-        return homeDirectory.appending(path: ".codex/accounts/\(fileKey).auth.json")
-    }
-
-    private func preferredAuthURL(for accountKey: String, activeAccountKey: String?, accountSnapshotURL: URL) -> URL {
+    private func preferredAuthURL(for accountKey: String, activeAccountKey: String?, accountSnapshotURL: URL, storage: CodexAccountStorage) -> URL {
         guard accountKey == activeAccountKey else { return accountSnapshotURL }
-        let activeAuthURL = homeDirectory.appending(path: ".codex/auth.json")
+        let activeAuthURL = storage.activeAuthURL
         guard let activeModifiedAt = modificationDate(activeAuthURL) else { return accountSnapshotURL }
         let snapshotModifiedAt = modificationDate(accountSnapshotURL) ?? .distantPast
         return activeModifiedAt > snapshotModifiedAt ? activeAuthURL : accountSnapshotURL
@@ -183,15 +179,6 @@ struct CodexUsageAPISyncer {
     private func modificationDate(_ url: URL) -> Date? {
         guard let attributes = try? fileManager.attributesOfItem(atPath: url.path) else { return nil }
         return attributes[.modificationDate] as? Date
-    }
-
-    private func writeRegistry(_ registry: [String: Any], to registryURL: URL) throws {
-        let permissions = try? fileManager.attributesOfItem(atPath: registryURL.path)[.posixPermissions]
-        let output = try JSONSerialization.data(withJSONObject: registry, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try output.write(to: registryURL, options: [.atomic])
-        if let permissions {
-            try? fileManager.setAttributes([.posixPermissions: permissions], ofItemAtPath: registryURL.path)
-        }
     }
 
     private static func defaultUsageClient(request: URLRequest, timeout: TimeInterval) throws -> CodexUsageAPIResponse {
@@ -471,21 +458,5 @@ private final class CodexUsageAPIResultBox: @unchecked Sendable {
         lock.lock()
         storedResult = result
         lock.unlock()
-    }
-}
-
-private extension String {
-    var needsCodexAccountFilenameEncoding: Bool {
-        guard !isEmpty, self != ".", self != ".." else { return true }
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
-        return unicodeScalars.contains { !allowed.contains($0) }
-    }
-
-    var codexAccountFileKey: String {
-        Data(utf8)
-            .base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
     }
 }

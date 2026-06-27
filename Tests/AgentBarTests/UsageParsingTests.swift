@@ -520,6 +520,17 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(command.contains(#"cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/dXNlci1hOjpvcmc.auth.json""#))
     }
 
+    func testCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths() {
+        let home = URL(fileURLWithPath: "/tmp/agentbar-codex-home")
+        let storage = CodexAccountStorage(homeDirectory: home)
+
+        XCTAssertEqual(storage.registryURL.path, "/tmp/agentbar-codex-home/.codex/accounts/registry.json")
+        XCTAssertEqual(storage.activeAuthURL.path, "/tmp/agentbar-codex-home/.codex/auth.json")
+        XCTAssertEqual(storage.accountAuthURL(for: "user-a::org").path, "/tmp/agentbar-codex-home/.codex/accounts/dXNlci1hOjpvcmc.auth.json")
+        XCTAssertEqual(storage.accountAuthURL(for: "plain-account").path, "/tmp/agentbar-codex-home/.codex/accounts/plain-account.auth.json")
+        XCTAssertTrue(storage.recoveryLoginCommand(accountID: "user-a::org").contains(#"cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/dXNlci1hOjpvcmc.auth.json""#))
+    }
+
     @MainActor
     func testRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"

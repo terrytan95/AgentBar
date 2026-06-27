@@ -66,10 +66,15 @@ final class UsageStore: ObservableObject {
         }
     ) {
         self.settings = settings
-        usageRefreshOrchestrator = UsageRefreshOrchestrator(
+        let codexUsageSource = CodexUsageSource(
             codexUsageSynchronizer: codexUsageSynchronizer,
             codexDetailedResetCreditsSynchronizer: codexDetailedResetCreditsSynchronizer,
-            codexUsageReader: codexUsageReader,
+            codexUsageReader: codexUsageReader
+        )
+        usageRefreshOrchestrator = UsageRefreshOrchestrator(
+            codexUsageSource: { detailedResetCreditsEnabled in
+                codexUsageSource.read(detailedResetCreditsEnabled: detailedResetCreditsEnabled)
+            },
             claudeUsageReader: claudeUsageReader
         )
         self.codexAccountSwitcher = codexAccountSwitcher

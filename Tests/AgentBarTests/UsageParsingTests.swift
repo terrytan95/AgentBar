@@ -605,29 +605,21 @@ final class UsageParsingTests: XCTestCase {
             estimatedCostUSD: nil
         )
         let orchestrator = UsageRefreshOrchestrator(
-            codexUsageSynchronizer: {
-                recorder.record("sync")
-                return .failed("expired token")
-            },
-            codexDetailedResetCreditsSynchronizer: {
-                recorder.record("detailed-sync")
-                return .success
-            },
-            codexUsageReader: {
-                XCTAssertEqual(recorder.events, ["sync"])
-                recorder.record("codex-read")
+            codexUsageSource: { detailedResetCreditsEnabled in
+                XCTAssertFalse(detailedResetCreditsEnabled)
+                recorder.record("codex-source")
                 return UsageSnapshot(
                     service: .codex,
                     status: .live,
                     accounts: [codexAccount],
                     points: [],
-                    securityNotes: [],
+                    securityNotes: ["source note"],
                     refreshedAt: now,
                     pricingFingerprint: Pricing.fingerprint
                 )
             },
             claudeUsageReader: {
-                XCTAssertEqual(recorder.events, ["sync", "codex-read"])
+                XCTAssertEqual(recorder.events, ["codex-source"])
                 recorder.record("claude-read")
                 return UsageSnapshot(
                     service: .claudeCode,
@@ -643,13 +635,47 @@ final class UsageParsingTests: XCTestCase {
 
         let result = orchestrator.refresh(detailedResetCreditsEnabled: false)
 
-        XCTAssertEqual(recorder.events, ["sync", "codex-read", "claude-read"])
-        XCTAssertEqual(result.snapshots[.codex]?.securityNotes, [
-            "Codex usage API sync failed: expired token; using local registry and session cache."
-        ])
+        XCTAssertEqual(recorder.events, ["codex-source", "claude-read"])
+        XCTAssertEqual(result.snapshots[.codex]?.securityNotes, ["source note"])
         XCTAssertEqual(result.snapshots[.claudeCode]?.points, [claudePoint])
         XCTAssertEqual(result.accounts.map(\.id), ["codex"])
         XCTAssertEqual(result.points, [claudePoint])
+    }
+
+    func testCodexUsageSourceSyncsBeforeReadAndAppendsSyncNote() {
+        let recorder = RefreshOrderRecorder()
+        let now = Date()
+        let source = CodexUsageSource(
+            codexUsageSynchronizer: {
+                recorder.record("normal-sync")
+                return .success
+            },
+            codexDetailedResetCreditsSynchronizer: {
+                recorder.record("detailed-sync")
+                return .failed("expired token")
+            },
+            codexUsageReader: {
+                XCTAssertEqual(recorder.events, ["detailed-sync"])
+                recorder.record("codex-read")
+                return UsageSnapshot(
+                    service: .codex,
+                    status: .live,
+                    accounts: [],
+                    points: [],
+                    securityNotes: ["local note"],
+                    refreshedAt: now,
+                    pricingFingerprint: Pricing.fingerprint
+                )
+            }
+        )
+
+        let snapshot = source.read(detailedResetCreditsEnabled: true)
+
+        XCTAssertEqual(recorder.events, ["detailed-sync", "codex-read"])
+        XCTAssertEqual(snapshot.securityNotes, [
+            "local note",
+            "Codex usage API sync failed: expired token; using local registry and session cache."
+        ])
     }
 
     @MainActor

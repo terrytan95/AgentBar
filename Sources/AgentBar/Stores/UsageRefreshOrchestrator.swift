@@ -7,18 +7,11 @@ struct UsageRefreshResult: Equatable, Sendable {
 }
 
 struct UsageRefreshOrchestrator: Sendable {
-    var codexUsageSynchronizer: @Sendable () -> CodexUsageSyncResult
-    var codexDetailedResetCreditsSynchronizer: @Sendable () -> CodexUsageSyncResult
-    var codexUsageReader: @Sendable () -> UsageSnapshot
+    var codexUsageSource: @Sendable (Bool) -> UsageSnapshot
     var claudeUsageReader: @Sendable () -> UsageSnapshot
 
     func refresh(detailedResetCreditsEnabled: Bool) -> UsageRefreshResult {
-        let syncCodexUsage = detailedResetCreditsEnabled ? codexDetailedResetCreditsSynchronizer : codexUsageSynchronizer
-        let syncResult = syncCodexUsage()
-        var codex = codexUsageReader()
-        if let note = syncResult.note {
-            codex.securityNotes.append(note)
-        }
+        let codex = codexUsageSource(detailedResetCreditsEnabled)
         let claude = claudeUsageReader()
 
         return UsageRefreshResult(

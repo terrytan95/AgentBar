@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:AgentBar}",
+      "name": "Debug AgentBar",
+      "target": "AgentBar",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug AgentBar"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:AgentBar}",
+      "name": "Release AgentBar",
+      "target": "AgentBar",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release AgentBar"
+    }
+  ]
+}

@@ -197,6 +197,8 @@ struct StatisticsView: View {
 
     @ViewBuilder
     private var dashboardContent: some View {
+        let projection = dashboardOverviewProjection
+
         VStack(alignment: .leading, spacing: 14) {
             dashboardOverviewHeader
 
@@ -219,9 +221,9 @@ struct StatisticsView: View {
             }
             .frame(height: hasClaudeData ? 152 : 70)
 
-            QuotaPressurePanel(pressure: quotaPressure, language: store.language, theme: settings.themeColor)
+            QuotaPressurePanel(pressure: projection.quotaPressure, language: store.language, theme: settings.themeColor)
 
-            if let quotaETA {
+            if let quotaETA = projection.quotaETA {
                 QuotaETAPanel(eta: quotaETA, language: store.language, theme: settings.themeColor)
             }
 
@@ -237,12 +239,12 @@ struct StatisticsView: View {
                 }
             }
 
-            if let rapidUsageAlert {
+            if let rapidUsageAlert = projection.rapidUsageAlert {
                 RapidUsageAlertPanel(alert: rapidUsageAlert, language: store.language, theme: settings.themeColor)
             }
 
-            if !usageAnomalies.isEmpty {
-                UsageAnomalyPanel(anomalies: usageAnomalies, language: store.language, theme: settings.themeColor)
+            if !projection.usageAnomalies.isEmpty {
+                UsageAnomalyPanel(anomalies: projection.usageAnomalies, language: store.language, theme: settings.themeColor)
             }
 
             HStack(alignment: .top, spacing: 14) {
@@ -255,7 +257,7 @@ struct StatisticsView: View {
                     }
                     Panel(title: usageLocalized("top_usage")) {
                         TopUsagePanel(
-                            breakdown: topUsage,
+                            breakdown: projection.topUsage,
                             selectedSessionLabel: selectedSessionLabel,
                             language: store.language,
                             theme: settings.themeColor
@@ -264,7 +266,7 @@ struct StatisticsView: View {
                         }
                     }
                     Panel(title: usageLocalized("session_drilldown")) {
-                        SessionDrilldownPanel(detail: selectedSessionDetail, language: store.language, theme: settings.themeColor)
+                        SessionDrilldownPanel(detail: projection.selectedSessionDetail, language: store.language, theme: settings.themeColor)
                     }
                     if hasConfiguredBudgets {
                         Panel(title: budgetLocalized("budgets")) {
@@ -277,11 +279,11 @@ struct StatisticsView: View {
                         }
                     }
                     Panel(title: dataSourceLocalized("data_source_health")) {
-                        DataSourceHealthPanel(health: dataSourceHealth, language: store.language, theme: settings.themeColor)
+                        DataSourceHealthPanel(health: projection.dataSourceHealth, language: store.language, theme: settings.themeColor)
                     }
                     Panel(title: healthLocalized("account_health")) {
                         AccountHealthCenterPanel(
-                            health: accountHealthCenter,
+                            health: projection.accountHealthCenter,
                             language: store.language,
                             theme: settings.themeColor,
                             onLogin: openHealthLogin,
@@ -726,35 +728,16 @@ struct StatisticsView: View {
         }
     }
 
-    private var quotaPressure: QuotaPressureInsight {
-        UsageInsights.quotaPressure(
+    private var dashboardOverviewProjection: DashboardOverviewProjection {
+        UsageInsights.dashboardOverviewProjection(
             accounts: store.accounts,
             points: filteredPoints,
+            snapshots: store.snapshots,
+            selectedSessionLabel: selectedSessionLabel,
             rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
-            autoRotationEnabled: settings.autoCodexAccountRotationEnabled
+            autoRotationEnabled: settings.autoCodexAccountRotationEnabled,
+            language: store.language
         )
-    }
-
-    private var quotaETA: QuotaETA? {
-        guard let account = store.activeAccount else { return nil }
-        return UsageInsights.quotaETA(account: account, points: filteredPoints)
-    }
-
-    private var topUsage: TopUsageBreakdown {
-        UsageInsights.topUsage(points: filteredPoints)
-    }
-
-    private var selectedSessionDetail: SessionDrilldown? {
-        let label = selectedSessionLabel ?? topUsage.sessions.first?.label
-        return label.flatMap { UsageInsights.sessionDrilldown(for: $0, points: filteredPoints) }
-    }
-
-    private var rapidUsageAlert: RapidUsageAlert? {
-        UsageInsights.rapidUsageAlert(points: filteredPoints)
-    }
-
-    private var usageAnomalies: [UsageAnomaly] {
-        UsageInsights.usageAnomalies(points: filteredPoints)
     }
 
     private var hasConfiguredBudgets: Bool {

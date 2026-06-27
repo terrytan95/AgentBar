@@ -127,6 +127,17 @@ struct DataSourceHealthSummary: Equatable, Sendable {
     var issueCount: Int
 }
 
+struct DashboardOverviewProjection: Equatable, Sendable {
+    var quotaPressure: QuotaPressureInsight
+    var quotaETA: QuotaETA?
+    var topUsage: TopUsageBreakdown
+    var selectedSessionDetail: SessionDrilldown?
+    var rapidUsageAlert: RapidUsageAlert?
+    var usageAnomalies: [UsageAnomaly]
+    var dataSourceHealth: DataSourceHealthSummary
+    var accountHealthCenter: AccountHealthCenter
+}
+
 enum UsageInsights {
     static func currentLimitSummary(accounts: [UsageAccount]) -> CurrentLimitSummary {
         let quotaAccounts = accounts.filter { $0.fiveHourWindow != nil || $0.weeklyWindow != nil }
@@ -140,6 +151,41 @@ enum UsageInsights {
             mostConstrainedAccount: constrained,
             lowestFiveHourRemaining: quotaAccounts.compactMap(\.fiveHourWindow?.remainingPercent).min(),
             lowestWeeklyRemaining: quotaAccounts.compactMap(\.weeklyWindow?.remainingPercent).min()
+        )
+    }
+
+    static func dashboardOverviewProjection(
+        accounts: [UsageAccount],
+        points: [UsagePoint],
+        snapshots: [UsageService: UsageSnapshot],
+        selectedSessionLabel: String?,
+        rotationThresholdRemainingPercent: Double,
+        autoRotationEnabled: Bool,
+        language: AppLanguage,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> DashboardOverviewProjection {
+        let pressure = quotaPressure(
+            accounts: accounts,
+            points: points,
+            rotationThresholdRemainingPercent: rotationThresholdRemainingPercent,
+            autoRotationEnabled: autoRotationEnabled,
+            now: now
+        )
+        let activeAccount = accounts.first(where: \.isActive) ?? accounts.first
+        let top = topUsage(points: points, now: now, calendar: calendar)
+        let selectedLabel = selectedSessionLabel ?? top.sessions.first?.label
+        let sourceHealth = dataSourceHealth(snapshots: snapshots)
+
+        return DashboardOverviewProjection(
+            quotaPressure: pressure,
+            quotaETA: activeAccount.map { quotaETA(account: $0, points: points, now: now) },
+            topUsage: top,
+            selectedSessionDetail: selectedLabel.flatMap { sessionDrilldown(for: $0, points: points) },
+            rapidUsageAlert: rapidUsageAlert(points: points, now: now, calendar: calendar),
+            usageAnomalies: usageAnomalies(points: points, now: now, calendar: calendar),
+            dataSourceHealth: sourceHealth,
+            accountHealthCenter: accountHealthCenter(accounts: accounts, dataSourceHealth: sourceHealth, language: language)
         )
     }
 

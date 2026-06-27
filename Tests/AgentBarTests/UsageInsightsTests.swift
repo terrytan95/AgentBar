@@ -237,6 +237,42 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(alert).todayShare, 0.6, accuracy: 0.001)
     }
 
+    func testDashboardOverviewProjectionComposesStatisticsInsights() throws {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let active = account(id: "active", name: "active@example.com", fiveHourUsed: 96, weeklyUsed: 20, now: now, active: true)
+        let better = account(id: "better", name: "better@example.com", fiveHourUsed: 20, weeklyUsed: 10, now: now, active: false)
+        let points = [
+            point(total: 6_000, minutesAgo: 5, now: now, model: "gpt-5", sessionID: "session-a", sessionTitle: "Fix dashboard", projectName: "AgentBar"),
+            point(total: 1_000, minutesAgo: 25, now: now, model: "gpt-5-mini", sessionID: "session-b", sessionTitle: "Audit release", projectName: "AgentBar")
+        ]
+
+        let projection = UsageInsights.dashboardOverviewProjection(
+            accounts: [active, better],
+            points: points,
+            snapshots: [
+                .codex: UsageSnapshot(service: .codex, status: .live, accounts: [], points: [], securityNotes: [], refreshedAt: now, pricingFingerprint: Pricing.fingerprint),
+                .claudeCode: UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "No Claude data")
+            ],
+            selectedSessionLabel: nil,
+            rotationThresholdRemainingPercent: 10,
+            autoRotationEnabled: true,
+            language: .english,
+            now: now,
+            calendar: Calendar(identifier: .gregorian)
+        )
+
+        XCTAssertEqual(projection.quotaPressure.activeAccount?.id, "active")
+        XCTAssertEqual(projection.quotaPressure.recommendedAccount?.id, "better")
+        XCTAssertTrue(projection.quotaPressure.shouldTriggerRotation)
+        XCTAssertEqual(projection.quotaETA?.windows.first { $0.minutes == 15 }?.tokens, 6_000)
+        XCTAssertEqual(projection.topUsage.sessions.first?.label, "Fix dashboard")
+        XCTAssertEqual(projection.selectedSessionDetail?.title, "Fix dashboard")
+        XCTAssertEqual(projection.rapidUsageAlert?.recentTokens, 6_000)
+        XCTAssertEqual(projection.usageAnomalies.first?.kind, .dailyTokens)
+        XCTAssertEqual(projection.dataSourceHealth.issueCount, 1)
+        XCTAssertEqual(projection.accountHealthCenter.rows.map(\.kind), [.dataSource])
+    }
+
     func testSwitchRecommendationExplainsWhyAlternativeIsBetter() throws {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         let active = account(id: "active", name: "active@example.com", fiveHourUsed: 96, weeklyUsed: 20, now: now, active: true)

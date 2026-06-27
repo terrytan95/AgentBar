@@ -1158,6 +1158,8 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(all.totalTokens, 72)
         XCTAssertEqual(all.serviceBreakdown[.codex], 36)
         XCTAssertEqual(all.serviceBreakdown[.claudeCode], 36)
+        XCTAssertEqual(today.dailyBars.first?.codexCostUSD, Decimal(string: "0.001"))
+        XCTAssertEqual(sevenDays.dailyBars.map(\.codexCostUSD).reduce(Decimal(0), +), Decimal(string: "0.003"))
     }
 
     func testPeriodChangeComparesSelectedRangeAgainstPreviousPeriod() {

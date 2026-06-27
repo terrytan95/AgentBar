@@ -450,6 +450,8 @@ struct DailyUsageBar: Equatable, Identifiable, Sendable {
     var day: Date
     var codexTokens: Int
     var claudeTokens: Int
+    var codexCostUSD: Decimal = 0
+    var claudeCostUSD: Decimal = 0
 
     func tooltipText(language: AppLanguage) -> String {
         let formatter = DateFormatter()

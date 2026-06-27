@@ -63,7 +63,7 @@ final class UsageInsightsTests: XCTestCase {
                     model: "codex-local",
                     date: now,
                     tokens: TokenTotals(input: 3_000, cachedInput: 0, output: 3_000, reasoningOutput: 0, total: 6_000),
-                    estimatedCostUSD: nil
+                    estimatedCostUSD: Decimal(string: "4.25")
                 )
             ],
             now: now,
@@ -72,6 +72,7 @@ final class UsageInsightsTests: XCTestCase {
 
         XCTAssertTrue(anomalies.contains { $0.kind == .dailyTokens && $0.multiple >= 3 })
         XCTAssertTrue(anomalies.contains { $0.kind == .modelTokens && $0.label == "codex-local" })
+        XCTAssertEqual(anomalies.first { $0.kind == .dailyTokens }?.estimatedCostUSD, Decimal(string: "4.25"))
     }
 
     func testBudgetStatusWarnsForDailyTokenAndCostThresholds() {
@@ -160,9 +161,9 @@ final class UsageInsightsTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         let top = UsageInsights.topUsage(
             points: [
-                point(total: 1_000, minutesAgo: 10, now: now, model: "gpt-5", sessionID: "session-a", sessionTitle: "Fix high CPU usage", projectName: "AgentBar"),
-                point(total: 500, minutesAgo: 20, now: now, model: "gpt-5", sessionID: "session-a", sessionTitle: "Fix high CPU usage", projectName: "AgentBar"),
-                point(total: 800, minutesAgo: 30, now: now, model: "gpt-5-mini", sessionID: "session-b", projectName: "Other")
+                point(total: 1_000, minutesAgo: 10, now: now, model: "gpt-5", sessionID: "session-a", sessionTitle: "Fix high CPU usage", projectName: "AgentBar", cost: "0.30"),
+                point(total: 500, minutesAgo: 20, now: now, model: "gpt-5", sessionID: "session-a", sessionTitle: "Fix high CPU usage", projectName: "AgentBar", cost: "0.10"),
+                point(total: 800, minutesAgo: 30, now: now, model: "gpt-5-mini", sessionID: "session-b", projectName: "Other", cost: "0.05")
             ],
             now: now,
             calendar: Calendar(identifier: .gregorian)
@@ -170,6 +171,7 @@ final class UsageInsightsTests: XCTestCase {
 
         XCTAssertEqual(top.sessions.first?.label, "Fix high CPU usage")
         XCTAssertEqual(top.sessions.first?.tokens, 1_500)
+        XCTAssertEqual(top.sessions.first?.estimatedCostUSD, Decimal(string: "0.40"))
         XCTAssertEqual(top.sessions.first?.lastUsedAt, now.addingTimeInterval(-10 * 60))
         XCTAssertEqual(top.projects.first?.label, "AgentBar")
         XCTAssertEqual(top.models.first?.label, "gpt-5")
@@ -199,6 +201,7 @@ final class UsageInsightsTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         var locked = account(id: "locked", name: "locked@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now, active: false)
         locked.loginWarning = .forcedLogout
+        locked.workspaces = [UsageWorkspace(name: "Team Workspace", workspaceID: "workspace-123456")]
         let health = UsageInsights.accountHealthCenter(
             accounts: [locked],
             dataSourceHealth: DataSourceHealthSummary(
@@ -219,6 +222,7 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(health.rows.map(\.kind), [.login, .dataSource])
         XCTAssertEqual(health.rows.first?.accountID, "locked")
         XCTAssertTrue(health.rows.first?.title.contains("locked@example.com") == true)
+        XCTAssertEqual(health.rows.first?.workspaceLines, ["Workspace: Team Workspace · workspac"])
         XCTAssertTrue(health.rows.last?.detail.contains("Codex usage API sync failed") == true)
     }
 

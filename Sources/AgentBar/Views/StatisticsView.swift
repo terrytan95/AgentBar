@@ -8,6 +8,7 @@ struct StatisticsView: View {
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
     @State private var selectedSessionLabel: String?
+    @State private var chartMetric: DashboardChartMetric = .tokens
 
     private static let dashboardContentTopPadding: CGFloat = 12
     private static let dashboardContentBottomPadding: CGFloat = 26
@@ -228,7 +229,19 @@ struct StatisticsView: View {
             }
 
             Panel(title: "\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))") {
-                DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
+                HStack {
+                    Spacer()
+                    Picker("", selection: $chartMetric) {
+                        ForEach(DashboardChartMetric.allCases) { metric in
+                            Text(metric.title(store.language)).tag(metric)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 162)
+                }
+
+                DashboardStackedBars(bars: displayBars, metric: chartMetric, language: store.language, theme: settings.themeColor)
                     .frame(height: 206)
                 HStack(spacing: 14) {
                     Spacer()
@@ -973,6 +986,22 @@ private enum DashboardViewMode: Hashable {
     case audit
 }
 
+private enum DashboardChartMetric: String, CaseIterable, Identifiable {
+    case tokens
+    case cost
+
+    var id: String { rawValue }
+
+    func title(_ language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.tokens, .chinese): "Token"
+        case (.cost, .chinese): "美元"
+        case (.tokens, _): "Tokens"
+        case (.cost, _): "Cost"
+        }
+    }
+}
+
 private struct ResetSpendAdvice {
     var title: String
     var message: String
@@ -1262,6 +1291,7 @@ private struct ResizablePanel<Content: View>: View {
 
 private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
+    var metric: DashboardChartMetric
     var language: AppLanguage
     var theme: AppThemeColor
     @State private var hoveredBarID: Date?
@@ -1276,15 +1306,15 @@ private struct DashboardStackedBars: View {
                 EmptyPanelMessage(L.text("no_usage_events", language))
                     .frame(width: proxy.size.width, height: proxy.size.height)
             } else {
-                let maxValue = max(1, bars.map { $0.codexTokens + $0.claudeTokens }.max() ?? 1)
+                let maxValue = axisMaximum
                 let plotHeight = max(0, proxy.size.height - 36)
                 ZStack(alignment: .top) {
                     VStack(spacing: 4) {
                         HStack(alignment: .bottom, spacing: 8) {
                             VStack(alignment: .trailing) {
-                                Text(DisplayFormatters.compactTokenString(maxValue, language: language))
+                                Text(valueText(maxValue))
                                 Spacer()
-                                Text(DisplayFormatters.compactTokenString(maxValue / 2, language: language))
+                                Text(valueText(maxValue / 2))
                                 Spacer()
                                 Text("0")
                             }
@@ -1308,10 +1338,10 @@ private struct DashboardStackedBars: View {
                                             VStack(spacing: 0) {
                                                 Rectangle()
                                                     .fill(theme.secondary)
-                                                    .frame(height: plotHeight * CGFloat(bar.claudeTokens) / CGFloat(maxValue))
+                                                    .frame(height: plotHeight * CGFloat(claudeValue(bar)) / CGFloat(maxValue))
                                                 Rectangle()
                                                     .fill(theme.tertiary)
-                                                    .frame(height: plotHeight * CGFloat(bar.codexTokens) / CGFloat(maxValue))
+                                                    .frame(height: plotHeight * CGFloat(codexValue(bar)) / CGFloat(maxValue))
                                             }
                                             .frame(width: 28, height: plotHeight, alignment: .bottom)
                                             .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
@@ -1350,7 +1380,7 @@ private struct DashboardStackedBars: View {
 
                     if let hoveredBar, let hoverLocation {
                         let tooltipPosition = ChartTooltipPlacement.position(cursor: hoverLocation, calloutSize: calloutSize, plotSize: hoverPlotSize)
-                        ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
+                        ChartHoverCallout(bar: hoveredBar, metric: metric, language: language, theme: theme)
                             .frame(width: calloutSize.width, height: calloutSize.height)
                             .position(x: tooltipPosition.x + 52, y: tooltipPosition.y + 4)
                             .padding(.top, 4)
@@ -1381,10 +1411,48 @@ private struct DashboardStackedBars: View {
         formatter.setLocalizedDateFormatFromTemplate("MMM d")
         return formatter.string(from: date)
     }
+
+    private func totalValue(_ bar: DailyUsageBar) -> Double {
+        codexValue(bar) + claudeValue(bar)
+    }
+
+    private var axisMaximum: Double {
+        let rawMaximum = bars.map(totalValue).max() ?? 0
+        switch metric {
+        case .tokens:
+            return max(1, rawMaximum)
+        case .cost:
+            return max(0.0001, rawMaximum)
+        }
+    }
+
+    private func codexValue(_ bar: DailyUsageBar) -> Double {
+        switch metric {
+        case .tokens: Double(bar.codexTokens)
+        case .cost: (bar.codexCostUSD as NSDecimalNumber).doubleValue
+        }
+    }
+
+    private func claudeValue(_ bar: DailyUsageBar) -> Double {
+        switch metric {
+        case .tokens: Double(bar.claudeTokens)
+        case .cost: (bar.claudeCostUSD as NSDecimalNumber).doubleValue
+        }
+    }
+
+    private func valueText(_ value: Double) -> String {
+        switch metric {
+        case .tokens:
+            return DisplayFormatters.compactTokenString(Int(value.rounded()), language: language)
+        case .cost:
+            return DisplayFormatters.costString(Decimal(value))
+        }
+    }
 }
 
 private struct ChartHoverCallout: View {
     var bar: DailyUsageBar
+    var metric: DashboardChartMetric
     var language: AppLanguage
     var theme: AppThemeColor
 
@@ -1392,13 +1460,13 @@ private struct ChartHoverCallout: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dateText)
                 .font(.system(size: 11, weight: .bold))
-            metricRow("Codex", value: bar.codexTokens, color: theme.tertiary)
-            metricRow("Claude", value: bar.claudeTokens, color: theme.secondary)
+            metricRow("Codex", value: codexValue, color: theme.tertiary)
+            metricRow("Claude", value: claudeValue, color: theme.secondary)
             Divider()
             HStack {
                 Text(L.text("total", language))
                 Spacer()
-                Text("\(DisplayFormatters.compactTokenString(bar.codexTokens + bar.claudeTokens, language: language)) \(L.text("tokens", language))")
+                Text(valueText(codexValue + claudeValue))
                     .monospacedDigit()
             }
         }
@@ -1414,14 +1482,14 @@ private struct ChartHoverCallout: View {
         .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
     }
 
-    private func metricRow(_ title: String, value: Int, color: Color) -> some View {
+    private func metricRow(_ title: String, value: Double, color: Color) -> some View {
         HStack(spacing: 7) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(color)
                 .frame(width: 7, height: 7)
             Text(title)
             Spacer()
-            Text("\(DisplayFormatters.compactTokenString(value, language: language)) \(L.text("tokens", language))")
+            Text(valueText(value))
                 .monospacedDigit()
         }
     }
@@ -1431,6 +1499,29 @@ private struct ChartHoverCallout: View {
         formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
         formatter.setLocalizedDateFormatFromTemplate("yMMMd")
         return formatter.string(from: bar.day)
+    }
+
+    private var codexValue: Double {
+        switch metric {
+        case .tokens: Double(bar.codexTokens)
+        case .cost: (bar.codexCostUSD as NSDecimalNumber).doubleValue
+        }
+    }
+
+    private var claudeValue: Double {
+        switch metric {
+        case .tokens: Double(bar.claudeTokens)
+        case .cost: (bar.claudeCostUSD as NSDecimalNumber).doubleValue
+        }
+    }
+
+    private func valueText(_ value: Double) -> String {
+        switch metric {
+        case .tokens:
+            return "\(DisplayFormatters.compactTokenString(Int(value.rounded()), language: language)) \(L.text("tokens", language))"
+        case .cost:
+            return DisplayFormatters.costString(Decimal(value))
+        }
     }
 }
 
@@ -1956,9 +2047,17 @@ private struct TopUsagePanel: View {
                 }
             }
             Spacer()
-            Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
-                .font(.system(size: 12, weight: .bold))
-                .monospacedDigit()
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
+                    .font(.system(size: 12, weight: .bold))
+                    .monospacedDigit()
+                if let estimatedCostUSD = row.estimatedCostUSD {
+                    Text(DisplayFormatters.costString(estimatedCostUSD))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
             Text("\(Int((row.share * 100).rounded()))%")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
@@ -2091,6 +2190,12 @@ private struct AccountHealthCenterPanel: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                                 .fixedSize(horizontal: false, vertical: true)
+                            ForEach(row.workspaceLines, id: \.self) { line in
+                                Text(line)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                         Spacer(minLength: 8)
                         actions(for: row)
@@ -2214,11 +2319,12 @@ private struct UsageAnomalyPanel: View {
     private func detail(for anomaly: UsageAnomaly) -> String {
         let tokens = DisplayFormatters.compactTokenString(anomaly.tokens, language: language)
         let baseline = DisplayFormatters.compactTokenString(anomaly.baselineTokens, language: language)
+        let cost = anomaly.estimatedCostUSD.map { " · \(DisplayFormatters.costString($0))" } ?? ""
         switch language {
         case .chinese:
-            return "\(tokens) \(L.text("tokens", language))，近期基线 \(baseline)"
+            return "\(tokens) \(L.text("tokens", language))\(cost)，近期基线 \(baseline)"
         case .english:
-            return "\(tokens) \(L.text("tokens", language)), baseline \(baseline)"
+            return "\(tokens) \(L.text("tokens", language))\(cost), baseline \(baseline)"
         }
     }
 
@@ -2827,6 +2933,12 @@ private struct SettingsAccountSummary: View {
                 Text(account?.displayName ?? "--")
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
+                if let workspaceLine = account?.workspaceLine(language: language) {
+                    Text(workspaceLine)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
         }
@@ -2857,6 +2969,12 @@ private struct SettingsAccountDeleteRow: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                ForEach(account.workspaceLines(language: language), id: \.self) { line in
+                    Text(line)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
             Button(role: .destructive) {

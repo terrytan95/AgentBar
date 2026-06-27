@@ -17,10 +17,7 @@ final class UsageStore: ObservableObject {
     @Published var customEnd = Date()
 
     let settings: SettingsStore
-    private let codexUsageSynchronizer: @Sendable () -> CodexUsageSyncResult
-    private let codexDetailedResetCreditsSynchronizer: @Sendable () -> CodexUsageSyncResult
-    private let codexUsageReader: @Sendable () -> UsageSnapshot
-    private let claudeUsageReader: @Sendable () -> UsageSnapshot
+    private let usageRefreshOrchestrator: UsageRefreshOrchestrator
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
     private let codexAccountRemover: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
@@ -69,10 +66,12 @@ final class UsageStore: ObservableObject {
         }
     ) {
         self.settings = settings
-        self.codexUsageSynchronizer = codexUsageSynchronizer
-        self.codexDetailedResetCreditsSynchronizer = codexDetailedResetCreditsSynchronizer
-        self.codexUsageReader = codexUsageReader
-        self.claudeUsageReader = claudeUsageReader
+        usageRefreshOrchestrator = UsageRefreshOrchestrator(
+            codexUsageSynchronizer: codexUsageSynchronizer,
+            codexDetailedResetCreditsSynchronizer: codexDetailedResetCreditsSynchronizer,
+            codexUsageReader: codexUsageReader,
+            claudeUsageReader: claudeUsageReader
+        )
         self.codexAccountSwitcher = codexAccountSwitcher
         self.codexAccountRemover = codexAccountRemover
         self.automaticCodexRestarter = automaticCodexRestarter
@@ -217,23 +216,17 @@ final class UsageStore: ObservableObject {
         refreshInFlight = true
         isRefreshing = true
         lastError = nil
-        let syncCodexUsage = settings.detailedResetCreditsEnabled ? codexDetailedResetCreditsSynchronizer : codexUsageSynchronizer
-        let readCodexUsage = codexUsageReader
-        let readClaudeUsage = claudeUsageReader
+        let orchestrator = usageRefreshOrchestrator
+        let detailedResetCreditsEnabled = settings.detailedResetCreditsEnabled
 
         DispatchQueue.global(qos: .utility).async {
-            let syncResult = syncCodexUsage()
-            var codex = readCodexUsage()
-            if let note = syncResult.note {
-                codex.securityNotes.append(note)
-            }
-            let claude = readClaudeUsage()
+            let refreshed = orchestrator.refresh(detailedResetCreditsEnabled: detailedResetCreditsEnabled)
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.snapshots = [.codex: codex, .claudeCode: claude]
-                self.accounts = codex.accounts + claude.accounts
-                self.points = codex.points + claude.points
+                self.snapshots = refreshed.snapshots
+                self.accounts = refreshed.accounts
+                self.points = refreshed.points
                 self.hasLoadedAccountInformation = true
                 self.isRefreshing = false
                 self.refreshInFlight = false

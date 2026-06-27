@@ -87,6 +87,65 @@ final class AppUpdateSecurityTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testAppUpdateLifecycleDownloadsNewerReleaseAndEmitsState() async {
+        let release = AppUpdateRelease(
+            version: "v9.0.0",
+            name: "AgentBar v9.0.0",
+            pageURL: URL(string: "https://github.com/terrytan95/AgentBar/releases/tag/v9.0.0")!,
+            asset: AppUpdateAsset(
+                name: "AgentBar-v9.0.0.zip",
+                downloadURL: URL(string: "https://github.com/terrytan95/AgentBar/releases/download/v9.0.0/AgentBar-v9.0.0.zip")!,
+                size: 1,
+                digest: nil
+            )
+        )
+        let appURL = URL(fileURLWithPath: "/tmp/AgentBar.app")
+        var events: [AppUpdateStatus] = []
+        var downloadedVersions: [String] = []
+        let lifecycle = AppUpdateLifecycle()
+
+        let result = await lifecycle.checkForUpdates(
+            trigger: .manual,
+            downloadedUpdate: nil,
+            currentVersion: "1.0.0",
+            fetchLatestRelease: { release },
+            download: { release in
+                downloadedVersions.append(release.version)
+                return DownloadedAppUpdate(release: release, appURL: appURL)
+            },
+            statusDidChange: { events.append($0) }
+        )
+
+        XCTAssertEqual(events, [.downloading("v9.0.0")])
+        XCTAssertEqual(downloadedVersions, ["v9.0.0"])
+        XCTAssertEqual(result.latestRelease, release)
+        XCTAssertEqual(result.downloadedUpdate, DownloadedAppUpdate(release: release, appURL: appURL))
+        XCTAssertEqual(result.status, .downloaded("v9.0.0"))
+        XCTAssertFalse(result.shouldClearPendingDownload)
+    }
+
+    func testAppUpdateLifecycleClearsStalePendingRestore() throws {
+        let lifecycle = AppUpdateLifecycle()
+        let root = URL(fileURLWithPath: "/tmp/AgentBarUpdates")
+
+        let result = lifecycle.restorePendingDownload(
+            version: "v1.0.0",
+            path: "/tmp/AgentBarUpdates/v1.0.0/AgentBar.app",
+            currentVersion: "1.0.0",
+            updatesRoot: root,
+            validateAppURL: { _, _ in
+                XCTFail("stale pending update should not validate app bundle")
+                return URL(fileURLWithPath: "/tmp/unused.app")
+            }
+        )
+
+        XCTAssertNil(result.latestRelease)
+        XCTAssertNil(result.downloadedUpdate)
+        XCTAssertNil(result.status)
+        XCTAssertTrue(result.shouldClearPendingDownload)
+    }
+
     func testRequiredDigestRejectsMissingOrMalformedDigest() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }

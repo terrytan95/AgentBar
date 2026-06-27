@@ -15,6 +15,7 @@ final class AppUpdateStore: ObservableObject {
     private let fileManager: FileManager
     private let session: URLSession
     private let updatesRootOverride: URL?
+    private let lifecycle: AppUpdateLifecycle
     private var automaticCheckTimer: Timer?
     private var isChecking = false
 
@@ -22,12 +23,14 @@ final class AppUpdateStore: ObservableObject {
         defaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
         session: URLSession = .shared,
-        updatesRootOverride: URL? = nil
+        updatesRootOverride: URL? = nil,
+        lifecycle: AppUpdateLifecycle = AppUpdateLifecycle()
     ) {
         self.defaults = defaults
         self.fileManager = fileManager
         self.session = session
         self.updatesRootOverride = updatesRootOverride
+        self.lifecycle = lifecycle
         restorePendingDownload()
     }
 
@@ -88,23 +91,22 @@ final class AppUpdateStore: ObservableObject {
         defer { isChecking = false }
 
         status = .checking
-        do {
-            let release = try await fetchLatestRelease()
-            latestRelease = release
-            guard VersionComparator.isReleaseVersion(release.version, newerThan: AppVersion.currentComparableVersion) else {
-                downloadedUpdate = nil
-                clearPendingDownload()
-                status = trigger == .manual ? .upToDate : .idle
-                return
+        let result = await lifecycle.checkForUpdates(
+            trigger: trigger,
+            downloadedUpdate: downloadedUpdate,
+            currentVersion: AppVersion.currentComparableVersion,
+            fetchLatestRelease: fetchLatestRelease,
+            download: download,
+            statusDidChange: { [weak self] status in
+                self?.status = status
             }
-            if let downloadedUpdate, downloadedUpdate.release.version == release.version {
-                status = .downloaded(release.version)
-                return
-            }
-            try await download(release)
-        } catch {
-            status = .failed(error.localizedDescription)
+        )
+        latestRelease = result.latestRelease ?? latestRelease
+        downloadedUpdate = result.downloadedUpdate
+        if result.shouldClearPendingDownload {
+            clearPendingDownload()
         }
+        status = result.status
     }
 
     private func fetchLatestRelease() async throws -> AppUpdateRelease {
@@ -134,8 +136,7 @@ final class AppUpdateStore: ObservableObject {
         )
     }
 
-    private func download(_ release: AppUpdateRelease) async throws {
-        status = .downloading(release.version)
+    private func download(_ release: AppUpdateRelease) async throws -> DownloadedAppUpdate {
         let updateDirectory = try freshUpdateDirectory(for: release.version)
         try AppUpdateSecurity.validateDownloadURL(release.asset.downloadURL)
         let zipURL = updateDirectory.appending(path: try AppUpdateSecurity.safeAssetFileName(release.asset.name))
@@ -152,10 +153,9 @@ final class AppUpdateStore: ObservableObject {
         try AppUpdateSecurity.validateDownloadedAppBundle(appURL, expectedRoot: extractDirectory, fileManager: fileManager)
 
         let downloadedUpdate = DownloadedAppUpdate(release: release, appURL: appURL)
-        self.downloadedUpdate = downloadedUpdate
         defaults.set(release.version, forKey: Keys.pendingReleaseVersion)
         defaults.set(appURL.path, forKey: Keys.pendingAppPath)
-        status = .downloaded(release.version)
+        return downloadedUpdate
     }
 
     private func freshUpdateDirectory(for version: String) throws -> URL {
@@ -189,28 +189,32 @@ final class AppUpdateStore: ObservableObject {
         guard let version = defaults.string(forKey: Keys.pendingReleaseVersion),
               let path = defaults.string(forKey: Keys.pendingAppPath)
         else { return }
-        guard VersionComparator.isReleaseVersion(version, newerThan: AppVersion.currentComparableVersion) else {
+        guard let updatesRoot = try? updatesRootDirectory() else {
             clearPendingDownload()
             return
         }
-        guard let updatesRoot = try? updatesRootDirectory(),
-              let appURL = try? AppUpdateSecurity.validatedRestoredPendingAppURL(
-                path: path,
-                updatesRoot: updatesRoot,
-                fileManager: fileManager
-              ) else {
-            clearPendingDownload()
-            return
-        }
-        let release = AppUpdateRelease(
+        let result = lifecycle.restorePendingDownload(
             version: version,
-            name: "AgentBar \(version)",
-            pageURL: URL(string: "https://github.com/terrytan95/AgentBar/releases/tag/\(version)")!,
-            asset: AppUpdateAsset(name: "", downloadURL: appURL, size: 0, digest: nil)
+            path: path,
+            currentVersion: AppVersion.currentComparableVersion,
+            updatesRoot: updatesRoot,
+            validateAppURL: { [fileManager] path, updatesRoot in
+                try AppUpdateSecurity.validatedRestoredPendingAppURL(
+                    path: path,
+                    updatesRoot: updatesRoot,
+                    fileManager: fileManager
+                )
+            }
         )
-        latestRelease = release
-        downloadedUpdate = DownloadedAppUpdate(release: release, appURL: appURL)
-        status = .downloaded(version)
+        if result.shouldClearPendingDownload {
+            clearPendingDownload()
+            return
+        }
+        latestRelease = result.latestRelease
+        downloadedUpdate = result.downloadedUpdate
+        if let status = result.status {
+            self.status = status
+        }
     }
 
     private func clearPendingDownload() {

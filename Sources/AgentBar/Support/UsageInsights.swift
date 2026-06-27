@@ -34,6 +34,7 @@ struct UsageAnomaly: Equatable, Identifiable, Sendable {
     var label: String
     var tokens: Int
     var baselineTokens: Int
+    var estimatedCostUSD: Decimal?
     var multiple: Double
 }
 
@@ -60,6 +61,7 @@ struct TopUsageRow: Equatable, Identifiable, Sendable {
     var id: String { label }
     var label: String
     var tokens: Int
+    var estimatedCostUSD: Decimal?
     var share: Double
     var lastUsedAt: Date?
 }
@@ -99,6 +101,7 @@ struct AccountHealthCenter: Equatable, Sendable {
         var kind: Kind
         var title: String
         var detail: String
+        var workspaceLines: [String] = []
         var accountID: String?
         var severity: InsightSeverity
     }
@@ -338,6 +341,7 @@ enum UsageInsights {
         let todayPoints = points.filter { calendar.isDate($0.date, inSameDayAs: now) }
         let baselinePoints = points.filter { $0.date >= baselineStart && $0.date < todayStart }
         let todayTotal = todayPoints.reduce(0) { $0 + $1.tokens.total }
+        let todayCost = totalCost(todayPoints)
         let baselineDailyAverage = max(1, baselinePoints.reduce(0) { $0 + $1.tokens.total } / 7)
 
         var anomalies: [UsageAnomaly] = []
@@ -348,6 +352,7 @@ enum UsageInsights {
                     label: "Today",
                     tokens: todayTotal,
                     baselineTokens: baselineDailyAverage,
+                    estimatedCostUSD: todayCost,
                     multiple: Double(todayTotal) / Double(baselineDailyAverage)
                 )
             )
@@ -362,12 +367,14 @@ enum UsageInsights {
             let baseline = baselineByModel[model, default: baselineDailyAverage]
             let multiple = Double(tokens) / Double(max(1, baseline))
             if multiple >= 2.5 {
+                let modelCost = totalCost(todayPoints.filter { $0.model == model })
                 anomalies.append(
                     UsageAnomaly(
                         kind: .modelTokens,
                         label: model,
                         tokens: tokens,
                         baselineTokens: baseline,
+                        estimatedCostUSD: modelCost,
                         multiple: multiple
                     )
                 )
@@ -439,6 +446,7 @@ enum UsageInsights {
                     kind: .login,
                     title: account.displayName,
                     detail: account.loginWarningLine(language: language) ?? "",
+                    workspaceLines: account.workspaceLines(language: language),
                     accountID: account.id,
                     severity: .warning
                 )
@@ -451,6 +459,7 @@ enum UsageInsights {
                     kind: .dataSource,
                     title: row.service.rawValue,
                     detail: row.note?.redactedForCredentialWords ?? row.status.label(language: language),
+                    workspaceLines: [],
                     accountID: nil,
                     severity: row.status == .error ? .critical : .warning
                 )
@@ -528,10 +537,12 @@ enum UsageInsights {
         let total = max(1, points.reduce(0) { $0 + $1.tokens.total })
         return Dictionary(grouping: points, by: key)
             .map { label, points in
-                TopUsageRow(
+                let tokens = points.reduce(0) { $0 + $1.tokens.total }
+                return TopUsageRow(
                     label: label,
-                    tokens: points.reduce(0) { $0 + $1.tokens.total },
-                    share: Double(points.reduce(0) { $0 + $1.tokens.total }) / Double(total),
+                    tokens: tokens,
+                    estimatedCostUSD: totalCost(points),
+                    share: Double(tokens) / Double(total),
                     lastUsedAt: points.map(\.date).max()
                 )
             }
@@ -541,5 +552,10 @@ enum UsageInsights {
             }
             .prefix(limit)
             .map { $0 }
+    }
+
+    private static func totalCost(_ points: [UsagePoint]) -> Decimal? {
+        let costs = points.compactMap(\.estimatedCostUSD)
+        return costs.isEmpty ? nil : costs.reduce(Decimal(0), +)
     }
 }

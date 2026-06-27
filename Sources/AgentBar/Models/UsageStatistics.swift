@@ -83,9 +83,15 @@ enum UsageStatistics {
 
         return grouped.keys.sorted().map { day in
             let points = grouped[day, default: []]
-            let codex = points.filter { $0.service == .codex }.reduce(0) { $0 + $1.tokens.total }
-            let claude = points.filter { $0.service == .claudeCode }.reduce(0) { $0 + $1.tokens.total }
-            return DailyUsageBar(day: day, codexTokens: codex, claudeTokens: claude)
+            let codexPoints = points.filter { $0.service == .codex }
+            let claudePoints = points.filter { $0.service == .claudeCode }
+            return DailyUsageBar(
+                day: day,
+                codexTokens: codexPoints.reduce(0) { $0 + $1.tokens.total },
+                claudeTokens: claudePoints.reduce(0) { $0 + $1.tokens.total },
+                codexCostUSD: codexPoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +),
+                claudeCostUSD: claudePoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
+            )
         }
     }
 }

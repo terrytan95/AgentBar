@@ -31,6 +31,7 @@ final class UsageParsingTests: XCTestCase {
         checkPopoverHeightPreferenceIsClampedWhenLoadedAndSaved()
         try checkCodexReadPrefersRegistryUsageOverLocalSessionRateLimits()
         try checkCodexReadUsesNewestRateLimitEventAcrossSessionFiles()
+        try checkCodexReadDoesNotInventLastActivityForAccountsMissingUsageTimestamp()
         try checkCodexSessionMetricsCacheInvalidatesWhenFileChanges()
         try checkCodexSessionMetricsCacheDropsDeletedFiles()
         try checkCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation()
@@ -856,6 +857,39 @@ final class UsageParsingTests: XCTestCase {
 
         XCTAssertEqual(active.fiveHourWindow?.usedPercent, 9)
         XCTAssertEqual(active.weeklyWindow?.usedPercent, 11)
+    }
+
+    private func checkCodexReadDoesNotInventLastActivityForAccountsMissingUsageTimestamp() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "active",
+          "accounts": [
+            {"account_key": "active", "email": "active@example.com", "plan": "team"},
+            {"account_key": "inactive", "email": "inactive@example.com", "plan": "team"}
+          ]
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"type":"event_msg","timestamp":"2026-06-14T06:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":9,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":11,"window_minutes":10080,"resets_at":1781910000},"plan_type":"team"},"rate_limit_reset_credits":{"available_count":1}}}
+        """.data(using: .utf8)!.write(to: sessionDir.appending(path: "current.jsonl"))
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let active = try XCTUnwrap(snapshot.accounts.first { $0.id == "active" })
+        let inactive = try XCTUnwrap(snapshot.accounts.first { $0.id == "inactive" })
+
+        XCTAssertEqual(active.lastUpdated, ISO8601DateFormatter().date(from: "2026-06-14T06:00:00Z"))
+        XCTAssertEqual(active.fiveHourWindow?.usedPercent, 9)
+        XCTAssertNil(inactive.lastUpdated)
+        XCTAssertNil(inactive.fiveHourWindow)
+        XCTAssertNil(inactive.weeklyWindow)
+        XCTAssertNil(inactive.resetCredits)
     }
 
     private func checkCodexSessionMetricsCacheInvalidatesWhenFileChanges() throws {

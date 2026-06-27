@@ -102,21 +102,47 @@ struct AuditView: View {
     }
 
     private func metricCard(_ title: String, _ value: String, accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(accent)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+        ZStack(alignment: .bottomTrailing) {
+            Circle()
+                .fill(accent.opacity(0.10))
+                .frame(width: 126, height: 126)
+                .offset(x: 34, y: 38)
+            VStack(alignment: .leading, spacing: 16) {
+                Image(systemName: iconName(for: title))
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(accent)
+                    .frame(width: 42, height: 42)
+                    .background(accent.opacity(0.10), in: Circle())
+                Spacer()
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text(value)
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
-        .agentBarPanel()
+        .padding(18)
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
+        .background(
+            LinearGradient(colors: [Color.white.opacity(0.84), accent.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .agentBarPanel(cornerRadius: 16)
+    }
+
+    private func iconName(for title: String) -> String {
+        switch title {
+        case localized("input"): return "mic"
+        case localized("cached"): return "internaldrive"
+        case localized("output"): return "arrow.up"
+        case localized("reasoning"): return "bolt"
+        default: return "cylinder.split.1x2"
+        }
     }
 
     @ViewBuilder
@@ -234,7 +260,7 @@ struct AuditView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .agentBarPanel()
+        .agentBarPanel(cornerRadius: 16)
     }
 
     private var budgetStatusForReport: BudgetStatus? {
@@ -321,9 +347,16 @@ private struct EmptyAuditMessage: View {
     var text: String
 
     var body: some View {
-        Text(text)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 72, alignment: .center)
+        VStack(spacing: 10) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 40, weight: .semibold))
+                .foregroundStyle(Color.blue.opacity(0.36))
+                .frame(width: 86, height: 70)
+                .background(Color.blue.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            Text(text)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 154, alignment: .center)
     }
 }

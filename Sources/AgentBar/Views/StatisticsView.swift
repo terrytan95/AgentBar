@@ -27,28 +27,45 @@ struct StatisticsView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar
-                .frame(width: 216)
+                .frame(width: 236)
 
             VStack(spacing: 0) {
                 if topTab == .usage {
                     usageContent
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
+                        settingsHeader
+                            .padding(.top, 24)
+                            .padding(.horizontal, 26)
                         settingsContent
                             .padding(.top, 12)
-                            .padding(.horizontal, 28)
+                            .padding(.horizontal, 26)
                             .padding(.bottom, 28)
                     }
                 }
+                appFooter
+                    .padding(.horizontal, 26)
+                    .frame(height: 42)
+                    .background(.ultraThinMaterial)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.regularMaterial)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.72),
+                        AgentBarDesign.appBackground,
+                        Color(red: 0.93, green: 0.96, blue: 1.0).opacity(0.55)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .transaction { transaction in
                 transaction.animation = nil
             }
         }
         .tint(settings.themeColor.primary)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AgentBarDesign.appBackground)
         .onReceive(NotificationCenter.default.publisher(for: DashboardNavigation.tabRequestNotification)) { notification in
             guard let rawValue = notification.userInfo?["tab"] as? String,
                   let tab = DashboardTopTab(rawValue: rawValue)
@@ -58,7 +75,11 @@ struct StatisticsView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 0) {
+            sidebarBrand
+                .padding(.top, 54)
+                .padding(.bottom, 34)
+
             sidebarGroup(title: L.text("usage_statistics", store.language)) {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     topTab = .usage
@@ -72,20 +93,86 @@ struct StatisticsView: View {
                     topTab = .usage
                     viewMode = .audit
                 }
-            }
-
-            sidebarGroup(title: L.text("settings", store.language)) {
                 sidebarItem(L.text("settings", store.language), systemImage: "gearshape", active: topTab == .settings) {
                     topTab = .settings
                 }
             }
 
             Spacer()
+
+            sidebarAccountSelector
+                .padding(.bottom, 18)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 42)
+        .padding(.horizontal, 16)
         .frame(maxHeight: .infinity, alignment: .top)
-        .agentBarPanel(cornerRadius: 0)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(AgentBarDesign.hairline)
+                .frame(width: 1)
+        }
+    }
+
+    private var sidebarBrand: some View {
+        HStack(spacing: 12) {
+            Image(nsImage: AppLogo.image())
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Text("AgentBar")
+                .font(.system(size: 20, weight: .bold))
+        }
+    }
+
+    private var sidebarAccountSelector: some View {
+        let account = store.activeAccount ?? currentCodexAccount
+        return HStack(spacing: 10) {
+            AccountAvatar(text: account?.displayName ?? "A", color: settings.themeColor.primary, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account?.displayName ?? "--")
+                    .font(.system(size: 12, weight: .bold))
+                    .lineLimit(1)
+                Text(account?.workspaceLine(language: store.language) ?? L.text("current_account", store.language))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Image(systemName: "chevron.down")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 54)
+        .agentBarPanel(cornerRadius: 10)
+    }
+
+    private var appFooter: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 10, height: 10)
+                .shadow(color: .green.opacity(0.36), radius: 5)
+            Text("数据每分钟自动更新")
+            Spacer()
+            Text("时区：UTC+8")
+            Image(systemName: "shield.checkered")
+            Text("数据安全保护中")
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(.secondary)
+    }
+
+    private var settingsHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L.text("accounts", store.language))
+                .font(.system(size: 24, weight: .bold))
+            Text(L.text("accounts_settings_subtitle", store.language))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func setTopTab(_ tab: DashboardTopTab) {
@@ -133,16 +220,20 @@ struct StatisticsView: View {
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
             }
-            .foregroundStyle(active ? .white : (enabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.72)))
+            .foregroundStyle(active ? settings.themeColor.primary : (enabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.72)))
             .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .background(active ? settings.themeColor.primary : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(active ? settings.themeColor.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(active ? settings.themeColor.primary.opacity(0.24) : Color.clear, lineWidth: 1)
+            }
+            .shadow(color: active ? settings.themeColor.primary.opacity(0.18) : .clear, radius: 10, y: 4)
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.86)
         .tactilePlainButton(enabled: enabled)
-        .agentBarPanel(cornerRadius: 8)
     }
 
     private var usageContent: some View {
@@ -163,7 +254,7 @@ struct StatisticsView: View {
                 }
             }
             .padding(.top, Self.dashboardContentTopPadding)
-            .padding(.horizontal, 22)
+            .padding(.horizontal, 26)
             .padding(.bottom, Self.dashboardContentBottomPadding)
         }
     }
@@ -200,7 +291,7 @@ struct StatisticsView: View {
     private var dashboardContent: some View {
         let projection = dashboardOverviewProjection
 
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             dashboardOverviewHeader
 
             if !store.hasLoadedAccountInformation {
@@ -211,29 +302,45 @@ struct StatisticsView: View {
             }
 
             GeometryReader { proxy in
-                LazyVGrid(columns: kpiColumns(for: proxy.size.width), spacing: 12) {
-                    DashboardKPI(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language), delta: DisplayFormatters.changePercentString(periodChange.tokenPercent), accent: .primary, theme: settings.themeColor)
-                    DashboardKPI(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), delta: DisplayFormatters.changePercentString(periodChange.costPercent), accent: .primary, theme: settings.themeColor)
-                    DashboardKPI(title: "OpenAI", value: serviceCostText(.codex), delta: serviceShareText(.codex), marker: settings.themeColor.tertiary, accent: settings.themeColor.tertiary, theme: settings.themeColor)
-                    if hasClaudeData {
-                        DashboardKPI(title: "Anthropic", value: serviceCostText(.claudeCode), delta: serviceShareText(.claudeCode), marker: settings.themeColor.secondary, accent: settings.themeColor.secondary, theme: settings.themeColor)
-                    }
+                LazyVGrid(columns: kpiColumns(for: proxy.size.width), spacing: 14) {
+                    DashboardKPI(
+                        title: L.text("total_tokens", store.language),
+                        value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language),
+                        delta: DisplayFormatters.changePercentString(periodChange.tokenPercent),
+                        subtitle: "较昨日",
+                        systemImage: "cylinder.split.1x2.fill",
+                        accent: settings.themeColor.primary,
+                        theme: settings.themeColor
+                    )
+                    DashboardKPI(
+                        title: L.text("total_cost", store.language),
+                        value: costText(summary.estimatedCostUSD),
+                        delta: DisplayFormatters.changePercentString(periodChange.costPercent),
+                        subtitle: "较昨日",
+                        systemImage: "dollarsign",
+                        accent: .green,
+                        theme: settings.themeColor
+                    )
+                    DashboardKPI(
+                        title: "OpenAI 概览",
+                        value: serviceCostText(.codex),
+                        delta: serviceShareText(.codex),
+                        subtitle: "占总花费比例",
+                        systemImage: "sparkles",
+                        marker: settings.themeColor.tertiary,
+                        accent: settings.themeColor.tertiary,
+                        theme: settings.themeColor
+                    )
                 }
             }
-            .frame(height: hasClaudeData ? 152 : 70)
+            .frame(height: 116)
 
             QuotaPressurePanel(pressure: projection.quotaPressure, language: store.language, theme: settings.themeColor)
 
-            if let quotaETA = projection.quotaETA {
-                QuotaETAPanel(eta: quotaETA, language: store.language, theme: settings.themeColor)
-            }
-
-            Panel(title: quotaCapacityLocalized("quota_capacity_history")) {
-                QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language, theme: settings.themeColor)
-            }
-
             Panel(title: "\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))") {
-                HStack {
+                HStack(spacing: 14) {
+                    LegendItem(title: "Token（万）", color: settings.themeColor.primary)
+                    LegendItem(title: "花费（美元）", color: .orange)
                     Spacer()
                     Picker("", selection: $chartMetric) {
                         ForEach(DashboardChartMetric.allCases) { metric in
@@ -243,80 +350,43 @@ struct StatisticsView: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(width: 162)
+                    Button {
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(width: 26, height: 26)
+                    }
+                    .tactilePlainButton()
+                    .agentBarPanel(cornerRadius: 8)
                 }
 
                 DashboardStackedBars(bars: displayBars, metric: chartMetric, language: store.language, theme: settings.themeColor)
-                    .frame(height: 206)
-                HStack(spacing: 14) {
-                    Spacer()
-                    LegendItem(title: "Codex", color: settings.themeColor.tertiary)
-                    if hasClaudeData {
-                        LegendItem(title: "Claude", color: settings.themeColor.secondary)
-                    }
-                }
-            }
-
-            if let rapidUsageAlert = projection.rapidUsageAlert {
-                RapidUsageAlertPanel(alert: rapidUsageAlert, language: store.language, theme: settings.themeColor)
-            }
-
-            if !projection.usageAnomalies.isEmpty {
-                UsageAnomalyPanel(anomalies: projection.usageAnomalies, language: store.language, theme: settings.themeColor)
+                    .frame(height: 230)
             }
 
             HStack(alignment: .top, spacing: 14) {
-                VStack(spacing: 14) {
-                    Panel(title: L.text("by_service", store.language)) {
-                        serviceMixRows
-                    }
-                    Panel(title: L.text("by_model", store.language)) {
-                        modelRows
-                    }
-                    Panel(title: usageLocalized("top_usage")) {
-                        TopUsagePanel(
-                            breakdown: projection.topUsage,
-                            selectedSessionLabel: selectedSessionLabel,
-                            language: store.language,
-                            theme: settings.themeColor
-                        ) { label in
-                            selectedSessionLabel = label
-                        }
-                    }
-                    Panel(title: usageLocalized("session_drilldown")) {
-                        SessionDrilldownPanel(detail: projection.selectedSessionDetail, language: store.language, theme: settings.themeColor)
-                    }
-                    if hasConfiguredBudgets {
-                        Panel(title: budgetLocalized("budgets")) {
-                            BudgetStatusPanel(
-                                today: store.budgetStatus(for: .today),
-                                weekly: store.budgetStatus(for: .thisWeek),
-                                language: store.language,
-                                theme: settings.themeColor
-                            )
-                        }
-                    }
-                    Panel(title: dataSourceLocalized("data_source_health")) {
-                        DataSourceHealthPanel(health: projection.dataSourceHealth, language: store.language, theme: settings.themeColor)
-                    }
-                    Panel(title: healthLocalized("account_health")) {
-                        AccountHealthCenterPanel(
-                            health: projection.accountHealthCenter,
-                            language: store.language,
-                            theme: settings.themeColor,
-                            onLogin: openHealthLogin,
-                            onRemove: removeHealthAccount,
-                            onRefresh: { store.refresh(force: true, showManualFeedback: true) }
-                        )
+                Panel(title: L.text("by_service", store.language)) {
+                    serviceMixRows
+                }
+                Panel(title: L.text("by_model", store.language)) {
+                    modelRows
+                }
+                Panel(title: usageLocalized("top_usage")) {
+                    TopUsagePanel(
+                        breakdown: projection.topUsage,
+                        selectedSessionLabel: selectedSessionLabel,
+                        language: store.language,
+                        theme: settings.themeColor
+                    ) { label in
+                        selectedSessionLabel = label
                     }
                 }
-                .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
-
-                Panel(title: L.text("current_limits", store.language)) {
-                    currentLimitsRows
-                }
-                .frame(minWidth: 360, maxWidth: .infinity, alignment: .top)
             }
             .frame(maxWidth: .infinity, alignment: .top)
+
+            Panel(title: L.text("current_limits", store.language)) {
+                currentLimitsRows
+            }
         }
     }
 
@@ -377,12 +447,15 @@ struct StatisticsView: View {
                 dashboardRefreshButton
             }
 
-            HStack(spacing: 8) {
-                SummaryChip(title: L.text("resets", store.language), value: "\(totalResetCreditsCount)", color: settings.themeColor.primary)
-                SummaryChip(title: L.text("next_expiry", store.language), value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry))
-                SummaryChip(title: L.text("five_hour_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.fiveHourWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.fiveHourWindow?.remainingPercent))
-                SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.weeklyWindow?.remainingPercent))
+            GeometryReader { proxy in
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: proxy.size.width < 820 ? 2 : 4), spacing: 14) {
+                    SummaryChip(title: L.text("resets", store.language), value: "\(totalResetCreditsCount)", color: settings.themeColor.primary)
+                    SummaryChip(title: L.text("next_expiry", store.language), value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry))
+                    SummaryChip(title: L.text("five_hour_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.fiveHourWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.fiveHourWindow?.remainingPercent))
+                    SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.weeklyWindow?.remainingPercent))
+                }
             }
+            .frame(height: 90)
 
             ResetAdvicePanel(advice: resetSpendAdvice, theme: settings.themeColor)
 
@@ -625,12 +698,7 @@ struct StatisticsView: View {
     }
 
     private func kpiColumns(for width: CGFloat) -> [GridItem] {
-        let count: Int
-        if hasClaudeData {
-            count = 2
-        } else {
-            count = width < 760 ? 2 : 3
-        }
+        let count = width < 760 ? 2 : 3
         return Array(repeating: GridItem(.flexible(), spacing: 12), count: count)
     }
 
@@ -663,26 +731,39 @@ struct StatisticsView: View {
         if rows.isEmpty {
             EmptyPanelMessage(L.text("no_usage_data", store.language))
         } else {
-            VStack(spacing: 16) {
-                ForEach(rows, id: \.service) { row in
-                    VStack(alignment: .leading, spacing: 7) {
-                        HStack {
-                            LegendItem(title: row.title, color: row.color, subtitle: row.subtitle)
-                            Spacer()
-                            Text(row.cost)
-                                .font(.system(size: 13, weight: .bold))
-                                .monospacedDigit()
-                        }
-                        ProgressView(value: row.share)
-                            .tint(row.color)
-                        HStack {
-                            Text(DisplayFormatters.compactTokenString(row.tokens, language: store.language) + " \(L.text("tokens", store.language))")
-                            Spacer()
-                            Text("\(Int((row.share * 100).rounded()))% \(L.text("share", store.language))")
-                        }
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 18) {
+                ProgressRing(value: rows.first?.share ?? 0, tint: rows.first?.color ?? settings.themeColor.primary, diameter: 118, stroke: 16) {
+                    VStack(spacing: 2) {
+                        Text(DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language))
+                            .font(.system(size: 18, weight: .bold))
+                            .monospacedDigit()
+                        Text(L.text("total_tokens", store.language))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
                     }
+                }
+                VStack(spacing: 10) {
+                    ForEach(rows, id: \.service) { row in
+                        HStack(spacing: 8) {
+                            LegendItem(title: row.title, color: row.color)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text("\(Int((row.share * 100).rounded()))%")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text(DisplayFormatters.compactTokenString(row.tokens, language: store.language))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Button {
+                    } label: {
+                        Label("查看全部服务", systemImage: "chevron.right")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .tactilePlainButton()
+                    .foregroundStyle(settings.themeColor.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -909,32 +990,36 @@ struct StatisticsView: View {
         if rows.isEmpty {
             EmptyPanelMessage(L.text("no_model_data", store.language))
         } else {
-            VStack(spacing: 0) {
-                ForEach(rows) { row in
-                    if row.isHeader {
-                        LegendItem(title: row.name.uppercased(), color: serviceColor(row.service), subtitle: serviceSubtitle(row.service))
-                            .padding(.top, 2)
-                            .padding(.bottom, 4)
-                    } else {
+            let dataRows = rows.filter { !$0.isHeader }
+            let maximum = max(1, dataRows.map { $0.input + $0.output }.max() ?? 1)
+            VStack(spacing: 9) {
+                ForEach(dataRows.prefix(6)) { row in
+                    VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Text(row.name)
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: 12, weight: .bold))
+                                .lineLimit(1)
                             Spacer()
-                            Text("\(L.text("input_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.input, language: store.language))")
-                            Text("\(L.text("output_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.output, language: store.language))")
-                                .frame(width: 96, alignment: .trailing)
-                            Text(costText(row.cost))
-                                .font(.system(size: 13, weight: .bold))
-                                .frame(width: 88, alignment: .trailing)
+                            Text(DisplayFormatters.compactTokenString(row.input + row.output, language: store.language))
+                                .font(.system(size: 11, weight: .bold))
+                                .monospacedDigit()
+                            Text("\(Int((Double(row.input + row.output) / Double(maximum) * 100).rounded()))%")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 34, alignment: .trailing)
                         }
-                        .font(.system(size: 12))
-                        .foregroundStyle(.primary)
-                        .padding(.vertical, 5)
-                    }
-                    if row.dividerAfter {
-                        Divider().padding(.vertical, 4)
+                        ProgressView(value: Double(row.input + row.output) / Double(maximum))
+                            .tint(serviceColor(row.service))
                     }
                 }
+                Button {
+                } label: {
+                    Label("查看全部模型", systemImage: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .tactilePlainButton()
+                .foregroundStyle(settings.themeColor.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -1178,47 +1263,74 @@ private struct DashboardKPI: View {
     var title: String
     var value: String
     var delta: String
+    var subtitle: String
+    var systemImage: String
     var marker: Color?
     var accent: Color
     var theme: AppThemeColor
 
-    init(title: String, value: String, delta: String, marker: Color? = nil, accent: Color, theme: AppThemeColor) {
+    init(title: String, value: String, delta: String, subtitle: String, systemImage: String, marker: Color? = nil, accent: Color, theme: AppThemeColor) {
         self.title = title
         self.value = value
         self.delta = delta
+        self.subtitle = subtitle
+        self.systemImage = systemImage
         self.marker = marker
         self.accent = accent
         self.theme = theme
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                if let marker {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(marker)
-                        .frame(width: 7, height: 7)
+        ZStack(alignment: .trailing) {
+            Image(systemName: systemImage)
+                .font(.system(size: 48, weight: .bold))
+                .foregroundStyle(accent.opacity(0.12))
+                .offset(x: 6, y: 14)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(accent)
+                        .frame(width: 22, height: 22)
+                        .background(accent.opacity(0.12), in: Circle())
+                    if let marker {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(marker)
+                            .frame(width: 7, height: 7)
+                    }
+                    Text(title)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.primary)
                 }
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(value)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(accent)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(.primary)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
-                Text(delta)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(theme.primary)
+                HStack(spacing: 8) {
+                    Text(delta)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.green)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(.green.opacity(0.12), in: Capsule())
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
-        .agentBarPanel()
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+        .background(
+            LinearGradient(colors: [Color.white.opacity(0.86), accent.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .agentBarPanel(cornerRadius: 16)
     }
 }
 
@@ -1333,15 +1445,16 @@ private struct DashboardStackedBars: View {
                 EmptyPanelMessage(L.text("no_usage_events", language))
                     .frame(width: proxy.size.width, height: proxy.size.height)
             } else {
-                let maxValue = axisMaximum
-                let plotHeight = max(0, proxy.size.height - 36)
+                let tokenMax = max(1, bars.map(tokenValue).max() ?? 0)
+                let costMax = max(0.0001, bars.map(costValue).max() ?? 0)
+                let plotHeight = max(0, proxy.size.height - 30)
                 ZStack(alignment: .top) {
                     VStack(spacing: 4) {
                         HStack(alignment: .bottom, spacing: 8) {
                             VStack(alignment: .trailing) {
-                                Text(valueText(maxValue))
+                                Text(metric == .tokens ? valueText(tokenMax) : valueText(costMax))
                                 Spacer()
-                                Text(valueText(maxValue / 2))
+                                Text(metric == .tokens ? valueText(tokenMax / 2) : valueText(costMax / 2))
                                 Spacer()
                                 Text("0")
                             }
@@ -1350,7 +1463,7 @@ private struct DashboardStackedBars: View {
                             .frame(width: 44, height: max(1, proxy.size.height - 24))
 
                             GeometryReader { plotProxy in
-                                ZStack(alignment: .bottom) {
+                                ZStack {
                                     VStack {
                                         Divider()
                                         Spacer()
@@ -1360,22 +1473,18 @@ private struct DashboardStackedBars: View {
                                     }
                                     .opacity(0.45)
 
-                                    HStack(alignment: .bottom, spacing: 0) {
-                                        ForEach(bars) { bar in
-                                            VStack(spacing: 0) {
-                                                Rectangle()
-                                                    .fill(theme.secondary)
-                                                    .frame(height: plotHeight * CGFloat(claudeValue(bar)) / CGFloat(maxValue))
-                                                Rectangle()
-                                                    .fill(theme.tertiary)
-                                                    .frame(height: plotHeight * CGFloat(codexValue(bar)) / CGFloat(maxValue))
-                                            }
-                                            .frame(width: 28, height: plotHeight, alignment: .bottom)
-                                            .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-                                            .frame(maxWidth: .infinity, maxHeight: plotHeight, alignment: .bottom)
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                    chartArea(
+                                        size: CGSize(width: plotProxy.size.width, height: plotHeight),
+                                        values: bars.map(tokenValue),
+                                        maximum: tokenMax,
+                                        color: theme.primary
+                                    )
+                                    chartArea(
+                                        size: CGSize(width: plotProxy.size.width, height: plotHeight),
+                                        values: bars.map(costValue),
+                                        maximum: costMax,
+                                        color: .orange
+                                    )
                                 }
                                 .frame(width: plotProxy.size.width, height: plotHeight, alignment: .bottom)
                                 .overlay {
@@ -1420,6 +1529,49 @@ private struct DashboardStackedBars: View {
         }
     }
 
+    private func chartArea(size: CGSize, values: [Double], maximum: Double, color: Color) -> some View {
+        let points = plotPoints(size: size, values: values, maximum: maximum)
+        return ZStack {
+            Path { path in
+                guard let first = points.first else { return }
+                path.move(to: CGPoint(x: first.x, y: size.height))
+                points.forEach { path.addLine(to: $0) }
+                if let last = points.last {
+                    path.addLine(to: CGPoint(x: last.x, y: size.height))
+                    path.closeSubpath()
+                }
+            }
+            .fill(
+                LinearGradient(colors: [color.opacity(0.22), color.opacity(0.02)], startPoint: .top, endPoint: .bottom)
+            )
+            Path { path in
+                guard let first = points.first else { return }
+                path.move(to: first)
+                points.dropFirst().forEach { path.addLine(to: $0) }
+            }
+            .stroke(color, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+
+            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 7, height: 7)
+                    .overlay(Circle().stroke(color, lineWidth: 2))
+                    .position(point)
+            }
+        }
+    }
+
+    private func plotPoints(size: CGSize, values: [Double], maximum: Double) -> [CGPoint] {
+        guard !values.isEmpty else { return [] }
+        let step = values.count == 1 ? 0 : size.width / CGFloat(values.count - 1)
+        return values.enumerated().map { index, value in
+            CGPoint(
+                x: CGFloat(index) * step,
+                y: size.height - (size.height * CGFloat(value / max(maximum, 0.0001)))
+            )
+        }
+    }
+
     private var hoveredBar: DailyUsageBar? {
         guard let hoveredBarID else { return nil }
         return bars.first { $0.id == hoveredBarID }
@@ -1440,7 +1592,7 @@ private struct DashboardStackedBars: View {
     }
 
     private func totalValue(_ bar: DailyUsageBar) -> Double {
-        codexValue(bar) + claudeValue(bar)
+        tokenValue(bar)
     }
 
     private var axisMaximum: Double {
@@ -1465,6 +1617,14 @@ private struct DashboardStackedBars: View {
         case .tokens: Double(bar.claudeTokens)
         case .cost: (bar.claudeCostUSD as NSDecimalNumber).doubleValue
         }
+    }
+
+    private func tokenValue(_ bar: DailyUsageBar) -> Double {
+        Double(bar.codexTokens + bar.claudeTokens)
+    }
+
+    private func costValue(_ bar: DailyUsageBar) -> Double {
+        (bar.codexCostUSD as NSDecimalNumber).doubleValue + (bar.claudeCostUSD as NSDecimalNumber).doubleValue
     }
 
     private func valueText(_ value: Double) -> String {
@@ -1713,27 +1873,27 @@ private struct CurrentLimitSummaryStrip: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            SummaryChip(
+            MiniSummaryChip(
                 title: localized("most_constrained"),
                 value: summary.mostConstrainedAccount?.displayNameWithWorkspace(language: language) ?? "--",
                 color: theme.quotaColor(remaining: summary.mostConstrainedAccount?.mostConstrainedRemainingPercent)
             )
-            SummaryChip(
+            MiniSummaryChip(
                 title: localized("lowest_5h"),
                 value: DisplayFormatters.percentString(summary.lowestFiveHourRemaining),
                 color: theme.quotaColor(remaining: summary.lowestFiveHourRemaining)
             )
-            SummaryChip(
+            MiniSummaryChip(
                 title: localized("lowest_weekly"),
                 value: DisplayFormatters.percentString(summary.lowestWeeklyRemaining),
                 color: theme.quotaColor(remaining: summary.lowestWeeklyRemaining)
             )
-            SummaryChip(
+            MiniSummaryChip(
                 title: localized("resets"),
                 value: "\(resetCreditsCount)",
                 color: theme.primary
             )
-            SummaryChip(
+            MiniSummaryChip(
                 title: localized("accounts"),
                 value: "\(summary.accountCount)",
                 color: theme.tertiary
@@ -1766,14 +1926,16 @@ private struct QuotaPressurePanel: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: iconName)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(severityColor)
-                .frame(width: 18)
+                .frame(width: 48, height: 48)
+                .background(severityColor.opacity(0.10), in: Circle())
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(localized("quota_pressure"))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(severityColor)
                     Text(severityTitle)
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.white)
@@ -1782,8 +1944,8 @@ private struct QuotaPressurePanel: View {
                         .background(severityColor, in: Capsule())
                 }
                 Text(detailLine)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.primary.opacity(0.76))
                     .lineLimit(1)
             }
 
@@ -1812,15 +1974,26 @@ private struct QuotaPressurePanel: View {
                     }
                 }
             }
+
+            HStack(spacing: 6) {
+                Text(localized("view_details"))
+                Image(systemName: "chevron.right")
+            }
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(severityColor)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(severityColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(severityColor.opacity(0.22), lineWidth: 0.5)
+        .background(
+            LinearGradient(colors: [severityColor.opacity(0.16), .white.opacity(0.82), severityColor.opacity(0.06)], startPoint: .leading, endPoint: .trailing),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(severityColor.opacity(0.38), lineWidth: 1)
+        )
+        .shadow(color: severityColor.opacity(0.10), radius: 16, y: 8)
     }
 
     private var iconName: String {
@@ -1882,12 +2055,14 @@ private struct QuotaPressurePanel: View {
     private func localized(_ key: String) -> String {
         switch (key, language) {
         case ("quota_pressure", .chinese): "额度压力"
+        case ("view_details", .chinese): "查看详情"
         case ("best_account", .chinese): "推荐账号"
         case ("five_hour_exhausts", .chinese): "预计 5 小时额度耗尽于"
         case ("five_hour_healthy", .chinese): "5 小时额度暂无风险"
         case ("rotation_ready", .chinese): "自动轮换会触发"
         case ("rotation_standby", .chinese): "自动轮换待命"
         case ("quota_pressure", _): "Quota pressure"
+        case ("view_details", _): "View details"
         case ("best_account", _): "Best account"
         case ("five_hour_exhausts", _): "5H may exhaust"
         case ("five_hour_healthy", _): "5H quota is healthy"
@@ -2881,7 +3056,63 @@ private struct ResetExpiryDisplayGroupView: View {
     }
 }
 
+private struct AccountAvatar: View {
+    var text: String
+    var color: Color
+    var size: CGFloat
+
+    var body: some View {
+        Text(initial)
+            .font(.system(size: max(12, size * 0.42), weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(
+                LinearGradient(colors: [color, color.opacity(0.72)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: Circle()
+            )
+            .shadow(color: color.opacity(0.24), radius: 8, y: 4)
+    }
+
+    private var initial: String {
+        String(text.trimmingCharacters(in: .whitespacesAndNewlines).first ?? "A").uppercased()
+    }
+}
+
 private struct SummaryChip: View {
+    var title: String
+    var value: String
+    var color: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(color.opacity(0.14))
+                .frame(width: 46, height: 46)
+                .overlay {
+                    Circle()
+                        .trim(from: 0, to: 0.78)
+                        .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(value)
+                    .font(.system(size: 18, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.64)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
+        .agentBarPanel(cornerRadius: 14)
+    }
+}
+
+private struct MiniSummaryChip: View {
     var title: String
     var value: String
     var color: Color
@@ -2969,7 +3200,8 @@ private struct AccountLimitGroupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                AccountAvatar(text: account.displayName, color: account.isActive ? theme.primary : theme.secondary, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(account.displayName)
@@ -3067,12 +3299,12 @@ private struct AccountLimitGroupView: View {
                 .minimumScaleFactor(0.8)
             }
         }
-        .padding(9)
+        .padding(11)
         .background(account.needsLogin ? Color.red.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(account.needsLogin ? Color.red.opacity(0.70) : Color.clear, lineWidth: 1.5)
+                .stroke(account.needsLogin ? Color.red.opacity(0.70) : (account.isActive ? theme.primary.opacity(0.25) : Color.primary.opacity(0.06)), lineWidth: account.needsLogin ? 1.5 : 1)
         }
     }
 

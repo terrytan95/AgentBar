@@ -146,11 +146,12 @@ struct StatisticsView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 54, maxHeight: 54)
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
-        .padding(.horizontal, 10)
-        .frame(height: 54)
         .agentBarPanel(cornerRadius: 10)
         .popover(isPresented: $showsAccountPopover, arrowEdge: .bottom) {
             SidebarAccountPopover(account: account, language: store.language, theme: settings.themeColor)
@@ -2207,6 +2208,11 @@ private struct QuotaCapacityLineChart: View {
     var samples: [QuotaCapacitySample]
     var language: AppLanguage
     var theme: AppThemeColor
+    @State private var hoveredSampleID: Date?
+    @State private var hoverLocation: CGPoint?
+    @State private var hoverPlotSize: CGSize = .zero
+
+    private let calloutSize = CGSize(width: 218, height: 94)
 
     private var maxValue: Int {
         max(1, samples.flatMap { [$0.estimatedFiveHourTotalTokens, $0.estimatedWeeklyTotalTokens].compactMap { $0 } }.max() ?? 1)
@@ -2245,6 +2251,31 @@ private struct QuotaCapacityLineChart: View {
                         line(for: \.estimatedWeeklyTotalTokens, color: theme.tertiary, in: plotSize)
                     }
                     .frame(width: plotSize.width, height: plotSize.height)
+                    .overlay {
+                        PlotHoverTrackingView { location, size in
+                            if let location {
+                                hoveredSampleID = sampleID(at: location.x, plotWidth: size.width)
+                                hoverLocation = location
+                                hoverPlotSize = size
+                            } else {
+                                hoveredSampleID = nil
+                                hoverLocation = nil
+                            }
+                        }
+                    }
+                    .overlay {
+                        if let hoveredSample, let hoverLocation {
+                            let tooltipPosition = ChartTooltipPlacement.position(
+                                cursor: hoverLocation,
+                                calloutSize: calloutSize,
+                                plotSize: hoverPlotSize
+                            )
+                            QuotaCapacityHoverCallout(sample: hoveredSample, language: language, theme: theme)
+                                .frame(width: calloutSize.width, height: calloutSize.height)
+                                .position(tooltipPosition)
+                                .allowsHitTesting(false)
+                        }
+                    }
                 }
 
                 HStack {
@@ -2257,6 +2288,17 @@ private struct QuotaCapacityLineChart: View {
                 .padding(.leading, axisWidth)
             }
         }
+    }
+
+    private var hoveredSample: QuotaCapacitySample? {
+        guard let hoveredSampleID else { return nil }
+        return samples.first { $0.id == hoveredSampleID }
+    }
+
+    private func sampleID(at x: CGFloat, plotWidth: CGFloat) -> Date? {
+        guard let index = ChartTooltipPlacement.barIndex(at: x, plotWidth: plotWidth, barCount: samples.count) else { return nil }
+        guard samples.indices.contains(index) else { return nil }
+        return samples[index].id
     }
 
     private func line(for keyPath: KeyPath<QuotaCapacitySample, Int?>, color: Color, in size: CGSize) -> some View {
@@ -2303,6 +2345,68 @@ private struct QuotaCapacityLineChart: View {
         formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
         formatter.setLocalizedDateFormatFromTemplate("MMM d HH")
         return formatter.string(from: date)
+    }
+}
+
+private struct QuotaCapacityHoverCallout: View {
+    var sample: QuotaCapacitySample
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(dateText(sample.capturedAt))
+                .font(.system(size: 11, weight: .bold))
+            metricRow("5H", value: sample.estimatedFiveHourTotalTokens, color: theme.primary)
+            metricRow(localized("weekly"), value: sample.estimatedWeeklyTotalTokens, color: theme.tertiary)
+            Divider()
+            HStack {
+                Text(localized("sample_usage"))
+                Spacer()
+                Text(DisplayFormatters.compactTokenString(sample.tokensSincePreviousSample, language: language))
+                    .font(.system(size: 10, weight: .bold))
+                    .monospacedDigit()
+            }
+        }
+        .font(.system(size: 10, weight: .medium))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
+    }
+
+    private func metricRow(_ title: String, value: Int?, color: Color) -> some View {
+        HStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(color)
+                .frame(width: 7, height: 7)
+            Text(title)
+            Spacer()
+            Text(value.map { DisplayFormatters.compactTokenString($0, language: language) } ?? "--")
+                .font(.system(size: 10, weight: .semibold))
+                .monospacedDigit()
+        }
+    }
+
+    private func dateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.setLocalizedDateFormatFromTemplate("yMMMd HH:mm")
+        return formatter.string(from: date)
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("weekly", .chinese): "本周"
+        case ("sample_usage", .chinese): "样本消耗"
+        case ("weekly", _): "Weekly"
+        case ("sample_usage", _): "Sample usage"
+        default: key
+        }
     }
 }
 

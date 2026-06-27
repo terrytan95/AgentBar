@@ -56,23 +56,23 @@ struct CodexUsageReader {
                     latestRateLimitAt: metrics.latestRateLimitAt
                 )
                 if account.fiveHourWindow == nil,
-                   (canUseSessionRateLimitsForActiveAccount || !account.isActive),
+                   canUseSessionRateLimitsForActiveAccount,
                    let latestFiveHour = metrics.latestFiveHour {
                     account.fiveHourWindow = latestFiveHour
                 }
                 if account.weeklyWindow == nil,
-                   (canUseSessionRateLimitsForActiveAccount || !account.isActive),
+                   canUseSessionRateLimitsForActiveAccount,
                    let latestWeekly = metrics.latestWeekly {
                     account.weeklyWindow = latestWeekly
                 }
                 if account.resetCredits == nil,
-                   (canUseSessionRateLimitsForActiveAccount || !account.isActive) {
+                   canUseSessionRateLimitsForActiveAccount {
                     account.resetCredits = metrics.latestResetCredits
                 }
                 if account.tokens.total == 0 {
                     account.tokens = metrics.tokenTotals
                 }
-                account.lastUpdated = account.lastUpdated ?? metrics.latestRateLimitAt ?? now
+                account.lastUpdated = account.lastUpdated ?? (canUseSessionRateLimitsForActiveAccount ? metrics.latestRateLimitAt : nil)
                 return account
             }
         }
@@ -131,7 +131,7 @@ struct CodexUsageReader {
                 resetCredits: resetCredits,
                 tokens: .zero,
                 estimatedCostUSD: nil,
-                lastUpdated: epochDate(raw.lastUsageAt) ?? now,
+                lastUpdated: epochDate(raw.lastUsageAt),
                 isActive: raw.accountKey == registry.activeAccountKey,
                 loginWarning: loginWarning,
                 workspaceName: workspaceName,

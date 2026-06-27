@@ -323,6 +323,57 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
+    func testManualSwitchRefreshesAccountDataAfterSuccess() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let refreshExpectation = expectation(description: "usage refreshed after manual switch")
+        refreshExpectation.assertForOverFulfill = false
+        let recorder = AccountRotationRecorder()
+        let active = account(id: "active", used: 70, resetsAt: now.addingTimeInterval(600), lastUpdated: now, isActive: true)
+        let target = account(id: "target", used: 20, resetsAt: now.addingTimeInterval(1_800), lastUpdated: now)
+        let refreshedTarget = account(id: "target", used: 20, resetsAt: now.addingTimeInterval(1_800), lastUpdated: now, isActive: true)
+        let codexSnapshot = UsageSnapshot(
+            service: .codex,
+            status: .live,
+            accounts: [refreshedTarget, active],
+            points: [],
+            securityNotes: [],
+            refreshedAt: now,
+            pricingFingerprint: Pricing.fingerprint
+        )
+        let store = UsageStore(
+            settings: SettingsStore(defaults: defaults),
+            codexUsageSynchronizer: { .success },
+            codexUsageReader: {
+                refreshExpectation.fulfill()
+                return codexSnapshot
+            },
+            claudeUsageReader: {
+                UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "test")
+            },
+            codexAccountSwitcher: { accountID in
+                recorder.recordSwitch(accountID)
+            },
+            manualCodexAppRestarter: {
+                recorder.recordRestart(.restarted)
+            }
+        )
+        store.applyTestData(accounts: [active, target])
+
+        store.switchActiveAccount(target)
+        wait(for: [refreshExpectation], timeout: 2)
+        let deadline = Date().addingTimeInterval(1)
+        while store.accounts.first(where: { $0.id == "target" })?.isActive != true, Date() < deadline {
+            RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+
+        XCTAssertEqual(recorder.switchedAccountID, "target")
+        XCTAssertEqual(recorder.restartResult, .restarted)
+        XCTAssertTrue(store.accounts.first(where: { $0.id == "target" })?.isActive == true)
+    }
+
+    @MainActor
     func testFailedManualSwitchPromptsCodexReloginWithPhoneAuthHintAndRetriesAfterRecovery() throws {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

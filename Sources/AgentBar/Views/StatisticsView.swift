@@ -370,24 +370,7 @@ struct StatisticsView: View {
 
             QuotaPressurePanel(pressure: projection.quotaPressure, language: store.language, theme: settings.themeColor)
 
-            Panel(title: "\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))") {
-                HStack(spacing: 14) {
-                    LegendItem(title: "Token（万）", color: settings.themeColor.primary)
-                    LegendItem(title: "花费（美元）", color: .orange)
-                    Spacer()
-                    Button {
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 13, weight: .bold))
-                            .frame(width: 26, height: 26)
-                    }
-                    .tactilePlainButton()
-                    .agentBarPanel(cornerRadius: 8)
-                }
-
-                DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
-                    .frame(height: 230)
-            }
+            dailyUsagePanel
 
             Panel(title: quotaCapacityLocalized("quota_capacity_history")) {
                 QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language, theme: settings.themeColor)
@@ -433,25 +416,50 @@ struct StatisticsView: View {
 
             Spacer()
 
-            HStack(spacing: 8) {
-                Text(L.text("interval", store.language))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Picker("", selection: $store.selectedRange) {
-                    ForEach(UsageRange.allCases) { range in
-                        Text(range.dashboardLabel(store.language)).tag(range)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .agentBarPanel(cornerRadius: 12)
-
             dashboardRefreshButton
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var dailyUsagePanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(store.selectedRange.chartTitle(store.language))
+                    .font(.system(size: 14, weight: .bold))
+                Spacer()
+                dashboardRangePicker
+            }
+
+            HStack(spacing: 14) {
+                LegendItem(title: "Token（万）", color: settings.themeColor.primary)
+                LegendItem(title: "花费（美元）", color: .orange)
+                Spacer()
+            }
+
+            DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
+                .frame(height: 230)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .agentBarPanel()
+    }
+
+    private var dashboardRangePicker: some View {
+        HStack(spacing: 8) {
+            Text(L.text("interval", store.language))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Picker("", selection: $store.selectedRange) {
+                ForEach(UsageRange.allCases) { range in
+                    Text(range.dashboardLabel(store.language)).tag(range)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .agentBarPanel(cornerRadius: 12)
     }
 
     private var resetsContent: some View {

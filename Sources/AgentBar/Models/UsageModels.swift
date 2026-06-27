@@ -375,6 +375,33 @@ enum UsageRange: String, CaseIterable, Identifiable, Sendable {
 }
 
 extension UsageRange {
+    func chartTitle(_ language: AppLanguage) -> String {
+        guard language == .chinese else {
+            switch self {
+            case .today: return "Today's usage"
+            case .yesterday: return "Yesterday's usage"
+            case .thisWeek: return "This week usage"
+            case .thisMonth: return "This month usage"
+            case .thisYear: return "This year usage"
+            case .last7Days: return "Rolling 7-day usage"
+            case .last30Days: return "Rolling 30-day usage"
+            case .all: return "All usage"
+            case .custom: return "Custom range usage"
+            }
+        }
+        switch self {
+        case .today: return "今日用量"
+        case .yesterday: return "昨日用量"
+        case .thisWeek: return "本周用量"
+        case .thisMonth: return "本月用量"
+        case .thisYear: return "本年用量"
+        case .last7Days: return "连续7日用量"
+        case .last30Days: return "连续30日用量"
+        case .all: return "全部用量"
+        case .custom: return "自定义区间用量"
+        }
+    }
+
     func dateInterval(
         now: Date,
         calendar: Calendar,

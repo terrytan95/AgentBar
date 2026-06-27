@@ -214,6 +214,21 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestWeekly?.usedPercent, 4)
     }
 
+    func testCodexSessionJsonlUsesTurnContextModelForCostBreakdown() throws {
+        let jsonl = """
+        {"type":"turn_context","payload":{"model":"openai/gpt-5.5-2026-06-01"}}
+        {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":200000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}
+        {"type":"turn_context","payload":{"model":"gpt-5.4-mini"}}
+        {"type":"event_msg","timestamp":"2026-06-13T22:07:12.184Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":0,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}
+        """.data(using: .utf8)!
+
+        let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl)
+
+        XCTAssertEqual(metrics.points.map(\.model), ["gpt-5.5", "gpt-5.4-mini"])
+        XCTAssertEqual(metrics.points.first?.estimatedCostUSD, Decimal(string: "7.1"))
+        XCTAssertEqual(metrics.points.last?.estimatedCostUSD, Decimal(string: "0.45"))
+    }
+
     func testCodexSessionJsonlParsesResetCreditsFromRateLimitEvents() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:23.246Z","payload":{"rate_limits":{"primary":{"used_percent":7,"window_minutes":300,"resets_at":1781406270}},"rate_limit_reset_credits":{"available_count":2,"resets":[{"expires_at":1782000000}]}}}

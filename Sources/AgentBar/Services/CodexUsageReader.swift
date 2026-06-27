@@ -164,6 +164,7 @@ struct CodexUsageReader {
         var previousCumulativeUsage: TokenTotals?
         var previousCumulativeResetAt: Date?
         var currentSessionTitle: String?
+        var currentModel: String?
         let decoder = JSONDecoder()
         let dateParser = CodexTimestampParser()
 
@@ -177,6 +178,7 @@ struct CodexUsageReader {
             let sessionID = event.sessionID ?? fallbackSessionID
             let projectName = payload.projectName ?? fallbackProjectName
             currentSessionTitle = currentSessionTitle ?? payload.sessionTitleCandidate
+            currentModel = payload.model ?? currentModel
             if let resetAt = payload.rateLimits?.primary?.resetDate ?? payload.rateLimits?.secondary?.resetDate {
                 currentCumulativeResetAt = resetAt
             }
@@ -192,7 +194,7 @@ struct CodexUsageReader {
                     previousCumulativeResetAt = currentCumulativeResetAt
                 }
                 eventCount += 1
-                let model = info.model ?? "Codex local"
+                let model = Pricing.normalize(model: firstNonEmptyOptional([info.model, currentModel]) ?? "Codex local")
                 points.append(
                     UsagePoint(
                         service: .codex,
@@ -677,6 +679,7 @@ private struct CodexSessionPayload: Decodable {
     var cwd: String?
     var message: String?
     var title: String?
+    var model: String?
 
     enum CodingKeys: String, CodingKey {
         case info
@@ -685,6 +688,7 @@ private struct CodexSessionPayload: Decodable {
         case cwd
         case message
         case title
+        case model
     }
 
     var projectName: String? {

@@ -163,7 +163,7 @@ struct PopoverRootView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let activeAccount = store.activeAccount {
-                    Text("\(L.text("current_account", store.language)): \(activeAccount.displayName)")
+                    Text("\(L.text("current_account", store.language)): \(activeAccount.displayNameWithWorkspace(language: store.language))")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -561,12 +561,13 @@ struct PopoverWorkSessionPanel: View {
     }
 
     private var detail: String {
-        let recommended = plan.recommendedAccount?.displayName ?? localized("stay")
+        let active = plan.activeAccount.displayNameWithWorkspace(language: language)
+        let recommended = plan.recommendedAccount?.displayNameWithWorkspace(language: language) ?? localized("stay")
         switch language {
         case .chinese:
-            return "\(plan.activeAccountName) 当前速度下可用时间；建议账号：\(recommended)"
+            return "\(active) 当前速度下可用时间；建议账号：\(recommended)"
         case .english:
-            return "\(plan.activeAccountName) at current speed; recommended account: \(recommended)"
+            return "\(active) at current speed; recommended account: \(recommended)"
         }
     }
 

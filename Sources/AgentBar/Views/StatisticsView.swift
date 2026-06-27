@@ -2902,17 +2902,32 @@ private struct SettingsAccountDropdown: View {
     @State private var isExpanded = false
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(accounts) { account in
-                    SettingsAccountDeleteRow(account: account, language: language) {
-                        onRemove(account)
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack(spacing: 10) {
+                    SettingsAccountSummary(account: currentAccount, language: language)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(accounts) { account in
+                        SettingsAccountDeleteRow(account: account, language: language) {
+                            onRemove(account)
+                        }
                     }
                 }
+                .padding(.top, 8)
             }
-            .padding(.top, 8)
-        } label: {
-            SettingsAccountSummary(account: currentAccount, language: language)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

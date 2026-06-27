@@ -1755,15 +1755,22 @@ private struct PlotHoverTrackingView: NSViewRepresentable {
         }
 
         override func mouseMoved(with event: NSEvent) {
-            onHover?(convert(event.locationInWindow, from: nil), bounds.size)
+            onHover?(swiftUILocation(for: event), bounds.size)
         }
 
         override func mouseEntered(with event: NSEvent) {
-            onHover?(convert(event.locationInWindow, from: nil), bounds.size)
+            onHover?(swiftUILocation(for: event), bounds.size)
         }
 
         override func mouseExited(with event: NSEvent) {
             onHover?(nil, bounds.size)
+        }
+
+        private func swiftUILocation(for event: NSEvent) -> CGPoint {
+            ChartTooltipPlacement.swiftUILocation(
+                fromAppKit: convert(event.locationInWindow, from: nil),
+                plotHeight: bounds.height
+            )
         }
     }
 }

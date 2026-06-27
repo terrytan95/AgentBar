@@ -573,6 +573,13 @@ struct StatisticsView: View {
         store.points
     }
 
+    private var selectedRangePoints: [UsagePoint] {
+        guard let interval = store.selectedRange.dateInterval(now: Date(), calendar: .current, customStart: store.customStart, customEnd: store.customEnd) else {
+            return filteredPoints
+        }
+        return filteredPoints.filter { interval.contains($0.date) }
+    }
+
     private var codexAccounts: [UsageAccount] {
         store.accounts.filter { $0.service == .codex }
     }
@@ -606,7 +613,7 @@ struct StatisticsView: View {
     }
 
     private func serviceCostText(_ service: UsageService) -> String {
-        let costs = filteredPoints.filter { $0.service == service }.compactMap(\.estimatedCostUSD)
+        let costs = selectedRangePoints.filter { $0.service == service }.compactMap(\.estimatedCostUSD)
         guard !costs.isEmpty else { return L.text("no_cost_data", store.language) }
         return DisplayFormatters.costString(costs.reduce(Decimal(0), +))
     }
@@ -864,20 +871,26 @@ struct StatisticsView: View {
         } else {
             VStack(spacing: 0) {
                 ForEach(rows) { row in
-                    HStack {
-                        Text(row.name)
-                            .font(.system(size: 13, weight: .medium))
-                        Spacer()
-                        Text("\(L.text("input_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.input, language: store.language))")
-                        Text("\(L.text("output_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.output, language: store.language))")
-                            .frame(width: 96, alignment: .trailing)
-                        Text(costText(row.cost))
-                            .font(.system(size: 13, weight: .bold))
-                            .frame(width: 88, alignment: .trailing)
+                    if row.isHeader {
+                        LegendItem(title: row.name.uppercased(), color: serviceColor(row.service), subtitle: serviceSubtitle(row.service))
+                            .padding(.top, 2)
+                            .padding(.bottom, 4)
+                    } else {
+                        HStack {
+                            Text(row.name)
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer()
+                            Text("\(L.text("input_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.input, language: store.language))")
+                            Text("\(L.text("output_abbrev", store.language)) \(DisplayFormatters.compactTokenString(row.output, language: store.language))")
+                                .frame(width: 96, alignment: .trailing)
+                            Text(costText(row.cost))
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(width: 88, alignment: .trailing)
+                        }
+                        .font(.system(size: 12))
+                        .foregroundStyle(.primary)
+                        .padding(.vertical, 5)
                     }
-                    .font(.system(size: 12))
-                    .foregroundStyle(row.isHeader ? .secondary : .primary)
-                    .padding(.vertical, 5)
                     if row.dividerAfter {
                         Divider().padding(.vertical, 4)
                     }
@@ -887,20 +900,45 @@ struct StatisticsView: View {
     }
 
     private var modelBreakdownRows: [ModelBreakdownRow] {
-        let grouped = Dictionary(grouping: filteredPoints, by: \.model)
-        return grouped.map { model, points in
-            let tokens = points.reduce(TokenTotals.zero) { $0 + $1.tokens }
-            let costValues = points.compactMap(\.estimatedCostUSD)
-            return ModelBreakdownRow(
-                name: model,
-                input: tokens.input,
-                output: tokens.output,
-                cost: costValues.isEmpty ? nil : costValues.reduce(Decimal(0), +),
-                isHeader: false,
-                dividerAfter: false
-            )
+        UsageService.allCases.flatMap { service -> [ModelBreakdownRow] in
+            let servicePoints = selectedRangePoints.filter { $0.service == service }
+            guard !servicePoints.isEmpty else { return [] }
+            let rows = Dictionary(grouping: servicePoints, by: \.model).map { model, points in
+                let tokens = points.reduce(TokenTotals.zero) { $0 + $1.tokens }
+                let costValues = points.compactMap(\.estimatedCostUSD)
+                let cost = costValues.isEmpty ? nil : costValues.reduce(Decimal(0), +)
+                let output = tokens.output + tokens.reasoningOutput
+                return ModelBreakdownRow(
+                    service: service,
+                    name: model,
+                    input: tokens.input,
+                    output: output,
+                    cost: cost,
+                    isHeader: false,
+                    dividerAfter: false
+                )
+            }
+            .sorted { lhs, rhs in
+                let lhsCost = lhs.cost ?? 0
+                let rhsCost = rhs.cost ?? 0
+                if lhsCost != rhsCost { return lhsCost > rhsCost }
+                return lhs.input + lhs.output > rhs.input + rhs.output
+            }
+
+            return [ModelBreakdownRow(service: service, name: serviceTitle(service), input: 0, output: 0, cost: nil, isHeader: true, dividerAfter: false)] + rows
         }
-        .sorted { ($0.cost ?? 0, $0.input + $0.output) > ($1.cost ?? 0, $1.input + $1.output) }
+    }
+
+    private func serviceTitle(_ service: UsageService) -> String {
+        service == .codex ? "Codex" : "Claude"
+    }
+
+    private func serviceSubtitle(_ service: UsageService) -> String {
+        service == .codex ? "OpenAI" : "Anthropic"
+    }
+
+    private func serviceColor(_ service: UsageService) -> Color {
+        service == .codex ? settings.themeColor.tertiary : settings.themeColor.secondary
     }
 
     private func resetText(_ date: Date?) -> String {
@@ -3010,7 +3048,8 @@ private struct LimitRow: Identifiable {
 }
 
 private struct ModelBreakdownRow: Identifiable {
-    var id: String { name }
+    var id: String { "\(service.rawValue)-\(isHeader ? "header" : name)" }
+    var service: UsageService
     var name: String
     var input: Int
     var output: Int

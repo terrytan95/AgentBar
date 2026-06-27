@@ -402,13 +402,10 @@ struct StatisticsView: View {
                     }
                 }
                 if !codexAccounts.isEmpty {
-                    SettingsAccountList(
-                        groups: store.accountDisplayGroups(codexAccounts),
+                    SettingsAccountDropdown(
+                        accounts: store.sortedAccounts(codexAccounts),
+                        currentAccount: currentCodexAccount,
                         language: store.language,
-                        theme: settings.themeColor,
-                        switchingAccountID: store.switchingAccountID,
-                        onSwitch: store.switchActiveAccount,
-                        onLogin: { account in store.openLogin(for: account) },
                         onRemove: store.removeAccount
                     )
                     .padding(12)
@@ -578,6 +575,10 @@ struct StatisticsView: View {
 
     private var codexAccounts: [UsageAccount] {
         store.accounts.filter { $0.service == .codex }
+    }
+
+    private var currentCodexAccount: UsageAccount? {
+        codexAccounts.first(where: \.isActive) ?? codexAccounts.first
     }
 
     private var claudeAccounts: [UsageAccount] {
@@ -2749,30 +2750,102 @@ private struct AccountLimitGroupView: View {
     }
 }
 
-private struct SettingsAccountList: View {
-    var groups: [UsageAccountDisplayGroup]
+private struct SettingsAccountDropdown: View {
+    var accounts: [UsageAccount]
+    var currentAccount: UsageAccount?
     var language: AppLanguage
-    var theme: AppThemeColor
-    var switchingAccountID: String?
-    var onSwitch: (UsageAccount) -> Void
-    var onLogin: (UsageAccount) -> Void
     var onRemove: (UsageAccount) -> Void
+    @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(groups) { group in
-                PopoverAccountDisplayGroupView(
-                    group: group,
-                    language: language,
-                    theme: theme,
-                    switchingAccountID: switchingAccountID,
-                    onSwitch: onSwitch,
-                    onLogin: onLogin,
-                    onRemove: onRemove
-                )
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(accounts) { account in
+                    SettingsAccountDeleteRow(account: account, language: language) {
+                        onRemove(account)
+                    }
+                }
             }
+            .padding(.top, 8)
+        } label: {
+            SettingsAccountSummary(account: currentAccount, language: language)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SettingsAccountSummary: View {
+    var account: UsageAccount?
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.crop.circle")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L.text("current_account", language))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text(account?.displayName ?? "--")
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct SettingsAccountDeleteRow: View {
+    var account: UsageAccount
+    var language: AppLanguage
+    var onRemove: () -> Void
+    @State private var isConfirmingRemoval = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(account.displayName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                    if account.isActive {
+                        Text(L.text("current", language))
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(accountIdentityLine)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button(role: .destructive) {
+                isConfirmingRemoval = true
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .foregroundStyle(.red)
+            .help(L.text("remove_account", language))
+            .pointingHandCursor()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .confirmationDialog(L.text("remove_account", language), isPresented: $isConfirmingRemoval) {
+            Button(L.text("remove_account", language), role: .destructive) {
+                onRemove()
+            }
+        } message: {
+            Text(L.text("remove_account_confirmation", language))
+        }
+    }
+
+    private var accountIdentityLine: String {
+        account.username ?? account.maskedEmail ?? account.sourceDescription
     }
 }
 

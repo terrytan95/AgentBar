@@ -3,6 +3,10 @@ import CoreGraphics
 enum ChartTooltipPlacement {
     static let cursorOffset = CGSize(width: 16, height: 8)
 
+    static func swiftUILocation(fromAppKit location: CGPoint, plotHeight: CGFloat) -> CGPoint {
+        CGPoint(x: location.x, y: plotHeight - location.y)
+    }
+
     static func position(cursor: CGPoint, calloutSize: CGSize, plotSize: CGSize) -> CGPoint {
         let halfWidth = calloutSize.width / 2
         let halfHeight = calloutSize.height / 2

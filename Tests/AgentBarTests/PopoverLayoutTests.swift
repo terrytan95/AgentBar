@@ -20,6 +20,7 @@ final class PopoverLayoutTests: XCTestCase {
         checkPopoverHeightDoesNotUseUserPreferenceOverride()
         checkPopoverHeightCanUsePreferredHeightWithinBounds()
         checkChartTooltipTracksPointerAndClampsInsidePlot()
+        checkChartTooltipConvertsAppKitHoverToSwiftUICoordinates()
         checkChartTooltipHitTestingUsesFullPlotWidthSlots()
     }
     @MainActor
@@ -133,6 +134,17 @@ final class PopoverLayoutTests: XCTestCase {
 
         XCTAssertEqual(clamped.x, 371)
         XCTAssertEqual(clamped.y, 197)
+    }
+
+    private func checkChartTooltipConvertsAppKitHoverToSwiftUICoordinates() {
+        XCTAssertEqual(
+            ChartTooltipPlacement.swiftUILocation(fromAppKit: CGPoint(x: 120, y: 40), plotHeight: 260),
+            CGPoint(x: 120, y: 220)
+        )
+        XCTAssertEqual(
+            ChartTooltipPlacement.swiftUILocation(fromAppKit: CGPoint(x: 120, y: 220), plotHeight: 260),
+            CGPoint(x: 120, y: 40)
+        )
     }
 
     private func checkChartTooltipHitTestingUsesFullPlotWidthSlots() {

@@ -19,3 +19,7 @@ _Avoid_: Account action, account button flow
 **Codex usage source**:
 The local and remote Codex data used to build usage accounts, quota windows, reset credits, and usage points.
 _Avoid_: Codex parser, session files
+
+**App update lifecycle**:
+The flow that checks for a newer release, stages a verified download, restores pending installs, and starts installation.
+_Avoid_: Update button, GitHub check

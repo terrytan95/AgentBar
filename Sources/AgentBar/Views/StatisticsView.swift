@@ -8,7 +8,7 @@ struct StatisticsView: View {
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
     @State private var selectedSessionLabel: String?
-    @State private var chartMetric: DashboardChartMetric = .tokens
+    @State private var showsAccountPopover = false
 
     private static let dashboardContentTopPadding: CGFloat = 12
     private static let dashboardContentBottomPadding: CGFloat = 26
@@ -77,7 +77,7 @@ struct StatisticsView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             sidebarBrand
-                .padding(.top, 54)
+                .padding(.top, 16)
                 .padding(.bottom, 34)
 
             sidebarGroup(title: L.text("usage_statistics", store.language)) {
@@ -127,52 +127,84 @@ struct StatisticsView: View {
 
     private var sidebarAccountSelector: some View {
         let account = store.activeAccount ?? currentCodexAccount
-        return HStack(spacing: 10) {
-            AccountAvatar(text: account?.displayName ?? "A", color: settings.themeColor.primary, size: 34)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account?.displayName ?? "--")
-                    .font(.system(size: 12, weight: .bold))
-                    .lineLimit(1)
-                Text(account?.workspaceLine(language: store.language) ?? L.text("current_account", store.language))
-                    .font(.system(size: 10, weight: .medium))
+        return Button {
+            showsAccountPopover.toggle()
+        } label: {
+            HStack(spacing: 10) {
+                AccountAvatar(text: account?.displayName ?? "A", color: settings.themeColor.primary, size: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(account?.displayName ?? "--")
+                        .font(.system(size: 12, weight: .bold))
+                        .lineLimit(1)
+                    Text(account?.workspaceLine(language: store.language) ?? L.text("current_account", store.language))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
-            Spacer()
-            Image(systemName: "chevron.down")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.secondary)
         }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
         .padding(.horizontal, 10)
         .frame(height: 54)
         .agentBarPanel(cornerRadius: 10)
+        .popover(isPresented: $showsAccountPopover, arrowEdge: .bottom) {
+            SidebarAccountPopover(account: account, language: store.language, theme: settings.themeColor)
+        }
     }
 
     private var appFooter: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(Color.green)
-                .frame(width: 10, height: 10)
-                .shadow(color: .green.opacity(0.36), radius: 5)
-            Text("数据每分钟自动更新")
-            Spacer()
-            Text("时区：UTC+8")
-            Image(systemName: "shield.checkered")
-            Text("数据安全保护中")
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 10, height: 10)
+                    .shadow(color: .green.opacity(0.36), radius: 5)
+                Text("数据每分钟自动更新")
+                Spacer()
+                Text(footerDateTimeText(timeline.date))
+                    .monospacedDigit()
+                Text(timeZoneText)
+                Image(systemName: "shield.checkered")
+                Text("数据安全保护中")
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
         }
-        .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(.secondary)
     }
 
     private var settingsHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(L.text("accounts", store.language))
+            Text(L.text("settings", store.language))
                 .font(.system(size: 24, weight: .bold))
-            Text(L.text("accounts_settings_subtitle", store.language))
+            Text(L.text("general_settings_subtitle", store.language))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var timeZoneText: String {
+        let seconds = TimeZone.current.secondsFromGMT()
+        let sign = seconds >= 0 ? "+" : "-"
+        let absolute = abs(seconds)
+        let hours = absolute / 3_600
+        let minutes = (absolute % 3_600) / 60
+        let offset = minutes == 0 ? "\(sign)\(hours)" : String(format: "%@%02d:%02d", sign, hours, minutes)
+        return "\(store.language == .chinese ? "时区" : "TZ"): \(TimeZone.current.identifier) UTC\(offset)"
+    }
+
+    private func footerDateTimeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = store.language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.timeZone = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter.string(from: date)
     }
 
     private func setTopTab(_ tab: DashboardTopTab) {
@@ -342,14 +374,6 @@ struct StatisticsView: View {
                     LegendItem(title: "Token（万）", color: settings.themeColor.primary)
                     LegendItem(title: "花费（美元）", color: .orange)
                     Spacer()
-                    Picker("", selection: $chartMetric) {
-                        ForEach(DashboardChartMetric.allCases) { metric in
-                            Text(metric.title(store.language)).tag(metric)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 162)
                     Button {
                     } label: {
                         Image(systemName: "ellipsis")
@@ -360,16 +384,22 @@ struct StatisticsView: View {
                     .agentBarPanel(cornerRadius: 8)
                 }
 
-                DashboardStackedBars(bars: displayBars, metric: chartMetric, language: store.language, theme: settings.themeColor)
+                DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
                     .frame(height: 230)
             }
 
+            Panel(title: quotaCapacityLocalized("quota_capacity_history")) {
+                QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language, theme: settings.themeColor)
+            }
+
             HStack(alignment: .top, spacing: 14) {
-                Panel(title: L.text("by_service", store.language)) {
-                    serviceMixRows
-                }
-                Panel(title: L.text("by_model", store.language)) {
-                    modelRows
+                VStack(alignment: .leading, spacing: 14) {
+                    Panel(title: L.text("by_service", store.language)) {
+                        serviceMixRows
+                    }
+                    Panel(title: L.text("by_model", store.language)) {
+                        modelRows
+                    }
                 }
                 Panel(title: usageLocalized("top_usage")) {
                     TopUsagePanel(
@@ -449,10 +479,10 @@ struct StatisticsView: View {
 
             GeometryReader { proxy in
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: proxy.size.width < 820 ? 2 : 4), spacing: 14) {
-                    SummaryChip(title: L.text("resets", store.language), value: "\(totalResetCreditsCount)", color: settings.themeColor.primary)
-                    SummaryChip(title: L.text("next_expiry", store.language), value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry))
-                    SummaryChip(title: L.text("five_hour_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.fiveHourWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.fiveHourWindow?.remainingPercent))
-                    SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: settings.themeColor.quotaColor(remaining: store.activeAccount?.weeklyWindow?.remainingPercent))
+                    SummaryChip(title: L.text("resets", store.language), value: "\(totalResetCreditsCount)", color: .green, systemImage: "checkmark")
+                    SummaryChip(title: L.text("next_expiry", store.language), value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry), systemImage: "clock")
+                    SummaryChip(title: L.text("five_hour_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.fiveHourWindow?.remainingPercent), color: quotaMeterColor(store.activeAccount?.fiveHourWindow?.remainingPercent), progress: store.activeAccount?.fiveHourWindow?.remainingPercent)
+                    SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: quotaMeterColor(store.activeAccount?.weeklyWindow?.remainingPercent), progress: store.activeAccount?.weeklyWindow?.remainingPercent)
                 }
             }
             .frame(height: 90)
@@ -1085,6 +1115,13 @@ struct StatisticsView: View {
         if seconds <= 3 * 86_400 { return .orange }
         return settings.themeColor.primary
     }
+
+    private func quotaMeterColor(_ remaining: Double?) -> Color {
+        guard let remaining else { return settings.themeColor.tertiary }
+        if remaining < 15 { return .red }
+        if remaining < 35 { return .yellow }
+        return .blue
+    }
 }
 
 enum DashboardTopTab: String, Hashable {
@@ -1096,22 +1133,6 @@ private enum DashboardViewMode: Hashable {
     case overview
     case resets
     case audit
-}
-
-private enum DashboardChartMetric: String, CaseIterable, Identifiable {
-    case tokens
-    case cost
-
-    var id: String { rawValue }
-
-    func title(_ language: AppLanguage) -> String {
-        switch (self, language) {
-        case (.tokens, .chinese): "Token"
-        case (.cost, .chinese): "美元"
-        case (.tokens, _): "Tokens"
-        case (.cost, _): "Cost"
-        }
-    }
 }
 
 private struct ResetSpendAdvice {
@@ -1430,14 +1451,13 @@ private struct ResizablePanel<Content: View>: View {
 
 private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
-    var metric: DashboardChartMetric
     var language: AppLanguage
     var theme: AppThemeColor
     @State private var hoveredBarID: Date?
     @State private var hoverLocation: CGPoint?
     @State private var hoverPlotSize: CGSize = .zero
 
-    private let calloutSize = CGSize(width: 210, height: 94)
+    private let calloutSize = CGSize(width: 238, height: 126)
 
     var body: some View {
         GeometryReader { proxy in
@@ -1448,19 +1468,21 @@ private struct DashboardStackedBars: View {
                 let tokenMax = max(1, bars.map(tokenValue).max() ?? 0)
                 let costMax = max(0.0001, bars.map(costValue).max() ?? 0)
                 let plotHeight = max(0, proxy.size.height - 30)
+                let leftAxisWidth: CGFloat = 52
+                let rightAxisWidth: CGFloat = 56
                 ZStack(alignment: .top) {
                     VStack(spacing: 4) {
                         HStack(alignment: .bottom, spacing: 8) {
                             VStack(alignment: .trailing) {
-                                Text(metric == .tokens ? valueText(tokenMax) : valueText(costMax))
+                                Text(tokenAxisText(tokenMax))
                                 Spacer()
-                                Text(metric == .tokens ? valueText(tokenMax / 2) : valueText(costMax / 2))
+                                Text(tokenAxisText(tokenMax / 2))
                                 Spacer()
                                 Text("0")
                             }
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(.secondary)
-                            .frame(width: 44, height: max(1, proxy.size.height - 24))
+                            .frame(width: leftAxisWidth - 8, height: max(1, proxy.size.height - 24))
 
                             GeometryReader { plotProxy in
                                 ZStack {
@@ -1477,13 +1499,15 @@ private struct DashboardStackedBars: View {
                                         size: CGSize(width: plotProxy.size.width, height: plotHeight),
                                         values: bars.map(tokenValue),
                                         maximum: tokenMax,
-                                        color: theme.primary
+                                        color: theme.primary,
+                                        showsFill: true
                                     )
                                     chartArea(
                                         size: CGSize(width: plotProxy.size.width, height: plotHeight),
                                         values: bars.map(costValue),
                                         maximum: costMax,
-                                        color: .orange
+                                        color: .orange,
+                                        showsFill: false
                                     )
                                 }
                                 .frame(width: plotProxy.size.width, height: plotHeight, alignment: .bottom)
@@ -1501,6 +1525,17 @@ private struct DashboardStackedBars: View {
                                 }
                             }
                             .frame(height: plotHeight)
+
+                            VStack(alignment: .leading) {
+                                Text(costAxisText(costMax))
+                                Spacer()
+                                Text(costAxisText(costMax / 2))
+                                Spacer()
+                                Text("$0")
+                            }
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: rightAxisWidth, height: max(1, proxy.size.height - 24))
                         }
                         HStack {
                             Text(axisDate(bars.first?.day))
@@ -1511,14 +1546,15 @@ private struct DashboardStackedBars: View {
                         }
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.secondary)
-                        .padding(.leading, 52)
+                        .padding(.leading, leftAxisWidth)
+                        .padding(.trailing, rightAxisWidth + 8)
                     }
 
                     if let hoveredBar, let hoverLocation {
                         let tooltipPosition = ChartTooltipPlacement.position(cursor: hoverLocation, calloutSize: calloutSize, plotSize: hoverPlotSize)
-                        ChartHoverCallout(bar: hoveredBar, metric: metric, language: language, theme: theme)
+                        ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
                             .frame(width: calloutSize.width, height: calloutSize.height)
-                            .position(x: tooltipPosition.x + 52, y: tooltipPosition.y + 4)
+                            .position(x: tooltipPosition.x + leftAxisWidth, y: tooltipPosition.y + 4)
                             .padding(.top, 4)
                             .transition(.opacity.combined(with: .scale(scale: 0.98)))
                             .allowsHitTesting(false)
@@ -1529,27 +1565,30 @@ private struct DashboardStackedBars: View {
         }
     }
 
-    private func chartArea(size: CGSize, values: [Double], maximum: Double, color: Color) -> some View {
+    private func chartArea(size: CGSize, values: [Double], maximum: Double, color: Color, showsFill: Bool) -> some View {
         let points = plotPoints(size: size, values: values, maximum: maximum)
         return ZStack {
-            Path { path in
-                guard let first = points.first else { return }
-                path.move(to: CGPoint(x: first.x, y: size.height))
-                points.forEach { path.addLine(to: $0) }
-                if let last = points.last {
-                    path.addLine(to: CGPoint(x: last.x, y: size.height))
-                    path.closeSubpath()
+            if showsFill {
+                Path { path in
+                    guard let first = points.first else { return }
+                    path.move(to: CGPoint(x: first.x, y: size.height))
+                    points.forEach { path.addLine(to: $0) }
+                    if let last = points.last {
+                        path.addLine(to: CGPoint(x: last.x, y: size.height))
+                        path.closeSubpath()
+                    }
                 }
+                .fill(
+                    LinearGradient(colors: [color.opacity(0.32), color.opacity(0.05)], startPoint: .top, endPoint: .bottom)
+                )
             }
-            .fill(
-                LinearGradient(colors: [color.opacity(0.22), color.opacity(0.02)], startPoint: .top, endPoint: .bottom)
-            )
             Path { path in
                 guard let first = points.first else { return }
                 path.move(to: first)
                 points.dropFirst().forEach { path.addLine(to: $0) }
             }
             .stroke(color, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+            .shadow(color: color.opacity(0.32), radius: 4, y: 2)
 
             ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                 Circle()
@@ -1591,34 +1630,6 @@ private struct DashboardStackedBars: View {
         return formatter.string(from: date)
     }
 
-    private func totalValue(_ bar: DailyUsageBar) -> Double {
-        tokenValue(bar)
-    }
-
-    private var axisMaximum: Double {
-        let rawMaximum = bars.map(totalValue).max() ?? 0
-        switch metric {
-        case .tokens:
-            return max(1, rawMaximum)
-        case .cost:
-            return max(0.0001, rawMaximum)
-        }
-    }
-
-    private func codexValue(_ bar: DailyUsageBar) -> Double {
-        switch metric {
-        case .tokens: Double(bar.codexTokens)
-        case .cost: (bar.codexCostUSD as NSDecimalNumber).doubleValue
-        }
-    }
-
-    private func claudeValue(_ bar: DailyUsageBar) -> Double {
-        switch metric {
-        case .tokens: Double(bar.claudeTokens)
-        case .cost: (bar.claudeCostUSD as NSDecimalNumber).doubleValue
-        }
-    }
-
     private func tokenValue(_ bar: DailyUsageBar) -> Double {
         Double(bar.codexTokens + bar.claudeTokens)
     }
@@ -1627,19 +1638,17 @@ private struct DashboardStackedBars: View {
         (bar.codexCostUSD as NSDecimalNumber).doubleValue + (bar.claudeCostUSD as NSDecimalNumber).doubleValue
     }
 
-    private func valueText(_ value: Double) -> String {
-        switch metric {
-        case .tokens:
-            return DisplayFormatters.compactTokenString(Int(value.rounded()), language: language)
-        case .cost:
-            return DisplayFormatters.costString(Decimal(value))
-        }
+    private func tokenAxisText(_ value: Double) -> String {
+        DisplayFormatters.compactTokenString(Int(value.rounded()), language: language)
+    }
+
+    private func costAxisText(_ value: Double) -> String {
+        DisplayFormatters.costString(Decimal(value))
     }
 }
 
 private struct ChartHoverCallout: View {
     var bar: DailyUsageBar
-    var metric: DashboardChartMetric
     var language: AppLanguage
     var theme: AppThemeColor
 
@@ -1647,20 +1656,25 @@ private struct ChartHoverCallout: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dateText)
                 .font(.system(size: 11, weight: .bold))
-            metricRow("Codex", value: codexValue, color: theme.tertiary)
-            metricRow("Claude", value: claudeValue, color: theme.secondary)
+            metricRow("Codex", tokens: bar.codexTokens, cost: bar.codexCostUSD, color: theme.tertiary)
+            metricRow("Claude", tokens: bar.claudeTokens, cost: bar.claudeCostUSD, color: theme.secondary)
             Divider()
             HStack {
                 Text(L.text("total", language))
                 Spacer()
-                Text(valueText(codexValue + claudeValue))
-                    .monospacedDigit()
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(tokenText(bar.codexTokens + bar.claudeTokens))
+                    Text(DisplayFormatters.costString(bar.codexCostUSD + bar.claudeCostUSD))
+                        .foregroundStyle(.secondary)
+                }
+                .monospacedDigit()
+                .font(.system(size: 10, weight: .bold))
             }
         }
         .font(.system(size: 10, weight: .medium))
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .frame(width: 210)
+        .frame(width: 238)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -1669,16 +1683,25 @@ private struct ChartHoverCallout: View {
         .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
     }
 
-    private func metricRow(_ title: String, value: Double, color: Color) -> some View {
+    private func metricRow(_ title: String, tokens: Int, cost: Decimal, color: Color) -> some View {
         HStack(spacing: 7) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(color)
                 .frame(width: 7, height: 7)
             Text(title)
             Spacer()
-            Text(valueText(value))
-                .monospacedDigit()
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(tokenText(tokens))
+                Text(DisplayFormatters.costString(cost))
+                    .foregroundStyle(.secondary)
+            }
+            .monospacedDigit()
+            .font(.system(size: 10, weight: .semibold))
         }
+    }
+
+    private func tokenText(_ value: Int) -> String {
+        "\(DisplayFormatters.compactTokenString(value, language: language)) \(L.text("tokens", language))"
     }
 
     private var dateText: String {
@@ -1686,29 +1709,6 @@ private struct ChartHoverCallout: View {
         formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
         formatter.setLocalizedDateFormatFromTemplate("yMMMd")
         return formatter.string(from: bar.day)
-    }
-
-    private var codexValue: Double {
-        switch metric {
-        case .tokens: Double(bar.codexTokens)
-        case .cost: (bar.codexCostUSD as NSDecimalNumber).doubleValue
-        }
-    }
-
-    private var claudeValue: Double {
-        switch metric {
-        case .tokens: Double(bar.claudeTokens)
-        case .cost: (bar.claudeCostUSD as NSDecimalNumber).doubleValue
-        }
-    }
-
-    private func valueText(_ value: Double) -> String {
-        switch metric {
-        case .tokens:
-            return "\(DisplayFormatters.compactTokenString(Int(value.rounded()), language: language)) \(L.text("tokens", language))"
-        case .cost:
-            return DisplayFormatters.costString(Decimal(value))
-        }
     }
 }
 
@@ -3078,10 +3078,92 @@ private struct AccountAvatar: View {
     }
 }
 
+private struct SidebarAccountPopover: View {
+    var account: UsageAccount?
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let account {
+                HStack(spacing: 10) {
+                    AccountAvatar(text: account.displayName, color: theme.primary, size: 38)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(account.displayName)
+                            .font(.system(size: 14, weight: .bold))
+                            .lineLimit(1)
+                        Text(account.accountTypeLine(language: language))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Divider()
+                infoRow(L.text("current_account", language), account.isActive ? localized("yes") : localized("no"))
+                if let username = account.username, !username.isEmpty {
+                    infoRow("Username", username)
+                }
+                if let maskedEmail = account.maskedEmail, !maskedEmail.isEmpty {
+                    infoRow("Email", maskedEmail)
+                }
+                ForEach(account.workspaceLines(language: language, limit: 8), id: \.self) { line in
+                    infoRow(L.text("workspace", language), line.replacingOccurrences(of: "\(L.text("workspace", language)): ", with: ""))
+                }
+                infoRow("5H", windowText(account.fiveHourWindow))
+                infoRow(language == .chinese ? "本周" : "Weekly", windowText(account.weeklyWindow))
+                if let resetCredits = account.resetCredits {
+                    infoRow(L.text("resets", language), resetCredits.summaryLine(language: language))
+                }
+                infoRow(L.text("total_tokens", language), DisplayFormatters.compactTokenString(account.tokens.total, language: language))
+                infoRow(L.text("cost", language), account.estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
+                infoRow(L.text("last_activity", language), account.lastActivityLine(language: language).replacingOccurrences(of: "\(L.text("last_activity", language)): ", with: ""))
+                infoRow(language == .chinese ? "数据源" : "Source", account.sourceDescription)
+            } else {
+                Text(L.text("current_account", language))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(width: 318, alignment: .leading)
+    }
+
+    private func infoRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 76, alignment: .leading)
+            Text(value)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func windowText(_ window: UsageWindow?) -> String {
+        guard let window else { return "--" }
+        let reset = window.resetsAt.map { DisplayFormatters.relativeString(for: $0, language: language) } ?? "--"
+        return "\(DisplayFormatters.percentString(window.remainingPercent)) · \(reset)"
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("yes", .chinese): "是"
+        case ("no", .chinese): "否"
+        case ("yes", _): "Yes"
+        case ("no", _): "No"
+        default: key
+        }
+    }
+}
+
 private struct SummaryChip: View {
     var title: String
     var value: String
     var color: Color
+    var systemImage: String? = nil
+    var progress: Double? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -3089,10 +3171,18 @@ private struct SummaryChip: View {
                 .fill(color.opacity(0.14))
                 .frame(width: 46, height: 46)
                 .overlay {
-                    Circle()
-                        .trim(from: 0, to: 0.78)
-                        .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
+                    if let systemImage {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(color)
+                    } else {
+                        Circle()
+                            .stroke(color.opacity(0.18), lineWidth: 5)
+                        Circle()
+                            .trim(from: 0, to: min(1, max(0, (progress ?? 0) / 100)))
+                            .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
                 }
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)

@@ -4,7 +4,14 @@ import XCTest
 final class UsageAuditReporterTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_781_388_300)
 
-    func testReportIncludesTopServiceModelSpikeBudgetAndSourceHealth() {
+    func testUsageAuditReporterCoverage() throws {
+        checkReportIncludesTopServiceModelSpikeBudgetAndSourceHealth()
+        try checkExportRowsFilterRangeAndSerializeCSVWithEscaping()
+        try checkJSONSerializationUsesNullForMissingCost()
+        checkPreviousRangeComparisonUsesComparableWindow()
+    }
+
+    private func checkReportIncludesTopServiceModelSpikeBudgetAndSourceHealth() {
         let points = baselinePoints() + [
             point(model: "gpt-5", daysAgo: 0, input: 3_000, cached: 200, output: 2_000, reasoning: 1_000, cost: "1.25")
         ]
@@ -36,7 +43,7 @@ final class UsageAuditReporterTests: XCTestCase {
         XCTAssertTrue(report.body.contains("local parsed session logs"))
     }
 
-    func testExportRowsFilterRangeAndSerializeCSVWithEscaping() throws {
+    private func checkExportRowsFilterRangeAndSerializeCSVWithEscaping() throws {
         let rows = UsageAuditReporter.exportRows(
             points: [
                 point(model: "gpt,5", daysAgo: 0, input: 1, cached: 2, output: 3, reasoning: 4, cost: "0.10"),
@@ -54,7 +61,7 @@ final class UsageAuditReporterTests: XCTestCase {
         XCTAssertTrue(csv.contains(",1,2,3,4,10,0.1"))
     }
 
-    func testJSONSerializationUsesNullForMissingCost() throws {
+    private func checkJSONSerializationUsesNullForMissingCost() throws {
         let rows = UsageAuditReporter.exportRows(
             points: [point(model: "gpt-5", daysAgo: 0, input: 1, cached: 0, output: 1, reasoning: 0, cost: nil)],
             range: .today,
@@ -67,7 +74,7 @@ final class UsageAuditReporterTests: XCTestCase {
         XCTAssertTrue(json.contains(#""model" : "gpt-5""#) || json.contains(#""model": "gpt-5""#))
     }
 
-    func testPreviousRangeComparisonUsesComparableWindow() {
+    private func checkPreviousRangeComparisonUsesComparableWindow() {
         let points = [
             point(model: "gpt-5", daysAgo: 0, input: 80, cached: 0, output: 20, reasoning: 0, cost: nil),
             point(model: "gpt-5", daysAgo: 1, input: 20, cached: 0, output: 20, reasoning: 0, cost: nil)

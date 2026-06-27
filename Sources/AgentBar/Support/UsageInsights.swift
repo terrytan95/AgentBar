@@ -72,14 +72,6 @@ struct RapidUsageAlert: Equatable, Sendable {
     var todayShare: Double
 }
 
-struct WorkSessionPlan: Equatable, Sendable {
-    var activeAccount: UsageAccount
-    var recommendedAccount: UsageAccount?
-    var bestWindow: QuotaETAWindow
-    var minutesUntilFiveHourExhaustion: Double?
-    var minutesUntilWeeklyExhaustion: Double?
-}
-
 struct SessionDrilldown: Equatable, Sendable {
     var id: String
     var title: String
@@ -258,28 +250,6 @@ enum UsageInsights {
             )
         }
         return QuotaETA(windows: windows)
-    }
-
-    static func workSessionPlan(
-        activeAccount: UsageAccount?,
-        points: [UsagePoint],
-        pressure: QuotaPressureInsight,
-        now: Date = Date()
-    ) -> WorkSessionPlan? {
-        guard let activeAccount else { return nil }
-        let eta = quotaETA(account: activeAccount, points: points, now: now)
-        guard let best = eta.windows.first(where: { $0.minutes == 30 && $0.tokens > 0 })
-            ?? eta.windows.first(where: { $0.tokens > 0 })
-            ?? eta.windows.first
-        else { return nil }
-
-        return WorkSessionPlan(
-            activeAccount: activeAccount,
-            recommendedAccount: pressure.recommendedAccount,
-            bestWindow: best,
-            minutesUntilFiveHourExhaustion: best.minutesUntilFiveHourExhaustion,
-            minutesUntilWeeklyExhaustion: best.minutesUntilWeeklyExhaustion
-        )
     }
 
     static func topUsage(

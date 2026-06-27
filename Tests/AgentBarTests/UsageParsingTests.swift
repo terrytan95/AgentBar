@@ -51,6 +51,7 @@ final class UsageParsingTests: XCTestCase {
         checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod()
         checkPeriodChangeHasNoPercentWithoutComparableBaseline()
         try checkUsageRangeIntervalsDriveStatisticsAndAuditFiltering()
+        checkUsageRangeChartTitlesMatchSelectedInterval()
         checkChangePercentFormattingShowsDirectionAndMissingBaseline()
         checkAccountSortingUsesFiveHourThenWeeklyPressure()
         checkAccountSortingPrioritizesResetCreditsAfterActiveAccount()
@@ -1343,6 +1344,17 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(UsageStatistics.summarize(points: points, range: .last7Days, now: now, calendar: calendar).totalTokens, 150)
         XCTAssertEqual(UsageAuditReporter.filteredPoints(points: points, range: .last7Days, now: now, calendar: calendar).map(\.tokens.total).reduce(0, +), 150)
         XCTAssertEqual(UsageAuditReporter.rangeComparison(points: points, range: .last7Days, now: now, calendar: calendar)?.previousTokens, 20)
+    }
+
+    private func checkUsageRangeChartTitlesMatchSelectedInterval() {
+        XCTAssertEqual(UsageRange.today.chartTitle(.chinese), "今日用量")
+        XCTAssertEqual(UsageRange.yesterday.chartTitle(.chinese), "昨日用量")
+        XCTAssertEqual(UsageRange.thisWeek.chartTitle(.chinese), "本周用量")
+        XCTAssertEqual(UsageRange.thisMonth.chartTitle(.chinese), "本月用量")
+        XCTAssertEqual(UsageRange.thisYear.chartTitle(.chinese), "本年用量")
+        XCTAssertEqual(UsageRange.last7Days.chartTitle(.chinese), "连续7日用量")
+        XCTAssertEqual(UsageRange.last30Days.chartTitle(.chinese), "连续30日用量")
+        XCTAssertEqual(UsageRange.last7Days.chartTitle(.english), "Rolling 7-day usage")
     }
 
     private func checkChangePercentFormattingShowsDirectionAndMissingBaseline() {

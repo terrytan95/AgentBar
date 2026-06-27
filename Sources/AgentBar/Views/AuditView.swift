@@ -94,7 +94,7 @@ struct AuditView: View {
                 metricCard(localized("reasoning"), DisplayFormatters.compactTokenString(composition.reasoningOutput, language: store.language), accent: .orange)
             }
         }
-        .frame(height: 152)
+        .frame(height: 176)
     }
 
     private func columns(for width: CGFloat) -> [GridItem] {
@@ -105,29 +105,29 @@ struct AuditView: View {
         ZStack(alignment: .bottomTrailing) {
             Circle()
                 .fill(accent.opacity(0.10))
-                .frame(width: 126, height: 126)
-                .offset(x: 34, y: 38)
-            VStack(alignment: .leading, spacing: 16) {
+                .frame(width: 108, height: 108)
+                .offset(x: 30, y: 32)
+            VStack(alignment: .leading, spacing: 12) {
                 Image(systemName: iconName(for: title))
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(accent)
-                    .frame(width: 42, height: 42)
+                    .frame(width: 38, height: 38)
                     .background(accent.opacity(0.10), in: Circle())
                 Spacer()
                 Text(title)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.primary)
                 Text(value)
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.primary)
                     .monospacedDigit()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    .minimumScaleFactor(0.62)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 164, alignment: .leading)
         .background(
             LinearGradient(colors: [Color.white.opacity(0.84), accent.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing),
             in: RoundedRectangle(cornerRadius: 16, style: .continuous)

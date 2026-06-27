@@ -401,6 +401,18 @@ struct StatisticsView: View {
                         .pointingHandCursor()
                     }
                 }
+                if !codexAccounts.isEmpty {
+                    SettingsAccountList(
+                        groups: store.accountDisplayGroups(codexAccounts),
+                        language: store.language,
+                        theme: settings.themeColor,
+                        switchingAccountID: store.switchingAccountID,
+                        onSwitch: store.switchActiveAccount,
+                        onLogin: { account in store.openLogin(for: account) },
+                        onRemove: store.removeAccount
+                    )
+                    .padding(12)
+                }
                 SettingsRow(title: L.text("account_sort", store.language), subtitle: L.text("account_sort_subtitle", store.language)) {
                     Picker("", selection: $settings.accountSortMode) {
                         ForEach(AccountSortMode.allCases) { mode in
@@ -674,9 +686,14 @@ struct StatisticsView: View {
 
                 LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(currentLimitDisplayGroups) { group in
-                        AccountLimitDisplayGroupView(group: group, language: store.language, theme: settings.themeColor) { account in
-                            store.openLogin(for: account)
-                        }
+                        AccountLimitDisplayGroupView(
+                            group: group,
+                            language: store.language,
+                            theme: settings.themeColor,
+                            switchingAccountID: store.switchingAccountID,
+                            onSwitch: store.switchActiveAccount,
+                            onLogin: { account in store.openLogin(for: account) }
+                        )
                     }
                 }
             }
@@ -2561,6 +2578,8 @@ private struct AccountLimitDisplayGroupView: View {
     var group: UsageAccountDisplayGroup
     var language: AppLanguage
     var theme: AppThemeColor
+    var switchingAccountID: String?
+    var onSwitch: (UsageAccount) -> Void
     var onLogin: (UsageAccount) -> Void
 
     var body: some View {
@@ -2568,16 +2587,26 @@ private struct AccountLimitDisplayGroupView: View {
             VStack(alignment: .leading, spacing: 6) {
                 displayGroupHeader
                 ForEach(group.accounts) { account in
-                    AccountLimitGroupView(account: account, language: language, theme: theme) {
-                        onLogin(account)
-                    }
+                    AccountLimitGroupView(
+                        account: account,
+                        language: language,
+                        theme: theme,
+                        isSwitching: switchingAccountID == account.id,
+                        onSwitch: { onSwitch(account) },
+                        onLogin: { onLogin(account) }
+                    )
                     .padding(.leading, 12)
                 }
             }
         } else if let account = group.accounts.first {
-            AccountLimitGroupView(account: account, language: language, theme: theme) {
-                onLogin(account)
-            }
+            AccountLimitGroupView(
+                account: account,
+                language: language,
+                theme: theme,
+                isSwitching: switchingAccountID == account.id,
+                onSwitch: { onSwitch(account) },
+                onLogin: { onLogin(account) }
+            )
         }
     }
 
@@ -2598,6 +2627,8 @@ private struct AccountLimitGroupView: View {
     var account: UsageAccount
     var language: AppLanguage
     var theme: AppThemeColor
+    var isSwitching: Bool
+    var onSwitch: () -> Void
     var onLogin: () -> Void
 
     var body: some View {
@@ -2640,6 +2671,23 @@ private struct AccountLimitGroupView: View {
                     .controlSize(.small)
                     .tint(.red)
                     .pointingHandCursor()
+                } else if !account.isActive {
+                    Button {
+                        onSwitch()
+                    } label: {
+                        if isSwitching {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label(L.text("use_account", language), systemImage: "arrow.triangle.2.circlepath")
+                                .labelStyle(.titleAndIcon)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(theme.primary)
+                    .disabled(isSwitching)
+                    .pointingHandCursor(enabled: !isSwitching)
                 } else {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(account.service.rawValue)
@@ -2698,6 +2746,33 @@ private struct AccountLimitGroupView: View {
             return "\(identity) · \(DisplayFormatters.relativeString(for: lastUpdated, language: language))"
         }
         return identity
+    }
+}
+
+private struct SettingsAccountList: View {
+    var groups: [UsageAccountDisplayGroup]
+    var language: AppLanguage
+    var theme: AppThemeColor
+    var switchingAccountID: String?
+    var onSwitch: (UsageAccount) -> Void
+    var onLogin: (UsageAccount) -> Void
+    var onRemove: (UsageAccount) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(groups) { group in
+                PopoverAccountDisplayGroupView(
+                    group: group,
+                    language: language,
+                    theme: theme,
+                    switchingAccountID: switchingAccountID,
+                    onSwitch: onSwitch,
+                    onLogin: onLogin,
+                    onRemove: onRemove
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

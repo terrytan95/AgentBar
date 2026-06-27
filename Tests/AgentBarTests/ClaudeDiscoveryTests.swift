@@ -2,7 +2,12 @@ import XCTest
 @testable import AgentBar
 
 final class ClaudeDiscoveryTests: XCTestCase {
-    func testClaudeDiscoveryReportsUnavailableWhenNoClaudeCodeSourceExists() throws {
+
+    func testClaudeDiscoveryCoverage() throws {
+        try checkClaudeDiscoveryReportsUnavailableWhenNoClaudeCodeSourceExists()
+        try checkClaudeDiscoveryDoesNotCreatePlaceholderWhenCliDirectoryHasNoSafeUsageSource()
+    }
+    private func checkClaudeDiscoveryReportsUnavailableWhenNoClaudeCodeSourceExists() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
@@ -13,7 +18,7 @@ final class ClaudeDiscoveryTests: XCTestCase {
         XCTAssertTrue(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("not found") == true)
     }
 
-    func testClaudeDiscoveryDoesNotCreatePlaceholderWhenCliDirectoryHasNoSafeUsageSource() throws {
+    private func checkClaudeDiscoveryDoesNotCreatePlaceholderWhenCliDirectoryHasNoSafeUsageSource() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: UUID().uuidString)
         let claudeDirectory = root.appending(path: ".claude")
         try FileManager.default.createDirectory(at: claudeDirectory, withIntermediateDirectories: true)

@@ -3,7 +3,63 @@ import XCTest
 @testable import AgentBar
 
 final class UsageParsingTests: XCTestCase {
-    func testCodexRegistryParsesMultipleAccountsWithoutSecrets() throws {
+
+    @MainActor
+    func testUsageParsingCoverage() throws {
+        try checkCodexRegistryParsesMultipleAccountsWithoutSecrets()
+        try checkCodexRegistryParsesMultipleWorkspacesForOneAccount()
+        checkAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows()
+        try checkCodexRegistryFlagsAccountsThatNeedLoginAgain()
+        try checkCodexReadClearsStale401AfterNewerAuthSnapshot()
+        try checkCodexSessionJsonlAggregatesTokenUsageAndRateLimits()
+        try checkCodexSessionJsonlUsesTurnContextModelForCostBreakdown()
+        try checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents()
+        try checkCodexSessionJsonlCarriesSessionAndProjectMetadata()
+        try checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset()
+        try checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
+        try checkCodexUsageAPISyncerRefreshesOnlyActiveAccount()
+        try checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates()
+        try checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess()
+        try checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
+        checkCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot()
+        checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
+        checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
+        checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
+        checkUsageRefreshOrchestratorSyncsBeforeReadersAndMergesSnapshots()
+        checkCodexUsageSourceSyncsBeforeReadAndAppendsSyncNote()
+        checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized()
+        checkPopoverHeightPreferenceIsClampedWhenLoadedAndSaved()
+        try checkCodexReadPrefersRegistryUsageOverLocalSessionRateLimits()
+        try checkCodexReadUsesNewestRateLimitEventAcrossSessionFiles()
+        try checkCodexSessionMetricsCacheInvalidatesWhenFileChanges()
+        try checkCodexSessionMetricsCacheDropsDeletedFiles()
+        try checkCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation()
+        try checkSessionRateLimitsWithoutParsableTimestampDoNotOverrideActiveAccountWindows()
+        try checkOversizedSessionFilesAreSkipped()
+        try checkOpenAIModelPricingCalculatesPointCost()
+        checkPricingNormalizesProviderAndDateSuffixes()
+        checkPricingUsesDecimalAndUnknownModelsCostZeroButKeepTokens()
+        checkPricingFingerprintIsStableSHA256AndIncludedInSummary()
+        checkMenuBarDefaultsToActiveAccountQuotaWindows()
+        checkPopoverHeaderShowsActiveAccountFiveHourAndWeeklyRemaining()
+        checkMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows()
+        checkBudgetSettingsPersistAndWarnInMenuBarTitle()
+        checkRapidUsageAlertWarnsInMenuBarTitle()
+        checkStatisticsBucketsAggregateExpectedRanges()
+        checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod()
+        checkPeriodChangeHasNoPercentWithoutComparableBaseline()
+        try checkUsageRangeIntervalsDriveStatisticsAndAuditFiltering()
+        checkChangePercentFormattingShowsDirectionAndMissingBaseline()
+        checkAccountSortingUsesFiveHourThenWeeklyPressure()
+        checkAccountSortingPrioritizesResetCreditsAfterActiveAccount()
+        checkAccountSortingAlwaysKeepsActiveAccountOnTop()
+        checkEnglishCompactTokenFormattingUsesEnglishUnits()
+        checkDailyUsageBarTooltipIncludesDateAndUsageDetails()
+        checkAccountMetadataShowsResetActivityAndAccountType()
+        try checkCodexAccountSwitcherCopiesSnapshotToActiveAuthAndTracksPrevious()
+        try checkCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails()
+    }
+    private func checkCodexRegistryParsesMultipleAccountsWithoutSecrets() throws {
         let registry = """
         {
           "schema_version": 3,
@@ -58,7 +114,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("token"))
     }
 
-    func testCodexRegistryParsesMultipleWorkspacesForOneAccount() throws {
+    private func checkCodexRegistryParsesMultipleWorkspacesForOneAccount() throws {
         let registry = """
         {
           "schema_version": 3,
@@ -102,7 +158,7 @@ final class UsageParsingTests: XCTestCase {
         ])
     }
 
-    func testAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows() {
+    private func checkAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         var core = testAccount(id: "person::core", name: "person@example.com", fiveHourUsed: 18, weeklyUsed: 51, now: now)
         core.workspaceName = "Core Team"
@@ -126,7 +182,7 @@ final class UsageParsingTests: XCTestCase {
         ])
     }
 
-    func testCodexRegistryFlagsAccountsThatNeedLoginAgain() throws {
+    private func checkCodexRegistryFlagsAccountsThatNeedLoginAgain() throws {
         let registry = """
         {
           "schema_version": 3,
@@ -159,7 +215,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-reset" }?.loginWarning, .unreadableReset)
     }
 
-    func testCodexReadClearsStale401AfterNewerAuthSnapshot() throws {
+    private func checkCodexReadClearsStale401AfterNewerAuthSnapshot() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -195,7 +251,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(snapshot.accounts.first?.loginWarning)
     }
 
-    func testCodexSessionJsonlAggregatesTokenUsageAndRateLimits() throws {
+    private func checkCodexSessionJsonlAggregatesTokenUsageAndRateLimits() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1,"total_tokens":13},"total_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1,"total_tokens":13}},"rate_limits":{"primary":{"used_percent":5,"window_minutes":300,"resets_at":1781406270},"secondary":{"used_percent":3,"window_minutes":10080,"resets_at":1781894023},"plan_type":"team"}}}
         {"type":"event_msg","timestamp":"2026-06-13T22:06:23.246Z","payload":{"info":{"last_token_usage":{"input_tokens":20,"cached_input_tokens":4,"output_tokens":5,"reasoning_output_tokens":2,"total_tokens":25},"total_token_usage":{"input_tokens":30,"cached_input_tokens":6,"output_tokens":8,"reasoning_output_tokens":3,"total_tokens":38}},"rate_limits":{"primary":{"used_percent":7,"window_minutes":300,"resets_at":1781406270},"secondary":{"used_percent":4,"window_minutes":10080,"resets_at":1781894023},"plan_type":"team"}}}
@@ -214,7 +270,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestWeekly?.usedPercent, 4)
     }
 
-    func testCodexSessionJsonlUsesTurnContextModelForCostBreakdown() throws {
+    private func checkCodexSessionJsonlUsesTurnContextModelForCostBreakdown() throws {
         let jsonl = """
         {"type":"turn_context","payload":{"model":"openai/gpt-5.5-2026-06-01"}}
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":200000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}
@@ -229,7 +285,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.points.last?.estimatedCostUSD, Decimal(string: "0.45"))
     }
 
-    func testCodexSessionJsonlParsesResetCreditsFromRateLimitEvents() throws {
+    private func checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:23.246Z","payload":{"rate_limits":{"primary":{"used_percent":7,"window_minutes":300,"resets_at":1781406270}},"rate_limit_reset_credits":{"available_count":2,"resets":[{"expires_at":1782000000}]}}}
         """.data(using: .utf8)!
@@ -240,7 +296,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.latestResetCredits?.resets.first?.expiresAt, Date(timeIntervalSince1970: 1_782_000_000))
     }
 
-    func testCodexSessionJsonlCarriesSessionAndProjectMetadata() throws {
+    private func checkCodexSessionJsonlCarriesSessionAndProjectMetadata() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:01.000Z","payload":{"type":"user_message","message":"# Files mentioned by the user:\\n\\n## My request for Codex:\\nFix high CPU usage in AgentBar\\n"}}
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","session_id":"session-1","payload":{"cwd":"/Users/terrytan/Desktop/Coding/AgentBar","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0,"total_tokens":15}}}}
@@ -253,7 +309,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.points.first?.projectName, "AgentBar")
     }
 
-    func testCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {
+    private func checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-14T02:30:00.000Z","payload":{"info":{"total_token_usage":{"input_tokens":80,"cached_input_tokens":10,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100}},"rate_limits":{"primary":{"used_percent":90,"window_minutes":300,"resets_at":1781488800},"secondary":{"used_percent":40,"window_minutes":10080,"resets_at":1781900000}}}}
         {"type":"event_msg","timestamp":"2026-06-14T02:45:00.000Z","payload":{"info":{"total_token_usage":{"input_tokens":130,"cached_input_tokens":15,"output_tokens":30,"reasoning_output_tokens":0,"total_tokens":160}},"rate_limits":{"primary":{"used_percent":96,"window_minutes":300,"resets_at":1781488800},"secondary":{"used_percent":41,"window_minutes":10080,"resets_at":1781900000}}}}
@@ -273,7 +329,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(tooltip.contains("285"))
     }
 
-    func testCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime() throws {
+    private func checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -357,7 +413,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(String(data: data, encoding: .utf8)?.contains("secret-access-token") ?? true)
     }
 
-    func testCodexUsageAPISyncerRefreshesOnlyActiveAccount() throws {
+    private func checkCodexUsageAPISyncerRefreshesOnlyActiveAccount() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -394,7 +450,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["agentbar_auth_error"])
     }
 
-    func testCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates() throws {
+    private func checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -451,7 +507,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(resets.map { $0["expires_at"] as? Double }, [1_783_881_480, 1_784_387_760])
     }
 
-    func testCodexUsageAPISyncerPersists401AndClearsItAfterSuccess() throws {
+    private func checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -492,7 +548,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(account["agentbar_auth_error"])
     }
 
-    func testCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount() throws {
+    private func checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -528,14 +584,14 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(try registryAccount(from: registryURL)["agentbar_auth_error"])
     }
 
-    func testCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot() {
+    private func checkCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot() {
         let command = AccountLoginLauncher.codexRecoveryLoginCommand(accountID: "user-a::org")
 
         XCTAssertTrue(command.hasPrefix("codex login &&"))
         XCTAssertTrue(command.contains(#"cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/dXNlci1hOjpvcmc.auth.json""#))
     }
 
-    func testCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths() {
+    private func checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths() {
         let home = URL(fileURLWithPath: "/tmp/agentbar-codex-home")
         let storage = CodexAccountStorage(homeDirectory: home)
 
@@ -547,7 +603,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState() {
+    private func checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -564,7 +620,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testRefreshSyncsCodexUsageAPIBeforeReadingUsage() {
+    private func checkRefreshSyncsCodexUsageAPIBeforeReadingUsage() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -608,7 +664,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(store.menuBarTitle, "5H 92%  WK 45%")
     }
 
-    func testUsageRefreshOrchestratorSyncsBeforeReadersAndMergesSnapshots() {
+    private func checkUsageRefreshOrchestratorSyncsBeforeReadersAndMergesSnapshots() {
         let recorder = RefreshOrderRecorder()
         let now = Date()
         let codexAccount = testAccount(id: "codex", name: "codex@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)
@@ -657,7 +713,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(result.points, [claudePoint])
     }
 
-    func testCodexUsageSourceSyncsBeforeReadAndAppendsSyncNote() {
+    private func checkCodexUsageSourceSyncsBeforeReadAndAppendsSyncNote() {
         let recorder = RefreshOrderRecorder()
         let now = Date()
         let source = CodexUsageSource(
@@ -694,7 +750,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testDarkThemeSettingPersistsAndToneColorCopyIsLocalized() {
+    private func checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -710,7 +766,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testPopoverHeightPreferenceIsClampedWhenLoadedAndSaved() {
+    private func checkPopoverHeightPreferenceIsClampedWhenLoadedAndSaved() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -730,7 +786,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(defaults.double(forKey: "popoverHeight"), 1_200)
     }
 
-    func testCodexReadPrefersRegistryUsageOverLocalSessionRateLimits() throws {
+    private func checkCodexReadPrefersRegistryUsageOverLocalSessionRateLimits() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -777,7 +833,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(inactive.weeklyWindow?.usedPercent, 30)
     }
 
-    func testCodexReadUsesNewestRateLimitEventAcrossSessionFiles() throws {
+    private func checkCodexReadUsesNewestRateLimitEventAcrossSessionFiles() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -801,7 +857,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(active.weeklyWindow?.usedPercent, 11)
     }
 
-    func testCodexSessionMetricsCacheInvalidatesWhenFileChanges() throws {
+    private func checkCodexSessionMetricsCacheInvalidatesWhenFileChanges() throws {
         CodexUsageReader.resetSessionMetricsCacheForTesting()
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer {
@@ -836,7 +892,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.points.reduce(0) { $0 + $1.tokens.total }, 9)
     }
 
-    func testCodexSessionMetricsCacheDropsDeletedFiles() throws {
+    private func checkCodexSessionMetricsCacheDropsDeletedFiles() throws {
         CodexUsageReader.resetSessionMetricsCacheForTesting()
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer {
@@ -865,7 +921,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(snapshot.accounts.first?.fiveHourWindow)
     }
 
-    func testCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation() throws {
+    private func checkCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -908,7 +964,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(active.weeklyWindow?.usedPercent, 44)
     }
 
-    func testSessionRateLimitsWithoutParsableTimestampDoNotOverrideActiveAccountWindows() throws {
+    private func checkSessionRateLimitsWithoutParsableTimestampDoNotOverrideActiveAccountWindows() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -944,7 +1000,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(active.weeklyWindow?.usedPercent, 35)
     }
 
-    func testOversizedSessionFilesAreSkipped() throws {
+    private func checkOversizedSessionFilesAreSkipped() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -963,7 +1019,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts.first?.tokens.total, 0)
     }
 
-    func testOpenAIModelPricingCalculatesPointCost() throws {
+    private func checkOpenAIModelPricingCalculatesPointCost() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"model":"gpt-5.1","last_token_usage":{"input_tokens":1000000,"cached_input_tokens":100000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}
         """.data(using: .utf8)!
@@ -974,13 +1030,13 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.points[0].estimatedCostUSD ?? 0, Decimal(string: "2.1375"))
     }
 
-    func testPricingNormalizesProviderAndDateSuffixes() {
+    private func checkPricingNormalizesProviderAndDateSuffixes() {
         XCTAssertEqual(Pricing.normalize(model: "openai/GPT-5.4@20260131"), "gpt-5.4")
         XCTAssertEqual(Pricing.normalize(model: "claude-sonnet-4-5-20260229"), "claude-sonnet-4-5")
         XCTAssertEqual(Pricing.normalize(model: "claude-opus-4-7-2026-02-29"), "claude-opus-4-7")
     }
 
-    func testPricingUsesDecimalAndUnknownModelsCostZeroButKeepTokens() {
+    private func checkPricingUsesDecimalAndUnknownModelsCostZeroButKeepTokens() {
         let unknown = Pricing.cost(model: "codex-auto-review", input: 99_000_000, output: 1_000_000, cacheRead: 0, cacheCreation: 0)
         XCTAssertEqual(unknown, 0)
 
@@ -988,7 +1044,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(known, Decimal(string: "4.025"))
     }
 
-    func testPricingFingerprintIsStableSHA256AndIncludedInSummary() {
+    private func checkPricingFingerprintIsStableSHA256AndIncludedInSummary() {
         XCTAssertEqual(Pricing.fingerprint.count, 64)
         XCTAssertTrue(Pricing.fingerprint.allSatisfy { $0.isHexDigit })
 
@@ -997,7 +1053,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testMenuBarDefaultsToActiveAccountQuotaWindows() {
+    private func checkMenuBarDefaultsToActiveAccountQuotaWindows() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1044,7 +1100,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testPopoverHeaderShowsActiveAccountFiveHourAndWeeklyRemaining() {
+    private func checkPopoverHeaderShowsActiveAccountFiveHourAndWeeklyRemaining() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1064,7 +1120,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows() {
+    private func checkMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1076,7 +1132,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testBudgetSettingsPersistAndWarnInMenuBarTitle() {
+    private func checkBudgetSettingsPersistAndWarnInMenuBarTitle() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1110,7 +1166,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    func testRapidUsageAlertWarnsInMenuBarTitle() {
+    private func checkRapidUsageAlertWarnsInMenuBarTitle() {
         let now = Date()
         let recentPointDate = max(now.addingTimeInterval(-60), Calendar.current.startOfDay(for: now))
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
@@ -1140,7 +1196,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(store.menuBarTitle.hasPrefix("! "))
     }
 
-    func testStatisticsBucketsAggregateExpectedRanges() {
+    private func checkStatisticsBucketsAggregateExpectedRanges() {
         let calendar = Calendar(identifier: .gregorian)
         let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
         let points = [
@@ -1162,7 +1218,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(sevenDays.dailyBars.map(\.codexCostUSD).reduce(Decimal(0), +), Decimal(string: "0.003"))
     }
 
-    func testPeriodChangeComparesSelectedRangeAgainstPreviousPeriod() {
+    private func checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
@@ -1178,7 +1234,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(change.costPercent), 50, accuracy: 0.001)
     }
 
-    func testPeriodChangeHasNoPercentWithoutComparableBaseline() {
+    private func checkPeriodChangeHasNoPercentWithoutComparableBaseline() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
@@ -1195,7 +1251,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(allChange.costPercent)
     }
 
-    func testUsageRangeIntervalsDriveStatisticsAndAuditFiltering() throws {
+    private func checkUsageRangeIntervalsDriveStatisticsAndAuditFiltering() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
@@ -1217,14 +1273,14 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(UsageAuditReporter.rangeComparison(points: points, range: .last7Days, now: now, calendar: calendar)?.previousTokens, 20)
     }
 
-    func testChangePercentFormattingShowsDirectionAndMissingBaseline() {
+    private func checkChangePercentFormattingShowsDirectionAndMissingBaseline() {
         XCTAssertEqual(DisplayFormatters.changePercentString(50), "↑ 50.0%")
         XCTAssertEqual(DisplayFormatters.changePercentString(-25.26), "↓ 25.3%")
         XCTAssertEqual(DisplayFormatters.changePercentString(0), "0.0%")
         XCTAssertEqual(DisplayFormatters.changePercentString(nil), "--")
     }
 
-    func testAccountSortingUsesFiveHourThenWeeklyPressure() {
+    private func checkAccountSortingUsesFiveHourThenWeeklyPressure() {
         let now = Date()
         let accounts = [
             testAccount(id: "a", name: "a@example.com", fiveHourUsed: 1, weeklyUsed: 10, now: now),
@@ -1237,7 +1293,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.id), ["b", "c", "a"])
     }
 
-    func testAccountSortingPrioritizesResetCreditsAfterActiveAccount() {
+    private func checkAccountSortingPrioritizesResetCreditsAfterActiveAccount() {
         let now = Date()
         let accounts = [
             testAccount(id: "more-quota", name: "more@example.com", fiveHourUsed: 1, weeklyUsed: 10, now: now),
@@ -1250,7 +1306,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.id), ["reset-credit", "constrained", "more-quota"])
     }
 
-    func testAccountSortingAlwaysKeepsActiveAccountOnTop() {
+    private func checkAccountSortingAlwaysKeepsActiveAccountOnTop() {
         let now = Date()
         var active = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 1, weeklyUsed: 1, now: now)
         active.isActive = true
@@ -1261,12 +1317,12 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.id), ["active", "constrained"])
     }
 
-    func testEnglishCompactTokenFormattingUsesEnglishUnits() {
+    private func checkEnglishCompactTokenFormattingUsesEnglishUnits() {
         XCTAssertEqual(DisplayFormatters.compactTokenString(63_229_600, language: .english), "63.2296 mil")
         XCTAssertEqual(DisplayFormatters.compactTokenString(6_322_960_000, language: .english), "6.3230 bil")
     }
 
-    func testDailyUsageBarTooltipIncludesDateAndUsageDetails() {
+    private func checkDailyUsageBarTooltipIncludesDateAndUsageDetails() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let day = calendar.date(from: DateComponents(year: 2026, month: 6, day: 13))!
@@ -1280,7 +1336,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(tooltip.contains("Total: 3.5000 mil Tokens"))
     }
 
-    func testAccountMetadataShowsResetActivityAndAccountType() {
+    private func checkAccountMetadataShowsResetActivityAndAccountType() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         let account = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 1, weeklyUsed: 8, now: now)
 
@@ -1289,7 +1345,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(account.fiveHourWindow?.resetLine(language: .english).contains("Reset:") == true)
     }
 
-    func testCodexAccountSwitcherCopiesSnapshotToActiveAuthAndTracksPrevious() throws {
+    private func checkCodexAccountSwitcherCopiesSnapshotToActiveAuthAndTracksPrevious() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let accountDir = temp.appending(path: ".codex/accounts")
         try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
@@ -1319,7 +1375,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "selected account auth")
     }
 
-    func testCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails() throws {
+    private func checkCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let accountDir = temp.appending(path: ".codex/accounts")
         try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)

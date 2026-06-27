@@ -107,8 +107,6 @@ struct PopoverRootView: View {
             Divider()
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
-                    recommendationSection
-                    workSessionSection
                     quickSummarySection
                     accountSection
                 }
@@ -127,31 +125,6 @@ struct PopoverRootView: View {
 
     private var dataSourceHealth: DataSourceHealthSummary {
         UsageInsights.dataSourceHealth(snapshots: store.snapshots)
-    }
-
-    private var quotaPressure: QuotaPressureInsight {
-        UsageInsights.quotaPressure(
-            accounts: store.accounts,
-            points: store.points,
-            rotationThresholdRemainingPercent: store.settings.codexRotationThresholdRemainingPercent,
-            autoRotationEnabled: store.settings.autoCodexAccountRotationEnabled
-        )
-    }
-
-    private var recommendation: PopoverActionRecommendation {
-        PopoverActionRecommendation.make(
-            pressure: quotaPressure,
-            dataSourceHealth: dataSourceHealth,
-            language: store.language
-        )
-    }
-
-    private var workSessionPlan: WorkSessionPlan? {
-        UsageInsights.workSessionPlan(
-            activeAccount: store.activeAccount,
-            points: store.points,
-            pressure: quotaPressure
-        )
     }
 
     private var header: some View {
@@ -210,24 +183,6 @@ struct PopoverRootView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var recommendationSection: some View {
-        PopoverRecommendationPanel(
-            recommendation: recommendation,
-            theme: store.settings.themeColor,
-            language: store.language,
-            isWorking: isRecommendationActionWorking
-        ) {
-            performRecommendationAction(recommendation.action)
-        }
-    }
-
-    @ViewBuilder
-    private var workSessionSection: some View {
-        if let workSessionPlan {
-            PopoverWorkSessionPanel(plan: workSessionPlan, language: store.language, theme: store.settings.themeColor)
-        }
-    }
-
     private var quickSummarySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L.text("overview", store.language))
@@ -258,31 +213,8 @@ struct PopoverRootView: View {
             .joined(separator: " · ")
     }
 
-    private var isRecommendationActionWorking: Bool {
-        switch recommendation.action {
-        case .switchAccount(let accountID):
-            store.switchingAccountID == accountID
-        case .refresh:
-            store.isRefreshing
-        case .waitForReset, .none:
-            false
-        }
-    }
-
     private func costText(_ value: Decimal?) -> String {
         value.map { DisplayFormatters.costString($0) } ?? L.text("no_cost_data", store.language)
-    }
-
-    private func performRecommendationAction(_ action: PopoverActionRecommendation.Action) {
-        switch action {
-        case .switchAccount(let accountID):
-            guard let account = store.accounts.first(where: { $0.id == accountID }) else { return }
-            store.switchActiveAccount(account)
-        case .refresh:
-            store.refresh(force: true)
-        case .waitForReset, .none:
-            break
-        }
     }
 
     private var footer: some View {
@@ -386,209 +318,6 @@ struct PopoverLoadingRow: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-struct PopoverRecommendationPanel: View {
-    var recommendation: PopoverActionRecommendation
-    var theme: AppThemeColor
-    var language: AppLanguage
-    var isWorking: Bool
-    var onAction: () -> Void
-    @State private var isExpanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: iconName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 24, height: 24)
-                    .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 6))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(recommendation.title)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                    Text(recommendation.detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(isExpanded ? nil : 2)
-                        .fixedSize(horizontal: false, vertical: isExpanded)
-                }
-
-                Spacer(minLength: 6)
-
-                if let actionTitle = recommendation.actionTitle {
-                    Button {
-                        onAction()
-                    } label: {
-                        if isWorking {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Text(actionTitle)
-                                .lineLimit(1)
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(tint)
-                    .disabled(isWorking)
-                    .pointingHandCursor(enabled: !isWorking)
-                }
-
-                if hasExpandableText {
-                    Button {
-                        isExpanded.toggle()
-                    } label: {
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 10, weight: .bold))
-                            .frame(width: 18, height: 18)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help(L.text(isExpanded ? "hide_full_text" : "show_full_text", language))
-                    .accessibilityLabel(L.text(isExpanded ? "hide_full_text" : "show_full_text", language))
-                    .pointingHandCursor()
-                }
-            }
-
-            if isExpanded,
-               let actionTitle = recommendation.actionTitle,
-               actionTitle.count > Self.compactActionTitleLimit {
-                Text(actionTitle)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 34)
-            }
-        }
-        .onChange(of: recommendation) { _, newValue in
-            if !Self.hasExpandableText(for: newValue) {
-                isExpanded = false
-            }
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(tint.opacity(0.18), lineWidth: 1)
-        }
-    }
-
-    private var hasExpandableText: Bool {
-        Self.hasExpandableText(for: recommendation)
-    }
-
-    private static func hasExpandableText(for recommendation: PopoverActionRecommendation) -> Bool {
-        recommendation.detail.count > compactDetailLimit ||
-            (recommendation.actionTitle?.count ?? 0) > compactActionTitleLimit
-    }
-
-    private static let compactDetailLimit = 72
-    private static let compactActionTitleLimit = 22
-
-    private var iconName: String {
-        switch recommendation.severity {
-        case .ok: "checkmark.circle.fill"
-        case .warning: "exclamationmark.triangle.fill"
-        case .critical: "arrow.triangle.2.circlepath.circle.fill"
-        }
-    }
-
-    private var tint: Color {
-        switch recommendation.severity {
-        case .ok: theme.primary
-        case .warning: .orange
-        case .critical: .red
-        }
-    }
-}
-
-struct PopoverWorkSessionPanel: View {
-    var plan: WorkSessionPlan
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Label(localized("planner"), systemImage: "timer")
-                    .font(.caption.weight(.semibold))
-                Spacer()
-                Text("\(plan.bestWindow.minutes)m")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(theme.primary)
-                    .monospacedDigit()
-            }
-
-            HStack(spacing: 8) {
-                plannerMetric("5H", minutes: plan.minutesUntilFiveHourExhaustion, color: theme.primary)
-                plannerMetric("WK", minutes: plan.minutesUntilWeeklyExhaustion, color: theme.tertiary)
-            }
-
-            Text(detail)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(theme.primary.opacity(0.16), lineWidth: 1)
-        }
-    }
-
-    private func plannerMetric(_ title: String, minutes: Double?, color: Color) -> some View {
-        HStack {
-            Text(title)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(color)
-            Spacer()
-            Text(durationText(minutes))
-                .font(.caption.weight(.bold))
-                .monospacedDigit()
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 7))
-    }
-
-    private var detail: String {
-        let active = plan.activeAccount.displayNameWithWorkspace(language: language)
-        let recommended = plan.recommendedAccount?.displayNameWithWorkspace(language: language) ?? localized("stay")
-        switch language {
-        case .chinese:
-            return "\(active) 当前速度下可用时间；建议账号：\(recommended)"
-        case .english:
-            return "\(active) at current speed; recommended account: \(recommended)"
-        }
-    }
-
-    private func durationText(_ minutes: Double?) -> String {
-        guard let minutes else { return "--" }
-        if minutes < 1 { return localized("now") }
-        if minutes < 60 { return "\(Int(ceil(minutes)))m" }
-        let whole = Int(ceil(minutes))
-        return "\(whole / 60)h \(whole % 60)m"
-    }
-
-    private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("planner", .chinese): "工作会话规划"
-        case ("stay", .chinese): "继续当前账号"
-        case ("now", .chinese): "现在"
-        case ("planner", _): "Work session planner"
-        case ("stay", _): "stay on current"
-        case ("now", _): "now"
-        default: key
-        }
     }
 }
 

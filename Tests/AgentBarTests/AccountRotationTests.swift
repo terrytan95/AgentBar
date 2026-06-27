@@ -4,7 +4,32 @@ import XCTest
 final class AccountRotationTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    func testSelectorReturnsNilWhenActiveAccountIsNotNearFiveHourLimit() {
+    @MainActor
+    func testAccountRotationCoverage() throws {
+        checkSelectorReturnsNilWhenActiveAccountIsNotNearFiveHourLimit()
+        try checkSelectorPrefersUnusedSinceLastResetAccountWithClosestResetTime()
+        try checkSelectorFallsBackToLargestFiveHourRemainingWhenNoUnusedAccountExists()
+        try checkSelectorPrefersResetCreditAccountBeforeLargestRemainingFallback()
+        try checkSelectorUsesUnknownResetAccountOnlyAsFallback()
+        checkSelectorIgnoresMissingQuotaDataAndActiveAccount()
+        try checkSelectorIgnoresAccountsThatNeedLoginAgain()
+        checkSelectorReturnsNilWhenNoActiveCodexAccountExists()
+        checkRestartGuardDoesNotRestartWhenCodexWorkIsRunning()
+        checkRestartGuardForceRestartsWhenNoCodexWorkIsRunning()
+        checkProcessDetectorTreatsCodexCliRunAsWorkButIgnoresCodexAppProcess()
+        checkProcessDetectorIgnoresCodexAppWhenNoCliWorkIsRunning()
+        checkSettingsDefaultDisablesAutoRotationWithConservativeThreshold()
+        checkSettingsPersistAutoRotationThresholdAndEnabledState()
+        checkUsageStoreAutomaticallySwitchesAndSafelyRestartsWhenActiveCodexBelowThreshold()
+        checkUsageStoreDoesNotAutomaticallySwitchWhenAutoRotationIsDisabled()
+        checkManualSwitchForceRestartsAndSuppressesImmediateAutoRotationOverride()
+        checkManualSwitchRefreshesAccountDataAfterSuccess()
+        try checkFailedManualSwitchPromptsCodexReloginWithPhoneAuthHintAndRetriesAfterRecovery()
+        try checkCodexAccountRemoverDeletesActiveAccountFilesAndRegistryEntry()
+        checkUsageStoreRefreshesAfterAccountRemovalNotification()
+    }
+
+    private func checkSelectorReturnsNilWhenActiveAccountIsNotNearFiveHourLimit() {
         let accounts = [
             account(id: "active", used: 80, resetsAt: now.addingTimeInterval(900), lastUpdated: now, isActive: true),
             account(id: "candidate", used: 5, resetsAt: now.addingTimeInterval(1_800), lastUpdated: now.addingTimeInterval(-20_000))
@@ -16,7 +41,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertNil(selected)
     }
 
-    func testSelectorPrefersUnusedSinceLastResetAccountWithClosestResetTime() throws {
+    private func checkSelectorPrefersUnusedSinceLastResetAccountWithClosestResetTime() throws {
         let fartherUnused = account(
             id: "farther-unused",
             used: 60,
@@ -48,7 +73,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(selected.id, "closer-unused")
     }
 
-    func testSelectorFallsBackToLargestFiveHourRemainingWhenNoUnusedAccountExists() throws {
+    private func checkSelectorFallsBackToLargestFiveHourRemainingWhenNoUnusedAccountExists() throws {
         let accounts = [
             account(id: "active", used: 95, resetsAt: now.addingTimeInterval(600), lastUpdated: now, isActive: true),
             account(id: "low-remaining", used: 70, resetsAt: now.addingTimeInterval(1_800), lastUpdated: now),
@@ -62,7 +87,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(selected.id, "largest-remaining")
     }
 
-    func testSelectorPrefersResetCreditAccountBeforeLargestRemainingFallback() throws {
+    private func checkSelectorPrefersResetCreditAccountBeforeLargestRemainingFallback() throws {
         let accounts = [
             account(id: "active", used: 95, resetsAt: now.addingTimeInterval(600), lastUpdated: now, isActive: true),
             account(id: "reset-credit", used: 40, resetsAt: now.addingTimeInterval(1_800), lastUpdated: now, resetCredits: 1),
@@ -75,7 +100,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(selected.id, "reset-credit")
     }
 
-    func testSelectorUsesUnknownResetAccountOnlyAsFallback() throws {
+    private func checkSelectorUsesUnknownResetAccountOnlyAsFallback() throws {
         let unknownReset = account(id: "unknown-reset", used: 10, resetsAt: nil, lastUpdated: nil)
         let unusedKnownReset = account(
             id: "unused-known-reset",
@@ -95,7 +120,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(selected.id, "unused-known-reset")
     }
 
-    func testSelectorIgnoresMissingQuotaDataAndActiveAccount() {
+    private func checkSelectorIgnoresMissingQuotaDataAndActiveAccount() {
         let accounts = [
             account(id: "active", used: 97, resetsAt: now.addingTimeInterval(600), lastUpdated: now, isActive: true),
             account(id: "missing-quota", used: nil, resetsAt: nil, lastUpdated: nil),
@@ -108,7 +133,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertNil(selected)
     }
 
-    func testSelectorIgnoresAccountsThatNeedLoginAgain() throws {
+    private func checkSelectorIgnoresAccountsThatNeedLoginAgain() throws {
         var locked = account(id: "locked", used: 1, resetsAt: now.addingTimeInterval(600), lastUpdated: now)
         locked.loginWarning = .forcedLogout
         let usable = account(id: "usable", used: 30, resetsAt: now.addingTimeInterval(900), lastUpdated: now)
@@ -124,7 +149,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(selected.id, "usable")
     }
 
-    func testSelectorReturnsNilWhenNoActiveCodexAccountExists() {
+    private func checkSelectorReturnsNilWhenNoActiveCodexAccountExists() {
         let accounts = [
             account(id: "candidate", used: 2, resetsAt: now.addingTimeInterval(600), lastUpdated: nil)
         ]
@@ -135,7 +160,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertNil(selected)
     }
 
-    func testRestartGuardDoesNotRestartWhenCodexWorkIsRunning() {
+    private func checkRestartGuardDoesNotRestartWhenCodexWorkIsRunning() {
         let recorder = AccountRotationRecorder()
         let restarter = CodexAppRestarter(
             activityDetector: { true },
@@ -148,7 +173,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertNil(recorder.restartResult)
     }
 
-    func testRestartGuardForceRestartsWhenNoCodexWorkIsRunning() {
+    private func checkRestartGuardForceRestartsWhenNoCodexWorkIsRunning() {
         let recorder = AccountRotationRecorder()
         let restarter = CodexAppRestarter(
             activityDetector: { false },
@@ -161,7 +186,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(recorder.restartResult, .restarted)
     }
 
-    func testProcessDetectorTreatsCodexCliRunAsWorkButIgnoresCodexAppProcess() {
+    private func checkProcessDetectorTreatsCodexCliRunAsWorkButIgnoresCodexAppProcess() {
         let detector = CodexWorkActivityDetector(
             processLines: {
                 [
@@ -175,7 +200,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertTrue(detector.hasRunningCodexWork())
     }
 
-    func testProcessDetectorIgnoresCodexAppWhenNoCliWorkIsRunning() {
+    private func checkProcessDetectorIgnoresCodexAppWhenNoCliWorkIsRunning() {
         let detector = CodexWorkActivityDetector(
             processLines: {
                 [
@@ -189,7 +214,7 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsDefaultDisablesAutoRotationWithConservativeThreshold() {
+    private func checkSettingsDefaultDisablesAutoRotationWithConservativeThreshold() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -201,7 +226,7 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsPersistAutoRotationThresholdAndEnabledState() {
+    private func checkSettingsPersistAutoRotationThresholdAndEnabledState() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -216,7 +241,7 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testUsageStoreAutomaticallySwitchesAndSafelyRestartsWhenActiveCodexBelowThreshold() {
+    private func checkUsageStoreAutomaticallySwitchesAndSafelyRestartsWhenActiveCodexBelowThreshold() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -249,7 +274,7 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testUsageStoreDoesNotAutomaticallySwitchWhenAutoRotationIsDisabled() {
+    private func checkUsageStoreDoesNotAutomaticallySwitchWhenAutoRotationIsDisabled() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -275,7 +300,7 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testManualSwitchForceRestartsAndSuppressesImmediateAutoRotationOverride() {
+    private func checkManualSwitchForceRestartsAndSuppressesImmediateAutoRotationOverride() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -323,7 +348,7 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testManualSwitchRefreshesAccountDataAfterSuccess() {
+    private func checkManualSwitchRefreshesAccountDataAfterSuccess() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -374,7 +399,7 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedManualSwitchPromptsCodexReloginWithPhoneAuthHintAndRetriesAfterRecovery() throws {
+    private func checkFailedManualSwitchPromptsCodexReloginWithPhoneAuthHintAndRetriesAfterRecovery() throws {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -438,7 +463,7 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(recorder.restartResult, .restarted)
     }
 
-    func testCodexAccountRemoverDeletesActiveAccountFilesAndRegistryEntry() throws {
+    private func checkCodexAccountRemoverDeletesActiveAccountFilesAndRegistryEntry() throws {
         let home = FileManager.default.temporaryDirectory
             .appending(path: "AgentBarTests-\(UUID().uuidString)")
         let accountsDirectory = home.appending(path: ".codex/accounts")
@@ -474,7 +499,7 @@ final class AccountRotationTests: XCTestCase {
     }
 
     @MainActor
-    func testUsageStoreRefreshesAfterAccountRemovalNotification() {
+    private func checkUsageStoreRefreshesAfterAccountRemovalNotification() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }

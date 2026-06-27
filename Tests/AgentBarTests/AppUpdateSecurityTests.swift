@@ -3,8 +3,23 @@ import XCTest
 @testable import AgentBar
 
 final class AppUpdateSecurityTests: XCTestCase {
+
     @MainActor
-    func testManualUpdateCheckBypassesURLCacheRevalidation() async throws {
+    func testAppUpdateSecurityCoverage() async throws {
+        try await checkManualUpdateCheckBypassesURLCacheRevalidation()
+        try checkPendingDownloadedUpdateSuppressesManualUpdateCheck()
+        try checkRequiredDigestAcceptsMatchingSHA256()
+        await checkAppUpdateLifecycleDownloadsNewerReleaseAndEmitsState()
+        try checkAppUpdateLifecycleClearsStalePendingRestore()
+        try checkRequiredDigestRejectsMissingOrMalformedDigest()
+        try checkRestoredPendingUpdateMustBeAgentBarBundleUnderUpdatesRoot()
+        try checkRestoredPendingUpdateRejectsUnsignedAgentBarBundle()
+        try checkRestoredPendingUpdateRejectsBundleOutsideUpdatesRoot()
+        checkAssetNameCannotContainPathComponents()
+        checkInstallerUsesInlineQuotedCommandInsteadOfTemporaryScript()
+    }
+    @MainActor
+    private func checkManualUpdateCheckBypassesURLCacheRevalidation() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UpdateCheckURLProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -49,7 +64,7 @@ final class AppUpdateSecurityTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingDownloadedUpdateSuppressesManualUpdateCheck() throws {
+    private func checkPendingDownloadedUpdateSuppressesManualUpdateCheck() throws {
         let fileManager = FileManager.default
         let updatesRoot = fileManager.temporaryDirectory
             .appending(path: "AgentBarTests-\(UUID().uuidString)/Updates", directoryHint: .isDirectory)
@@ -74,7 +89,7 @@ final class AppUpdateSecurityTests: XCTestCase {
         XCTAssertFalse(store.canCheckForUpdates)
     }
 
-    func testRequiredDigestAcceptsMatchingSHA256() throws {
+    private func checkRequiredDigestAcceptsMatchingSHA256() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
@@ -88,7 +103,7 @@ final class AppUpdateSecurityTests: XCTestCase {
     }
 
     @MainActor
-    func testAppUpdateLifecycleDownloadsNewerReleaseAndEmitsState() async {
+    private func checkAppUpdateLifecycleDownloadsNewerReleaseAndEmitsState() async {
         let release = AppUpdateRelease(
             version: "v9.0.0",
             name: "AgentBar v9.0.0",
@@ -125,7 +140,7 @@ final class AppUpdateSecurityTests: XCTestCase {
         XCTAssertFalse(result.shouldClearPendingDownload)
     }
 
-    func testAppUpdateLifecycleClearsStalePendingRestore() throws {
+    private func checkAppUpdateLifecycleClearsStalePendingRestore() throws {
         let lifecycle = AppUpdateLifecycle()
         let root = URL(fileURLWithPath: "/tmp/AgentBarUpdates")
 
@@ -146,7 +161,7 @@ final class AppUpdateSecurityTests: XCTestCase {
         XCTAssertTrue(result.shouldClearPendingDownload)
     }
 
-    func testRequiredDigestRejectsMissingOrMalformedDigest() throws {
+    private func checkRequiredDigestRejectsMissingOrMalformedDigest() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
@@ -161,7 +176,7 @@ final class AppUpdateSecurityTests: XCTestCase {
         }
     }
 
-    func testRestoredPendingUpdateMustBeAgentBarBundleUnderUpdatesRoot() throws {
+    private func checkRestoredPendingUpdateMustBeAgentBarBundleUnderUpdatesRoot() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let root = temp.appending(path: "Updates", directoryHint: .isDirectory)
@@ -174,7 +189,7 @@ final class AppUpdateSecurityTests: XCTestCase {
         XCTAssertEqual(validated.path, app.path)
     }
 
-    func testRestoredPendingUpdateRejectsUnsignedAgentBarBundle() throws {
+    private func checkRestoredPendingUpdateRejectsUnsignedAgentBarBundle() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let root = temp.appending(path: "Updates", directoryHint: .isDirectory)
@@ -186,7 +201,7 @@ final class AppUpdateSecurityTests: XCTestCase {
         }
     }
 
-    func testRestoredPendingUpdateRejectsBundleOutsideUpdatesRoot() throws {
+    private func checkRestoredPendingUpdateRejectsBundleOutsideUpdatesRoot() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let root = temp.appending(path: "Updates", directoryHint: .isDirectory)
@@ -199,14 +214,14 @@ final class AppUpdateSecurityTests: XCTestCase {
         }
     }
 
-    func testAssetNameCannotContainPathComponents() {
+    private func checkAssetNameCannotContainPathComponents() {
         XCTAssertNoThrow(try AppUpdateSecurity.safeAssetFileName("AgentBar-v1.0.6.zip"))
         XCTAssertThrowsError(try AppUpdateSecurity.safeAssetFileName("../AgentBar-v1.0.6.zip")) { error in
             XCTAssertEqual(error as? AppUpdateError, .unsafeDownloadAsset)
         }
     }
 
-    func testInstallerUsesInlineQuotedCommandInsteadOfTemporaryScript() {
+    private func checkInstallerUsesInlineQuotedCommandInsteadOfTemporaryScript() {
         let appURL = URL(fileURLWithPath: "/tmp/AgentBar's Update/AgentBar.app")
 
         let command = AppUpdateInstaller.installCommand(from: appURL)

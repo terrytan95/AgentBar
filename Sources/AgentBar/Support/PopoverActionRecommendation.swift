@@ -83,22 +83,22 @@ struct PopoverActionRecommendation: Equatable {
     private static func switchDetail(active: UsageAccount?, recommended: UsageAccount, language: AppLanguage) -> String {
         switch language {
         case .english:
-            let activeName = active?.displayName ?? "Current account"
+            let activeName = active.map { accountLabel($0, language: language) } ?? "Current account"
             let activeFive = DisplayFormatters.percentString(active?.fiveHourWindow?.remainingPercent)
             let activeWeekly = DisplayFormatters.percentString(active?.weeklyWindow?.remainingPercent)
             let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
             let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
             let resetDetail = resetCreditDetail(for: recommended, language: language)
-            return "\(activeName) 5H \(activeFive), WK \(activeWeekly). \(recommended.displayName) 5H \(recommendedFive), WK \(recommendedWeekly)."
+            return "\(activeName) 5H \(activeFive), WK \(activeWeekly). \(accountLabel(recommended, language: language)) 5H \(recommendedFive), WK \(recommendedWeekly)."
                 + resetDetail
         case .chinese:
-            let activeName = active?.displayName ?? "当前账号"
+            let activeName = active.map { accountLabel($0, language: language) } ?? "当前账号"
             let activeFive = DisplayFormatters.percentString(active?.fiveHourWindow?.remainingPercent)
             let activeWeekly = DisplayFormatters.percentString(active?.weeklyWindow?.remainingPercent)
             let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
             let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
             let resetDetail = resetCreditDetail(for: recommended, language: language)
-            return "\(activeName) 5H \(activeFive)，本周 \(activeWeekly)。\(recommended.displayName) 5H \(recommendedFive)，本周 \(recommendedWeekly)。"
+            return "\(activeName) 5H \(activeFive)，本周 \(activeWeekly)。\(accountLabel(recommended, language: language)) 5H \(recommendedFive)，本周 \(recommendedWeekly)。"
                 + resetDetail
         }
     }
@@ -130,7 +130,7 @@ struct PopoverActionRecommendation: Equatable {
         dataSourceHealth: DataSourceHealthSummary,
         language: AppLanguage
     ) -> String {
-        let accountName = active?.displayName ?? L.text("current_account", language)
+        let accountName = active.map { accountLabel($0, language: language) } ?? L.text("current_account", language)
         switch language {
         case .english:
             return "\(accountName) is ready. \(dataSourceHealth.liveCount) live source(s)."
@@ -140,7 +140,11 @@ struct PopoverActionRecommendation: Equatable {
     }
 
     private static func actionTitle(prefixKey: String, account: UsageAccount, language: AppLanguage) -> String {
-        "\(localized(prefixKey, language)) \(account.displayName)"
+        "\(localized(prefixKey, language)) \(accountLabel(account, language: language))"
+    }
+
+    private static func accountLabel(_ account: UsageAccount, language: AppLanguage) -> String {
+        account.displayNameWithWorkspace(language: language)
     }
 
     private static func localized(_ key: String, _ language: AppLanguage) -> String {

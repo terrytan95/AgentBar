@@ -73,7 +73,7 @@ struct RapidUsageAlert: Equatable, Sendable {
 }
 
 struct WorkSessionPlan: Equatable, Sendable {
-    var activeAccountName: String
+    var activeAccount: UsageAccount
     var recommendedAccount: UsageAccount?
     var bestWindow: QuotaETAWindow
     var minutesUntilFiveHourExhaustion: Double?
@@ -274,7 +274,7 @@ enum UsageInsights {
         else { return nil }
 
         return WorkSessionPlan(
-            activeAccountName: activeAccount.displayName,
+            activeAccount: activeAccount,
             recommendedAccount: pressure.recommendedAccount,
             bestWindow: best,
             minutesUntilFiveHourExhaustion: best.minutesUntilFiveHourExhaustion,

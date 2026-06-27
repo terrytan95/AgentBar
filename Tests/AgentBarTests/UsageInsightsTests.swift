@@ -151,7 +151,7 @@ final class UsageInsightsTests: XCTestCase {
             now: now
         ))
 
-        XCTAssertEqual(plan.activeAccountName, "active@example.com")
+        XCTAssertEqual(plan.activeAccount.id, "active")
         XCTAssertEqual(plan.recommendedAccount?.id, "better")
         XCTAssertEqual(plan.bestWindow.minutes, 30)
         XCTAssertEqual(plan.minutesUntilFiveHourExhaustion ?? 0, 10, accuracy: 0.001)
@@ -295,8 +295,10 @@ final class UsageInsightsTests: XCTestCase {
 
     func testPopoverRecommendationSuggestsBestAccountWhenActiveQuotaIsCritical() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
-        let active = account(id: "active", name: "active@example.com", fiveHourUsed: 98, weeklyUsed: 30, now: now, active: true)
-        let better = account(id: "better", name: "better@example.com", fiveHourUsed: 14, weeklyUsed: 20, now: now, active: false)
+        var active = account(id: "active", name: "active@example.com", fiveHourUsed: 98, weeklyUsed: 30, now: now, active: true)
+        active.workspaces = [UsageWorkspace(name: "Active Workspace", workspaceID: "active-123456")]
+        var better = account(id: "better", name: "better@example.com", fiveHourUsed: 14, weeklyUsed: 20, now: now, active: false)
+        better.workspaces = [UsageWorkspace(name: "Better Workspace", workspaceID: "better-123456")]
         let pressure = UsageInsights.quotaPressure(
             accounts: [active, better],
             points: [point(total: 4_000, minutesAgo: 15, now: now)],
@@ -313,9 +315,9 @@ final class UsageInsightsTests: XCTestCase {
 
         XCTAssertEqual(recommendation.severity, .critical)
         XCTAssertEqual(recommendation.action, .switchAccount("better"))
-        XCTAssertEqual(recommendation.actionTitle, "Use better@example.com")
+        XCTAssertEqual(recommendation.actionTitle, "Use better@example.com · Better Workspace · better-1")
         XCTAssertTrue(recommendation.title.contains("Switch"))
-        XCTAssertTrue(recommendation.detail.contains("active@example.com"))
+        XCTAssertTrue(recommendation.detail.contains("active@example.com · Active Workspace · active-1"))
         XCTAssertTrue(recommendation.detail.contains("5H 2%"))
     }
 

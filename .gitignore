@@ -1,6 +1,8 @@
 .build/
 dist/
-screenshots/
+screenshots/*
+!screenshots/agentbar-overview-dashboard.png
+!screenshots/agentbar-settings.png
 verification/
 tmp/
 .superpowers/

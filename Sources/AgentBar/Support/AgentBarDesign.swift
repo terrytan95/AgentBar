@@ -3,9 +3,10 @@ import SwiftUI
 enum AgentBarDesign {
     static let radiusMedium: CGFloat = 12
     static let radiusLarge: CGFloat = 18
-    static let appBackground = Color(red: 0.965, green: 0.972, blue: 0.984)
-    static let cardBackground = Color.white.opacity(0.78)
-    static let hairline = Color(red: 0.78, green: 0.84, blue: 0.93).opacity(0.55)
+    static let appBackground = Color(nsColor: .windowBackgroundColor)
+    static let cardBackground = Color(nsColor: .controlBackgroundColor).opacity(0.78)
+    static let hairline = Color(nsColor: .separatorColor).opacity(0.72)
+    static let panelHighlight = Color(nsColor: .controlBackgroundColor).opacity(0.72)
     static let durationFast = 0.15
     static let durationNormal = 0.20
 
@@ -28,7 +29,7 @@ private struct AgentBarPanelModifier: ViewModifier {
                     .background(.ultraThinMaterial, in: shape)
                     .overlay(alignment: .top) {
                         shape
-                            .stroke(.white.opacity(cornerRadius == 0 ? 0 : 0.72), lineWidth: 1)
+                            .stroke(AgentBarDesign.panelHighlight.opacity(cornerRadius == 0 ? 0 : 0.72), lineWidth: 1)
                             .blur(radius: 0.4)
                     }
             )

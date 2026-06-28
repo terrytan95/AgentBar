@@ -89,6 +89,7 @@ final class StatusItemController: NSObject {
             }
         )
 
+        popover.animates = false
         popover.behavior = .transient
         popover.delegate = self
         popover.contentSize = NSSize(

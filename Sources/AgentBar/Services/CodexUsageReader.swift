@@ -46,6 +46,11 @@ struct CodexUsageReader {
         let sessionRoot = homeDirectory.appending(path: ".codex/sessions")
         let metrics = readSessionMetrics(root: sessionRoot)
         points.append(contentsOf: metrics.points)
+        do {
+            try CodexUsageIndexStore.defaultStore(homeDirectory: homeDirectory).replaceAll(points: metrics.points)
+        } catch {
+            notes.append("Codex aggregate usage index could not be refreshed: \(error.localizedDescription)")
+        }
 
         if !accounts.isEmpty {
             accounts = accounts.map { account in
@@ -152,7 +157,12 @@ struct CodexUsageReader {
         return (snapshot, epochMillisecondsDate(registry.activeAccountActivatedAtMs))
     }
 
-    static func parseSessionJsonl(data: Data, sessionID fallbackSessionID: String? = nil, projectName fallbackProjectName: String? = nil) throws -> CodexSessionMetrics {
+    static func parseSessionJsonl(
+        data: Data,
+        sessionID fallbackSessionID: String? = nil,
+        projectName fallbackProjectName: String? = nil,
+        sourceFile: String? = nil
+    ) throws -> CodexSessionMetrics {
         var eventCount = 0
         var latestTotal = TokenTotals.zero
         var points: [UsagePoint] = []
@@ -165,10 +175,12 @@ struct CodexUsageReader {
         var previousCumulativeResetAt: Date?
         var currentSessionTitle: String?
         var currentModel: String?
+        var currentCwd: String?
+        var currentReasoningEffort: String?
         let decoder = JSONDecoder()
         let dateParser = CodexTimestampParser()
 
-        for line in data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true) {
+        for (lineOffset, line) in data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true).enumerated() {
             guard let event = try? decoder.decode(CodexSessionEvent.self, from: Data(line))
             else { continue }
 
@@ -176,9 +188,11 @@ struct CodexUsageReader {
             let parsedEventDate = event.parsedDate(using: dateParser)
             let eventDate = parsedEventDate ?? .distantPast
             let sessionID = event.sessionID ?? fallbackSessionID
-            let projectName = payload.projectName ?? fallbackProjectName
             currentSessionTitle = currentSessionTitle ?? payload.sessionTitleCandidate
             currentModel = payload.model ?? currentModel
+            currentCwd = payload.cwd ?? currentCwd
+            currentReasoningEffort = payload.reasoningEffort ?? currentReasoningEffort
+            let projectName = payload.projectName ?? currentCwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? fallbackProjectName
             if let resetAt = payload.rateLimits?.primary?.resetDate ?? payload.rateLimits?.secondary?.resetDate {
                 currentCumulativeResetAt = resetAt
             }
@@ -204,7 +218,13 @@ struct CodexUsageReader {
                         estimatedCostUSD: Pricing.cost(model: model, tokens: pointUsage),
                         sessionID: sessionID,
                         sessionTitle: currentSessionTitle,
-                        projectName: projectName
+                        projectName: projectName,
+                        cwd: currentCwd,
+                        sourceFile: sourceFile,
+                        sourceLine: lineOffset + 1,
+                        reasoningEffort: currentReasoningEffort,
+                        initiator: payload.callInitiator,
+                        modelContextWindow: info.modelContextWindow
                     )
                 )
             }
@@ -277,7 +297,8 @@ struct CodexUsageReader {
                 guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
                       let parsedMetrics = try? Self.parseSessionJsonl(
                         data: data,
-                        sessionID: fileURL.deletingPathExtension().lastPathComponent
+                        sessionID: fileURL.deletingPathExtension().lastPathComponent,
+                        sourceFile: fileURL.path
                       )
                 else { continue }
                 metrics = parsedMetrics
@@ -673,6 +694,7 @@ private extension CodexSessionMetrics {
 }
 
 private struct CodexSessionPayload: Decodable {
+    var type: String?
     var info: CodexInfo?
     var rateLimits: CodexRateLimits?
     var resetCredits: CodexResetCredits?
@@ -680,8 +702,10 @@ private struct CodexSessionPayload: Decodable {
     var message: String?
     var title: String?
     var model: String?
+    var reasoningEffort: String?
 
     enum CodingKeys: String, CodingKey {
+        case type
         case info
         case rateLimits = "rate_limits"
         case resetCredits = "rate_limit_reset_credits"
@@ -689,6 +713,22 @@ private struct CodexSessionPayload: Decodable {
         case message
         case title
         case model
+        case reasoningEffort = "reasoning_effort"
+        case effort
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decodeIfPresent(String.self, forKey: .type)
+        info = try container.decodeIfPresent(CodexInfo.self, forKey: .info)
+        rateLimits = try container.decodeIfPresent(CodexRateLimits.self, forKey: .rateLimits)
+        resetCredits = try container.decodeIfPresent(CodexResetCredits.self, forKey: .resetCredits)
+        cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        reasoningEffort = try container.decodeIfPresent(String.self, forKey: .reasoningEffort)
+            ?? container.decodeIfPresent(String.self, forKey: .effort)
     }
 
     var projectName: String? {
@@ -700,17 +740,27 @@ private struct CodexSessionPayload: Decodable {
     var sessionTitleCandidate: String? {
         firstNonEmptyOptional([title, CodexUsageReader.sessionTitle(from: message)])
     }
+
+    var callInitiator: String? {
+        switch type {
+        case "user_message": return "User"
+        case "agent_message", "token_count", "mcp_tool_call_begin", "mcp_tool_call_end": return "Codex"
+        default: return nil
+        }
+    }
 }
 
 private struct CodexInfo: Decodable {
     var model: String?
     var lastTokenUsage: CodexTokenUsage?
     var totalTokenUsage: CodexTokenUsage?
+    var modelContextWindow: Int?
 
     enum CodingKeys: String, CodingKey {
         case model
         case lastTokenUsage = "last_token_usage"
         case totalTokenUsage = "total_token_usage"
+        case modelContextWindow = "model_context_window"
     }
 }
 

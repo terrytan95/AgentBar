@@ -234,14 +234,11 @@ struct StatisticsView: View {
     }
 
     private var pageAnimation: Animation? {
-        AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion, duration: AgentBarDesign.durationFast)
+        AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion, duration: 0.10)
     }
 
     private var pageTransition: AnyTransition {
-        if reduceMotion {
-            return .opacity
-        }
-        return .opacity.combined(with: .move(edge: .trailing))
+        .opacity
     }
 
     private func sidebarGroup<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

@@ -44,9 +44,9 @@ struct StatisticsView: View {
             .background(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.72),
+                        AgentBarDesign.panelHighlight,
                         AgentBarDesign.appBackground,
-                        Color(red: 0.93, green: 0.96, blue: 1.0).opacity(0.55)
+                        settings.themeColor.primary.opacity(0.08)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -400,6 +400,7 @@ struct StatisticsView: View {
             Panel(title: quotaCapacityLocalized("quota_capacity_history")) {
                 QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language, theme: settings.themeColor)
             }
+            .help(quotaCapacityLocalized("quota_capacity_history_tooltip"))
 
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -1025,9 +1026,11 @@ struct StatisticsView: View {
         case ("quota_capacity_history", .chinese): "额度容量估算"
         case ("quota_capacity_frequency", .chinese): "额度容量采样频率"
         case ("quota_capacity_frequency_subtitle", .chinese): "按此间隔记录 5H/本周额度推算历史。"
+        case ("quota_capacity_history_tooltip", .chinese): "根据最近采样估算 5H 和本周额度窗口的总 Token 容量，用来观察容量变化趋势并判断当前使用节奏。"
         case ("quota_capacity_history", _): "Quota capacity estimate"
         case ("quota_capacity_frequency", _): "Quota capacity sampling"
         case ("quota_capacity_frequency_subtitle", _): "Record estimated 5H and weekly capacity history on this cadence."
+        case ("quota_capacity_history_tooltip", _): "Estimates total token capacity for the 5H and weekly quota windows from recent samples, so you can track capacity trends and judge usage pace."
         default: key
         }
     }
@@ -1385,7 +1388,7 @@ private struct DashboardKPI: View {
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
         .background(
-            LinearGradient(colors: [Color.white.opacity(0.86), accent.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing),
+            LinearGradient(colors: [AgentBarDesign.panelHighlight, accent.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing),
             in: RoundedRectangle(cornerRadius: 16, style: .continuous)
         )
         .agentBarPanel(cornerRadius: 16)
@@ -2030,7 +2033,7 @@ private struct QuotaPressurePanel: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            LinearGradient(colors: [severityColor.opacity(0.16), .white.opacity(0.82), severityColor.opacity(0.06)], startPoint: .leading, endPoint: .trailing),
+            LinearGradient(colors: [severityColor.opacity(0.16), AgentBarDesign.panelHighlight, severityColor.opacity(0.06)], startPoint: .leading, endPoint: .trailing),
             in: RoundedRectangle(cornerRadius: 16, style: .continuous)
         )
         .overlay(

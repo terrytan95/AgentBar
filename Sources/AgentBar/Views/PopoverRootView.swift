@@ -131,9 +131,9 @@ struct PopoverRootView: View {
     private var popoverBackground: some View {
         LinearGradient(
             colors: [
-                Color.white.opacity(0.72),
+                AgentBarDesign.panelHighlight,
                 AgentBarDesign.appBackground,
-                Color(red: 0.93, green: 0.96, blue: 1.0).opacity(0.55)
+                store.settings.themeColor.primary.opacity(0.08)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing

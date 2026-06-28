@@ -20,6 +20,8 @@ struct LaunchStatusView: View {
 
     var body: some View {
         StatisticsView(store: store, initialTab: initialTab)
+            .preferredColorScheme(store.settings.useDarkAppearance ? .dark : .light)
+            .animation(nil, value: store.settings.useDarkAppearance)
     }
 }
 

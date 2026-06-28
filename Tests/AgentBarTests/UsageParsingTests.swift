@@ -50,6 +50,7 @@ final class UsageParsingTests: XCTestCase {
         checkQuotaResetNotificationsDetectWindowRefreshes()
         checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta()
         checkStatisticsBucketsAggregateExpectedRanges()
+        checkYearActivityBarsFillLast365Days()
         checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod()
         checkPeriodChangeHasNoPercentWithoutComparableBaseline()
         try checkUsageRangeIntervalsDriveStatisticsAndAuditFiltering()
@@ -1347,6 +1348,28 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(all.serviceBreakdown[.claudeCode], 36)
         XCTAssertEqual(today.dailyBars.first?.codexCostUSD, Decimal(string: "0.001"))
         XCTAssertEqual(sevenDays.dailyBars.map(\.codexCostUSD).reduce(Decimal(0), +), Decimal(string: "0.003"))
+    }
+
+    private func checkYearActivityBarsFillLast365Days() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
+        let start = calendar.date(byAdding: .day, value: -364, to: calendar.startOfDay(for: now))!
+        let excluded = calendar.date(byAdding: .day, value: -1, to: start)!
+        let points = [
+            UsagePoint(service: .codex, model: "codex-local", date: now, tokens: TokenTotals(input: 10, cachedInput: 0, output: 2, reasoningOutput: 0, total: 12), estimatedCostUSD: Decimal(string: "0.001")),
+            UsagePoint(service: .claudeCode, model: "claude-local", date: start.addingTimeInterval(60), tokens: TokenTotals(input: 30, cachedInput: 0, output: 6, reasoningOutput: 0, total: 36), estimatedCostUSD: Decimal(string: "0.002")),
+            UsagePoint(service: .codex, model: "old", date: excluded, tokens: TokenTotals(input: 99, cachedInput: 0, output: 1, reasoningOutput: 0, total: 100), estimatedCostUSD: nil)
+        ]
+
+        let bars = UsageStatistics.yearActivityBars(points: points, now: now, calendar: calendar)
+
+        XCTAssertEqual(bars.count, 365)
+        XCTAssertEqual(bars.first?.day, start)
+        XCTAssertEqual(bars.last?.day, calendar.startOfDay(for: now))
+        XCTAssertEqual(bars.first?.claudeTokens, 36)
+        XCTAssertEqual(bars.last?.codexTokens, 12)
+        XCTAssertEqual(bars.map { $0.codexTokens + $0.claudeTokens }.reduce(0, +), 48)
     }
 
     private func checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod() {

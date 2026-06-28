@@ -397,6 +397,10 @@ struct StatisticsView: View {
 
             dailyUsagePanel
 
+            Panel(title: yearActivityLocalized("year_activity")) {
+                YearActivityPanel(bars: yearActivityBars, language: store.language, theme: settings.themeColor)
+            }
+
             Panel(title: quotaCapacityLocalized("quota_capacity_history")) {
                 QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language, theme: settings.themeColor)
             }
@@ -776,6 +780,10 @@ struct StatisticsView: View {
         return Array(bars.suffix(24))
     }
 
+    private var yearActivityBars: [DailyUsageBar] {
+        UsageStatistics.yearActivityBars(points: filteredPoints)
+    }
+
     private func serviceCostText(_ service: UsageService) -> String {
         let costs = selectedRangePoints.filter { $0.service == service }.compactMap(\.estimatedCostUSD)
         guard !costs.isEmpty else { return L.text("no_cost_data", store.language) }
@@ -1007,6 +1015,14 @@ struct StatisticsView: View {
         case ("session_drilldown", .chinese): "会话明细"
         case ("top_usage", _): "Top usage"
         case ("session_drilldown", _): "Session drilldown"
+        default: key
+        }
+    }
+
+    private func yearActivityLocalized(_ key: String) -> String {
+        switch (key, store.language) {
+        case ("year_activity", .chinese): "年度活动"
+        case ("year_activity", _): "Year activity"
         default: key
         }
     }
@@ -1685,6 +1701,148 @@ private struct DashboardStackedBars: View {
     private func costAxisText(_ value: Double) -> String {
         DisplayFormatters.costString(Decimal(value))
     }
+}
+
+private struct YearActivityPanel: View {
+    var bars: [DailyUsageBar]
+    var language: AppLanguage
+    var theme: AppThemeColor
+
+    private let spacing: CGFloat = 3
+    private var calendar: Calendar { .current }
+
+    var body: some View {
+        if bars.isEmpty {
+            EmptyPanelMessage(L.text("no_usage_events", language))
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(rangeText)
+                    Spacer()
+                    Text(activeDaysText)
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+                GeometryReader { proxy in
+                    let cells = activityCells
+                    let columns = max(1, Int(ceil(Double(cells.count) / 7.0)))
+                    let cellSize = max(6, min(11, (proxy.size.width - CGFloat(max(0, columns - 1)) * spacing) / CGFloat(columns)))
+                    let gridHeight = cellSize * 7 + spacing * 6
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ZStack(alignment: .leading) {
+                            ForEach(monthMarkers) { marker in
+                                Text(marker.title)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 36, alignment: .leading)
+                                    .offset(x: CGFloat(marker.column) * (cellSize + spacing))
+                            }
+                        }
+                        .frame(height: 12)
+
+                        LazyHGrid(rows: Array(repeating: GridItem(.fixed(cellSize), spacing: spacing), count: 7), spacing: spacing) {
+                            ForEach(cells) { cell in
+                                if let bar = cell.bar {
+                                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                        .fill(color(for: bar))
+                                        .frame(width: cellSize, height: cellSize)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                .stroke(Color.primary.opacity(totalTokens(for: bar) > 0 ? 0.10 : 0.06), lineWidth: 1)
+                                        )
+                                        .help(bar.tooltipText(language: language))
+                                        .accessibilityLabel(accessibilityText(for: bar))
+                                } else {
+                                    Color.clear
+                                        .frame(width: cellSize, height: cellSize)
+                                }
+                            }
+                        }
+                        .frame(height: gridHeight, alignment: .topLeading)
+                    }
+                }
+                .frame(height: 116)
+            }
+        }
+    }
+
+    private var activityCells: [YearActivityCell] {
+        (Array<DailyUsageBar?>(repeating: nil, count: leadingBlankCount) + bars.map { Optional($0) })
+            .enumerated()
+            .map { YearActivityCell(index: $0.offset, bar: $0.element) }
+    }
+
+    private var leadingBlankCount: Int {
+        guard let first = bars.first else { return 0 }
+        let weekday = calendar.component(.weekday, from: first.day)
+        return (weekday - calendar.firstWeekday + 7) % 7
+    }
+
+    private var monthMarkers: [YearActivityMonthMarker] {
+        bars.enumerated().compactMap { offset, bar in
+            let day = calendar.component(.day, from: bar.day)
+            guard offset == 0 || day == 1 else { return nil }
+            return YearActivityMonthMarker(
+                id: "\(offset)-\(bar.day.timeIntervalSince1970)",
+                title: monthText(bar.day),
+                column: (leadingBlankCount + offset) / 7
+            )
+        }
+    }
+
+    private var activeDaysText: String {
+        let count = bars.filter { totalTokens(for: $0) > 0 }.count
+        return language == .chinese ? "\(count) 天有活动" : "\(count)d active"
+    }
+
+    private var rangeText: String {
+        guard let first = bars.first?.day, let last = bars.last?.day else { return "" }
+        let suffix = language == .chinese ? "365天" : "365d"
+        return "\(monthText(first)) - \(monthText(last)) · \(suffix)"
+    }
+
+    private var maxTokens: Int {
+        max(1, bars.map { totalTokens(for: $0) }.max() ?? 1)
+    }
+
+    private func color(for bar: DailyUsageBar) -> Color {
+        let tokens = totalTokens(for: bar)
+        guard tokens > 0 else { return Color.primary.opacity(0.07) }
+        let ratio = Double(tokens) / Double(maxTokens)
+        if ratio >= 0.75 { return theme.tertiary }
+        if ratio >= 0.50 { return theme.primary }
+        if ratio >= 0.25 { return theme.primary.opacity(0.68) }
+        return theme.primary.opacity(0.34)
+    }
+
+    private func totalTokens(for bar: DailyUsageBar) -> Int {
+        bar.codexTokens + bar.claudeTokens
+    }
+
+    private func monthText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
+        return formatter.string(from: date)
+    }
+
+    private func accessibilityText(for bar: DailyUsageBar) -> Text {
+        Text("\(bar.tooltipText(language: language))")
+    }
+}
+
+private struct YearActivityCell: Identifiable {
+    var index: Int
+    var bar: DailyUsageBar?
+    var id: Int { index }
+}
+
+private struct YearActivityMonthMarker: Identifiable {
+    var id: String
+    var title: String
+    var column: Int
 }
 
 private struct ChartHoverCallout: View {

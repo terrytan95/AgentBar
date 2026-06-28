@@ -40,6 +40,26 @@ enum UsageStatistics {
         )
     }
 
+    static func yearActivityBars(
+        points: [UsagePoint],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [DailyUsageBar] {
+        let endDay = calendar.startOfDay(for: now)
+        guard
+            let startDay = calendar.date(byAdding: .day, value: -364, to: endDay),
+            let endExclusive = calendar.date(byAdding: .day, value: 1, to: endDay)
+        else { return [] }
+
+        let interval = DateInterval(start: startDay, end: endExclusive)
+        let barsByDay = Dictionary(uniqueKeysWithValues: makeDailyBars(points: points.filter { interval.contains($0.date) }, calendar: calendar).map { ($0.day, $0) })
+
+        return (0..<365).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: startDay) else { return nil }
+            return barsByDay[day] ?? DailyUsageBar(day: day, codexTokens: 0, claudeTokens: 0)
+        }
+    }
+
     private static func summarize(points filtered: [UsagePoint], calendar: Calendar) -> UsageSummary {
         let total = filtered.reduce(TokenTotals.zero) { $0 + $1.tokens }
         let costValues = filtered.compactMap(\.estimatedCostUSD)

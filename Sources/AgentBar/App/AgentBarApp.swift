@@ -29,6 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
 
+        if handleUsageCommandLine() {
+            NSApp.terminate(nil)
+            return
+        }
+
         if let reportURL = smokeReportURL() {
             Task { @MainActor in
                 SmokeReporter.writeReport(to: reportURL)
@@ -56,5 +61,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               CommandLine.arguments.indices.contains(index + 1)
         else { return nil }
         return URL(fileURLWithPath: CommandLine.arguments[index + 1])
+    }
+
+    private func handleUsageCommandLine() -> Bool {
+        let arguments = CommandLine.arguments
+        guard arguments.contains("--usage-summary") || arguments.contains("--usage-mcp") else {
+            return false
+        }
+
+        let store = CodexUsageIndexStore.defaultStore()
+        do {
+            _ = CodexUsageReader().read()
+            let payload: Any
+            if let index = arguments.firstIndex(of: "--usage-mcp"),
+               arguments.indices.contains(index + 1) {
+                payload = try usageMCPPayload(tool: arguments[index + 1], store: store, arguments: arguments)
+            } else {
+                payload = try store.summaryPayload()
+            }
+            printJSON(payload)
+        } catch {
+            printJSON(["error": error.localizedDescription])
+        }
+        return true
+    }
+
+    private func usageMCPPayload(tool: String, store: CodexUsageIndexStore, arguments: [String]) throws -> Any {
+        switch tool {
+        case "usage_summary":
+            return try store.summaryPayload()
+        case "session_usage":
+            return try store.sessionPayload(sessionID: value(after: "--session-id", in: arguments))
+        case "expensive_calls":
+            return try store.sessionPayload(limit: 25)
+                .sorted { lhs, rhs in
+                    (lhs["total_tokens"] as? Int ?? 0) > (rhs["total_tokens"] as? Int ?? 0)
+                }
+        default:
+            return [
+                "error": "Unknown usage MCP tool.",
+                "tools": ["usage_summary", "session_usage", "expensive_calls"]
+            ]
+        }
+    }
+
+    private func value(after flag: String, in arguments: [String]) -> String? {
+        guard let index = arguments.firstIndex(of: flag),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        return arguments[index + 1]
+    }
+
+    private func printJSON(_ payload: Any) {
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: data, encoding: .utf8)
+        else {
+            print("{}")
+            return
+        }
+        print(text)
     }
 }

@@ -8,240 +8,406 @@ struct AuditView: View {
     var dataSourceHealth: DataSourceHealthSummary
     var theme: AppThemeColor
 
+    @State private var selectedTab: AuditUsageTab = .threads
+    @State private var selectedCallID: String?
+    @State private var expandedThreadID: String?
     @State private var exportStatus: String?
+    @State private var callsPage = 0
+    @State private var threadsPage = 0
+
+    private let pageSize = 20
 
     private var rangePoints: [UsagePoint] {
         UsageAuditReporter.filteredPoints(
-            points: points,
+            points: points.filter { $0.service == .codex },
             range: store.selectedRange,
             customStart: store.customStart,
             customEnd: store.customEnd
         )
+        .sorted { $0.date > $1.date }
+    }
+
+    private var threadRows: [AuditThreadRow] {
+        Dictionary(grouping: rangePoints) { point in
+            point.sessionTitle ?? point.sessionID ?? "Unknown thread"
+        }
+        .map { title, calls in
+            let sorted = calls.sorted { $0.date > $1.date }
+            let totals = calls.reduce(TokenTotals.zero) { $0 + $1.tokens }
+            return AuditThreadRow(
+                id: title,
+                title: title,
+                subtitle: "\(calls.count) calls · \(sorted.first?.projectName ?? "Unknown project")",
+                latest: sorted.first?.date ?? .distantPast,
+                duration: durationText(calls: calls),
+                tokens: totals,
+                cost: totalCost(calls),
+                calls: sorted
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.tokens.total != rhs.tokens.total { return lhs.tokens.total > rhs.tokens.total }
+            return lhs.latest > rhs.latest
+        }
     }
 
     private var composition: TokenComposition {
         UsageAuditReporter.tokenComposition(points: rangePoints)
     }
 
-    private var report: AuditReport {
-        UsageAuditReporter.makeReport(
-            points: points,
-            range: store.selectedRange,
-            budgetStatus: budgetStatusForReport,
-            dataSourceHealth: dataSourceHealth,
-            language: store.language,
-            customStart: store.customStart,
-            customEnd: store.customEnd
-        )
+    private var pagedCalls: [UsagePoint] {
+        page(rangePoints, index: clampedPage(callsPage, total: rangePoints.count))
+    }
+
+    private var pagedThreads: [AuditThreadRow] {
+        page(threadRows, index: clampedPage(threadsPage, total: threadRows.count))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
-            compositionGrid
-
-            HStack(alignment: .top, spacing: 14) {
-                auditPanel(title: localized("service_breakdown")) {
-                    breakdownRows(UsageAuditReporter.serviceRows(points: rangePoints))
-                }
-                auditPanel(title: localized("model_breakdown")) {
-                    breakdownRows(UsageAuditReporter.modelRows(points: rangePoints))
-                }
-            }
-
-            HStack(alignment: .top, spacing: 14) {
-                auditPanel(title: localized("spike_explanation")) {
-                    spikeExplanation
-                }
-                auditPanel(title: localized("report")) {
-                    reportPanel
-                }
-            }
-
-            auditPanel(title: localized("export_records")) {
-                exportPanel
-            }
+            kpiGrid
+            tablePanel
+            exportPanel
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .onAppear {
+            selectedCallID = selectedCallID ?? rangePoints.first?.callID
+        }
+        .onChange(of: rangePoints.map(\.callID)) { _, ids in
+            callsPage = clampedPage(callsPage, total: ids.count)
+            threadsPage = clampedPage(threadsPage, total: threadRows.count)
+            guard let selectedCallID, ids.contains(selectedCallID) else {
+                self.selectedCallID = ids.first
+                return
+            }
+        }
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(L.text("audit", store.language))
+                Text(localized("title"))
                     .font(.system(size: 20, weight: .bold))
                 Text(localized("subtitle"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("\(rangePoints.count) \(localized("records"))")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.primary)
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-    }
-
-    private var compositionGrid: some View {
-        GeometryReader { proxy in
-            LazyVGrid(columns: columns(for: proxy.size.width), spacing: 12) {
-                metricCard(localized("total"), DisplayFormatters.compactTokenString(composition.total, language: store.language), accent: theme.primary)
-                metricCard(localized("input"), DisplayFormatters.compactTokenString(composition.input, language: store.language), accent: theme.tertiary)
-                metricCard(localized("cached"), DisplayFormatters.compactTokenString(composition.cachedInput, language: store.language), accent: theme.secondary)
-                metricCard(localized("output"), DisplayFormatters.compactTokenString(composition.output, language: store.language), accent: theme.primary)
-                metricCard(localized("reasoning"), DisplayFormatters.compactTokenString(composition.reasoningOutput, language: store.language), accent: .orange)
-            }
-        }
-        .frame(height: 176)
-    }
-
-    private func columns(for width: CGFloat) -> [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: width < 840 ? 3 : 5)
-    }
-
-    private func metricCard(_ title: String, _ value: String, accent: Color) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            Circle()
-                .fill(accent.opacity(0.10))
-                .frame(width: 108, height: 108)
-                .offset(x: 30, y: 32)
-            VStack(alignment: .leading, spacing: 12) {
-                Image(systemName: iconName(for: title))
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(accent)
-                    .frame(width: 38, height: 38)
-                    .background(accent.opacity(0.10), in: Circle())
-                Spacer()
-                Text(title)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.primary)
-                Text(value)
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.62)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 164, alignment: .leading)
-        .background(
-            LinearGradient(colors: [Color.white.opacity(0.84), accent.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .agentBarPanel(cornerRadius: 16)
-    }
-
-    private func iconName(for title: String) -> String {
-        switch title {
-        case localized("input"): return "mic"
-        case localized("cached"): return "internaldrive"
-        case localized("output"): return "arrow.up"
-        case localized("reasoning"): return "bolt"
-        default: return "cylinder.split.1x2"
-        }
-    }
-
-    @ViewBuilder
-    private func breakdownRows(_ rows: [AuditBreakdownRow]) -> some View {
-        if rows.isEmpty {
-            EmptyAuditMessage(text: L.text("no_usage_data", store.language))
-        } else {
-            VStack(spacing: 12) {
-                ForEach(rows.prefix(8)) { row in
-                    VStack(alignment: .leading, spacing: 7) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(row.title)
-                                    .font(.system(size: 13, weight: .semibold))
-                                Text(row.subtitle)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(DisplayFormatters.compactTokenString(row.tokens, language: store.language))
-                                .font(.system(size: 13, weight: .bold))
-                                .monospacedDigit()
-                        }
-                        ProgressView(value: row.share)
-                            .tint(theme.primary)
-                    }
-                }
-            }
-        }
-    }
-
-    private var spikeExplanation: some View {
-        let anomalies = UsageInsights.usageAnomalies(points: points).prefix(4)
-        return VStack(alignment: .leading, spacing: 10) {
-            if anomalies.isEmpty {
-                EmptyAuditMessage(text: localized("no_spikes"))
-            } else {
-                ForEach(Array(anomalies), id: \.id) { anomaly in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(anomaly.label)
-                                .font(.system(size: 13, weight: .bold))
-                            Text("\(DisplayFormatters.compactTokenString(anomaly.tokens, language: store.language)) \(L.text("tokens", store.language)) · \(String(format: "%.1fx", anomaly.multiple)) \(localized("baseline"))")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                    }
-                }
-                Text(localized("local_basis"))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-            }
-        }
-    }
-
-    private var reportPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(report.body)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.primary.opacity(0.86))
-                .textSelection(.enabled)
-                .lineSpacing(3)
             Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(report.body, forType: .string)
-                exportStatus = localized("report_copied")
+                store.refresh(force: true, showManualFeedback: true)
             } label: {
-                Label(localized("copy_report"), systemImage: "doc.on.doc")
+                Label(L.text("refresh", store.language), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
             .pointingHandCursor()
+            statusPill
         }
+    }
+
+    private var statusPill: some View {
+        Text("\(rangePoints.count) \(localized("calls")) · SQLite")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(theme.primary)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var kpiGrid: some View {
+        GeometryReader { proxy in
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: proxy.size.width < 980 ? 3 : 6), spacing: 12) {
+                metricCard(localized("visible_calls"), "\(rangePoints.count)")
+                metricCard(localized("total_tokens"), DisplayFormatters.compactTokenString(composition.total, language: store.language))
+                metricCard(localized("cached_input"), DisplayFormatters.compactTokenString(composition.cachedInput, language: store.language))
+                metricCard(localized("uncached_input"), DisplayFormatters.compactTokenString(max(0, composition.input - composition.cachedInput), language: store.language))
+                metricCard(localized("reasoning_output"), DisplayFormatters.compactTokenString(composition.reasoningOutput, language: store.language))
+                metricCard(localized("estimated_cost"), costText(totalCost(rangePoints)))
+            }
+        }
+        .frame(height: 104)
+    }
+
+    private func metricCard(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 22, weight: .bold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .agentBarPanel(cornerRadius: 12)
+    }
+
+    private var tablePanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Text(selectedTab == .calls ? localized("model_calls") : localized("threads"))
+                    .font(.system(size: 16, weight: .bold))
+                Picker("", selection: $selectedTab) {
+                    ForEach(AuditUsageTab.allCases) { tab in
+                        Text(tab.title(language: store.language)).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 220)
+                Spacer()
+                Button {
+                    copyDashboardLink()
+                } label: {
+                    Label(localized("copy_link"), systemImage: "link")
+                }
+                .buttonStyle(.bordered)
+                .pointingHandCursor()
+                Button {
+                    export(format: .csv)
+                } label: {
+                    Label("CSV", systemImage: "tablecells")
+                }
+                .buttonStyle(.bordered)
+                .pointingHandCursor()
+            }
+            .padding(16)
+
+            Divider()
+
+            Text(selectedTab == .calls ? localized("calls_caption") : localized("threads_caption"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+
+            Divider()
+
+            VStack(spacing: 0) {
+                tableHeader
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+
+                Divider()
+
+                if selectedTab == .calls {
+                    callsTable
+                } else {
+                    threadsTable
+                }
+            }
+        }
+        .agentBarPanel(cornerRadius: 14)
+    }
+
+    private var tableHeader: some View {
+        HStack(spacing: 8) {
+            column(localized("time"), width: 108, alignment: .leading)
+            threadColumn(localized("thread"), strong: true)
+            column(localized("duration"), width: 60)
+            column(localized("initiated"), width: 58)
+            column(localized("model"), width: 76)
+            column(localized("effort"), width: 50)
+            column(localized("tokens"), width: 68)
+            column(localized("cached"), width: 68)
+            column(localized("uncached"), width: 68)
+            column(localized("output"), width: 58)
+            column(localized("reasoning"), width: 58)
+        }
+        .font(.system(size: 11, weight: .bold))
+        .foregroundStyle(.secondary)
+    }
+
+    private var callsTable: some View {
+        VStack(spacing: 0) {
+            ForEach(pagedCalls) { point in
+                callRow(point, nested: false)
+                if selectedCallID == point.callID {
+                    callDetail(point: point)
+                }
+                Divider()
+            }
+            paginationFooter(total: rangePoints.count, page: $callsPage, itemName: localized("calls"))
+        }
+    }
+
+    private var threadsTable: some View {
+        VStack(spacing: 0) {
+            ForEach(pagedThreads) { thread in
+                threadRow(thread)
+                if expandedThreadID == thread.id {
+                    ForEach(thread.calls.prefix(20)) { point in
+                        callRow(point, nested: true)
+                        if selectedCallID == point.callID {
+                            callDetail(point: point)
+                        }
+                    }
+                }
+                Divider()
+            }
+            paginationFooter(total: threadRows.count, page: $threadsPage, itemName: localized("threads"))
+        }
+    }
+
+    private func callRow(_ point: UsagePoint, nested: Bool) -> some View {
+        Button {
+            selectedCallID = point.callID
+        } label: {
+            HStack(spacing: 8) {
+                column(dateText(point.date), width: 108, alignment: .leading)
+                threadColumn((nested ? "  " : "") + (point.sessionTitle ?? point.sessionID ?? localized("unknown_thread")), strong: true)
+                column("1", width: 60)
+                column(point.initiator ?? "Codex", width: 58)
+                column(point.model, width: 76, pill: true)
+                column(point.reasoningEffort ?? "-", width: 50)
+                column(DisplayFormatters.compactTokenString(point.tokens.total, language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(point.tokens.cachedInput, language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(point.uncachedInputTokens, language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(point.tokens.output, language: store.language), width: 58)
+                column(DisplayFormatters.compactTokenString(point.tokens.reasoningOutput, language: store.language), width: 58)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, nested ? 8 : 11)
+            .background(selectedCallID == point.callID ? theme.primary.opacity(0.10) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+    }
+
+    private func threadRow(_ thread: AuditThreadRow) -> some View {
+        Button {
+            expandedThreadID = expandedThreadID == thread.id ? nil : thread.id
+            selectedCallID = thread.calls.first?.callID
+        } label: {
+            HStack(spacing: 8) {
+                column(dateText(thread.latest), width: 108, alignment: .leading)
+                HStack(spacing: 8) {
+                    Image(systemName: expandedThreadID == thread.id ? "minus.circle.fill" : "plus.circle.fill")
+                        .foregroundStyle(theme.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(thread.title)
+                            .font(.system(size: 12, weight: .bold))
+                            .lineLimit(2)
+                        Text(thread.subtitle)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                column(thread.duration, width: 60)
+                column("\(thread.calls.count)", width: 58)
+                column(thread.calls.first?.model ?? "-", width: 76, pill: true)
+                column(thread.calls.first?.reasoningEffort ?? "-", width: 50)
+                column(DisplayFormatters.compactTokenString(thread.tokens.total, language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(thread.tokens.cachedInput, language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(max(0, thread.tokens.input - thread.tokens.cachedInput), language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(thread.tokens.output, language: store.language), width: 58)
+                column(DisplayFormatters.compactTokenString(thread.tokens.reasoningOutput, language: store.language), width: 58)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+    }
+
+    private func column(_ text: String, width: CGFloat? = nil, alignment: Alignment = .trailing, strong: Bool = false, pill: Bool = false) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: strong ? .bold : .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.62)
+            .padding(.horizontal, pill ? 8 : 0)
+            .frame(width: width, alignment: alignment)
+            .foregroundStyle(pill ? theme.primary : .primary.opacity(0.9))
+            .background(pill ? theme.primary.opacity(0.10) : Color.clear, in: Capsule())
+    }
+
+    private func threadColumn(_ text: String, strong: Bool = false) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: strong ? .bold : .semibold))
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(.primary.opacity(0.9))
+    }
+
+    private func callDetail(point: UsagePoint) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(localized("call_investigator"))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.secondary)
+                    Text(point.sessionTitle ?? point.sessionID ?? localized("unknown_thread"))
+                        .font(.system(size: 16, weight: .bold))
+                    Text("\(dateText(point.date)) · \(point.model) · \(point.reasoningEffort ?? "-")")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let sourceFile = point.sourceFile {
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: sourceFile)])
+                    } label: {
+                        Label(localized("show_source"), systemImage: "doc.text.magnifyingglass")
+                    }
+                    .buttonStyle(.bordered)
+                    .pointingHandCursor()
+                }
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
+                detailCard(localized("last_call_input"), DisplayFormatters.tokenString(point.tokens.input), localized("exact_from_callback"))
+                detailCard(localized("cached_input"), DisplayFormatters.tokenString(point.tokens.cachedInput), "\(Int(point.cacheRatio * 100))%")
+                detailCard(localized("uncached_input"), DisplayFormatters.tokenString(point.uncachedInputTokens), localized("fresh_context"))
+                detailCard(localized("output"), DisplayFormatters.tokenString(point.tokens.output), localized("assistant_output"))
+                detailCard(localized("reasoning_output"), DisplayFormatters.tokenString(point.tokens.reasoningOutput), localized("reasoning"))
+                detailCard(localized("estimated_cost"), costText(point.estimatedCostUSD), localized("configured_price"))
+                detailCard(localized("source_line"), sourceLineText(point), localized("source_file_line"))
+                detailCard("Cwd", point.cwd ?? "-", point.projectName ?? "-")
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.primary.opacity(0.06))
+    }
+
+    private func detailCard(_ title: String, _ value: String, _ subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 15, weight: .bold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.68)
+                .textSelection(.enabled)
+            Text(subtitle)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var exportPanel: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(localized("export_detail"))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                if let exportStatus {
-                    Text(exportStatus)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(theme.primary)
-                }
-            }
+        HStack(spacing: 10) {
+            Text(localized("privacy_note"))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
             Spacer()
-            Button {
-                export(format: .csv)
-            } label: {
-                Label("CSV", systemImage: "tablecells")
+            if let exportStatus {
+                Text(exportStatus)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(theme.primary)
             }
-            .buttonStyle(.bordered)
-            .pointingHandCursor()
-
             Button {
                 export(format: .json)
             } label: {
@@ -250,113 +416,230 @@ struct AuditView: View {
             .buttonStyle(.bordered)
             .pointingHandCursor()
         }
+        .padding(14)
+        .agentBarPanel(cornerRadius: 12)
     }
 
-    private func auditPanel<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold))
-            content()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .agentBarPanel(cornerRadius: 16)
+    private func footer(text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
     }
 
-    private var budgetStatusForReport: BudgetStatus? {
-        switch store.selectedRange {
-        case .today:
-            return store.budgetStatus(for: .today)
-        case .thisWeek, .last7Days:
-            return store.budgetStatus(for: .thisWeek)
-        case .yesterday, .thisMonth, .thisYear, .last30Days, .all, .custom:
-            return nil
+    private func paginationFooter(total: Int, page: Binding<Int>, itemName: String) -> some View {
+        let currentPage = clampedPage(page.wrappedValue, total: total)
+        let start = total == 0 ? 0 : currentPage * pageSize + 1
+        let end = min(total, (currentPage + 1) * pageSize)
+        let pageCount = max(1, Int(ceil(Double(total) / Double(pageSize))))
+
+        return HStack(spacing: 10) {
+            Button {
+                page.wrappedValue = max(0, currentPage - 1)
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.bordered)
+            .disabled(currentPage == 0)
+            .pointingHandCursor()
+
+            Text("\(start)-\(end) / \(total) \(itemName) · \(localized("page")) \(currentPage + 1)/\(pageCount)")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 190)
+
+            Button {
+                page.wrappedValue = min(pageCount - 1, currentPage + 1)
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.bordered)
+            .disabled(currentPage >= pageCount - 1)
+            .pointingHandCursor()
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+    }
+
+    private func page<T>(_ values: [T], index: Int) -> [T] {
+        let start = min(values.count, max(0, index) * pageSize)
+        let end = min(values.count, start + pageSize)
+        return Array(values[start..<end])
+    }
+
+    private func clampedPage(_ page: Int, total: Int) -> Int {
+        min(max(0, page), max(0, (total - 1) / pageSize))
     }
 
     private func export(format: UsageExportFormat) {
         let rows = UsageAuditReporter.exportRows(
-            points: points,
-            range: store.selectedRange,
-            customStart: store.customStart,
-            customEnd: store.customEnd
+            points: rangePoints,
+            range: .all
         )
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "AgentBar-\(store.selectedRange.rawValue)-usage.\(format.fileExtension)"
+        panel.nameFieldStringValue = "AgentBar-codex-usage.\(format.fileExtension)"
         panel.allowedContentTypes = format == .csv ? [.commaSeparatedText] : [.json]
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
-            let text = UsageAuditReporter.serialize(rows: rows, format: format)
-            try text.write(to: url, atomically: true, encoding: .utf8)
+            try UsageAuditReporter.serialize(rows: rows, format: format).write(to: url, atomically: true, encoding: .utf8)
             exportStatus = "\(localized("exported")) \(url.lastPathComponent)"
         } catch {
             exportStatus = "\(localized("export_failed")) \(error.localizedDescription)"
         }
     }
 
+    private func copyDashboardLink() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("agentbar://usage/audit", forType: .string)
+        exportStatus = localized("link_copied")
+    }
+
+    private func sourceLineText(_ point: UsagePoint) -> String {
+        guard let sourceFile = point.sourceFile else { return "-" }
+        if let sourceLine = point.sourceLine {
+            return "\(sourceFile):\(sourceLine)"
+        }
+        return sourceFile
+    }
+
+    private func dateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = store.language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func costText(_ value: Decimal?) -> String {
+        guard let value else { return "-" }
+        return "$\(NSDecimalNumber(decimal: value).stringValue)"
+    }
+
+    private func totalCost(_ calls: [UsagePoint]) -> Decimal? {
+        let costs = calls.compactMap(\.estimatedCostUSD)
+        return costs.isEmpty ? nil : costs.reduce(Decimal(0), +)
+    }
+
+    private func durationText(calls: [UsagePoint]) -> String {
+        guard let first = calls.map(\.date).min(), let last = calls.map(\.date).max() else { return "-" }
+        let seconds = max(0, Int(last.timeIntervalSince(first)))
+        if seconds < 60 { return "\(seconds)s" }
+        return "\(seconds / 60)m \(seconds % 60)s"
+    }
+
     private func localized(_ key: String) -> String {
         switch (key, store.language) {
-        case ("subtitle", .chinese): "解释 Token 去向、异常增长，并导出安全的解析记录。"
-        case ("records", .chinese): "条记录"
-        case ("service_breakdown", .chinese): "按服务"
-        case ("model_breakdown", .chinese): "按模型"
-        case ("spike_explanation", .chinese): "异常解释"
-        case ("report", .chinese): "报告"
-        case ("export_records", .chinese): "导出记录"
-        case ("total", .chinese): "总量"
-        case ("input", .chinese): "输入"
-        case ("cached", .chinese): "缓存输入"
+        case ("title", .chinese): "Codex 用量审计"
+        case ("subtitle", .chinese): "读取本机 JSONL，索引聚合用量到 SQLite，并定位 token 与额度去向。"
+        case ("visible_calls", .chinese): "可见调用"
+        case ("total_tokens", .chinese): "总 Token"
+        case ("cached_input", .chinese): "缓存输入"
+        case ("uncached_input", .chinese): "未缓存输入"
+        case ("reasoning_output", .chinese): "推理输出"
+        case ("estimated_cost", .chinese): "估算成本"
+        case ("model_calls", .chinese): "模型调用"
+        case ("threads", .chinese): "线程"
+        case ("calls", .chinese): "调用"
+        case ("calls_caption", .chinese): "显示当前筛选范围内的模型调用。点击任意行查看来源和 token 构成。"
+        case ("threads_caption", .chinese): "按线程聚合调用。点击线程展开其调用。"
+        case ("copy_link", .chinese): "复制链接"
+        case ("time", .chinese): "时间"
+        case ("thread", .chinese): "线程"
+        case ("duration", .chinese): "时长"
+        case ("initiated", .chinese): "发起"
+        case ("model", .chinese): "模型"
+        case ("effort", .chinese): "Effort"
+        case ("tokens", .chinese): "Token"
+        case ("cached", .chinese): "缓存"
+        case ("uncached", .chinese): "未缓存"
         case ("output", .chinese): "输出"
-        case ("reasoning", .chinese): "推理输出"
-        case ("no_spikes", .chinese): "当前没有检测到明显异常增长。"
-        case ("baseline", .chinese): "高于基线"
-        case ("local_basis", .chinese): "基于本地已解析 session logs，不代表官方账单。"
-        case ("copy_report", .chinese): "复制报告"
-        case ("report_copied", .chinese): "报告已复制。"
-        case ("export_detail", .chinese): "导出当前服务筛选和时间范围内的解析记录，不包含原始 JSONL。"
+        case ("reasoning", .chinese): "推理"
+        case ("unknown_thread", .chinese): "未知线程"
+        case ("call_investigator", .chinese): "调用详情"
+        case ("show_source", .chinese): "显示来源"
+        case ("last_call_input", .chinese): "本次输入"
+        case ("exact_from_callback", .chinese): "来自 token callback"
+        case ("fresh_context", .chinese): "新上下文"
+        case ("assistant_output", .chinese): "助手输出"
+        case ("configured_price", .chinese): "按当前价格表估算"
+        case ("source_line", .chinese): "来源行"
+        case ("source_file_line", .chinese): "源文件和行号"
+        case ("privacy_note", .chinese): "SQLite/导出保存聚合字段和派生线程标题，不保存完整 prompt、回复或工具输出。"
         case ("exported", .chinese): "已导出"
         case ("export_failed", .chinese): "导出失败："
-        case ("subtitle", _): "Explain token usage, spikes, and export safe parsed records."
-        case ("records", _): "records"
-        case ("service_breakdown", _): "By service"
-        case ("model_breakdown", _): "By model"
-        case ("spike_explanation", _): "Spike explanation"
-        case ("report", _): "Report"
-        case ("export_records", _): "Export records"
-        case ("total", _): "Total"
-        case ("input", _): "Input"
-        case ("cached", _): "Cached input"
+        case ("link_copied", .chinese): "链接已复制。"
+        case ("page", .chinese): "页"
+        case ("title", _): "Codex Usage Audit"
+        case ("subtitle", _): "Indexes local JSONL aggregate usage into SQLite so token and credit spend is traceable."
+        case ("visible_calls", _): "Visible calls"
+        case ("total_tokens", _): "Total tokens"
+        case ("cached_input", _): "Cached input"
+        case ("uncached_input", _): "Uncached input"
+        case ("reasoning_output", _): "Reasoning output"
+        case ("estimated_cost", _): "Estimated cost"
+        case ("model_calls", _): "Model calls"
+        case ("threads", _): "Threads"
+        case ("calls", _): "calls"
+        case ("calls_caption", _): "Showing filtered model calls. Click any row for source and token details."
+        case ("threads_caption", _): "Grouped by thread. Click a thread to expand its calls."
+        case ("copy_link", _): "Copy link"
+        case ("time", _): "Time"
+        case ("thread", _): "Thread"
+        case ("duration", _): "Duration"
+        case ("initiated", _): "Initiated"
+        case ("model", _): "Model"
+        case ("effort", _): "Effort"
+        case ("tokens", _): "Tokens"
+        case ("cached", _): "Cached"
+        case ("uncached", _): "Uncached"
         case ("output", _): "Output"
         case ("reasoning", _): "Reasoning"
-        case ("no_spikes", _): "No obvious usage spikes detected for this data set."
-        case ("baseline", _): "over baseline"
-        case ("local_basis", _): "Based on local parsed session logs, not official billing records."
-        case ("copy_report", _): "Copy report"
-        case ("report_copied", _): "Report copied."
-        case ("export_detail", _): "Exports parsed records for the current service filter and time range, without raw JSONL lines."
+        case ("unknown_thread", _): "Unknown thread"
+        case ("call_investigator", _): "Call investigator"
+        case ("show_source", _): "Show source"
+        case ("last_call_input", _): "Last call input"
+        case ("exact_from_callback", _): "Exact from callback"
+        case ("fresh_context", _): "Fresh context"
+        case ("assistant_output", _): "Assistant output"
+        case ("configured_price", _): "Configured price"
+        case ("source_line", _): "Source line"
+        case ("source_file_line", _): "Source file and line"
+        case ("privacy_note", _): "SQLite and exports store aggregate fields plus derived thread labels, not full prompts, replies, or tool output."
         case ("exported", _): "Exported"
         case ("export_failed", _): "Export failed:"
+        case ("link_copied", _): "Link copied."
+        case ("page", _): "Page"
         default: key
         }
     }
 }
 
-private struct EmptyAuditMessage: View {
-    var text: String
+private enum AuditUsageTab: String, CaseIterable, Identifiable {
+    case threads
+    case calls
 
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 40, weight: .semibold))
-                .foregroundStyle(Color.blue.opacity(0.36))
-                .frame(width: 86, height: 70)
-                .background(Color.blue.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            Text(text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
+    var id: String { rawValue }
+
+    func title(language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.calls, .chinese): "调用"
+        case (.threads, .chinese): "线程"
+        case (.calls, _): "Calls"
+        case (.threads, _): "Threads"
         }
-        .frame(maxWidth: .infinity, minHeight: 154, alignment: .center)
     }
+}
+
+private struct AuditThreadRow: Identifiable {
+    var id: String
+    var title: String
+    var subtitle: String
+    var latest: Date
+    var duration: String
+    var tokens: TokenTotals
+    var cost: Decimal?
+    var calls: [UsagePoint]
 }

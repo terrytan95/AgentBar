@@ -15,6 +15,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexSessionJsonlUsesTurnContextModelForCostBreakdown()
         try checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents()
         try checkCodexSessionJsonlCarriesSessionAndProjectMetadata()
+        try checkCodexUsageIndexPersistsAggregateCallRows()
         try checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset()
         try checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
         try checkCodexUsageAPISyncerRefreshesOnlyActiveAccount()
@@ -310,6 +311,30 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.points.first?.sessionID, "session-1")
         XCTAssertEqual(metrics.points.first?.sessionTitle, "Fix high CPU usage in AgentBar")
         XCTAssertEqual(metrics.points.first?.projectName, "AgentBar")
+    }
+
+    private func checkCodexUsageIndexPersistsAggregateCallRows() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let sourceFile = temp.appending(path: "session.jsonl").path
+        let jsonl = """
+        {"type":"event_msg","timestamp":"2026-06-13T22:06:01.000Z","payload":{"type":"user_message","message":"Investigate budget usage"}}
+        {"type":"turn_context","payload":{"cwd":"/Users/terrytan/Desktop/Coding/AgentBar","model":"gpt-5.5","reasoning_effort":"high"}}
+        {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","session_id":"session-1","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":60,"output_tokens":20,"reasoning_output_tokens":5,"total_tokens":125},"model_context_window":258400}}}
+        """.data(using: .utf8)!
+        let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl, sourceFile: sourceFile)
+        let store = CodexUsageIndexStore(databaseURL: temp.appending(path: "usage.sqlite3"))
+
+        try store.replaceAll(points: metrics.points)
+        let summary = try store.summaryPayload()
+        let sessions = try store.sessionPayload(sessionID: "session-1")
+
+        XCTAssertEqual((summary["totals"] as? [String: Any])?["calls"] as? Int, 1)
+        XCTAssertEqual((summary["totals"] as? [String: Any])?["total_tokens"] as? Int, 125)
+        XCTAssertEqual(sessions.first?["source_line"] as? Int, 3)
+        XCTAssertEqual(sessions.first?["cwd"] as? String, "/Users/terrytan/Desktop/Coding/AgentBar")
+        XCTAssertEqual(sessions.first?["project_name"] as? String, "AgentBar")
+        XCTAssertEqual(sessions.first?["effort"] as? String, "high")
     }
 
     private func checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {

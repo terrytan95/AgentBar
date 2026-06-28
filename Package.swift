@@ -17,6 +17,9 @@ let package = Package(
                 .copy("Resources/AgentBarLogo.png"),
                 .copy("Resources/AgentBarMenuIcon.png"),
                 .copy("Resources/AgentBarIcon.icns")
+            ],
+            linkerSettings: [
+                .linkedLibrary("sqlite3")
             ]
         ),
         .testTarget(

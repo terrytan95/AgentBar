@@ -344,6 +344,28 @@ struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var sessionID: String? = nil
     var sessionTitle: String? = nil
     var projectName: String? = nil
+    var cwd: String? = nil
+    var sourceFile: String? = nil
+    var sourceLine: Int? = nil
+    var reasoningEffort: String? = nil
+    var initiator: String? = nil
+    var modelContextWindow: Int? = nil
+
+    var callID: String {
+        if let sourceFile, let sourceLine {
+            return "\(sourceFile):\(sourceLine)"
+        }
+        return id.uuidString
+    }
+
+    var uncachedInputTokens: Int {
+        max(0, tokens.input - tokens.cachedInput)
+    }
+
+    var cacheRatio: Double {
+        guard tokens.input > 0 else { return 0 }
+        return Double(tokens.cachedInput) / Double(tokens.input)
+    }
 }
 
 enum UsageRange: String, CaseIterable, Identifiable, Sendable {

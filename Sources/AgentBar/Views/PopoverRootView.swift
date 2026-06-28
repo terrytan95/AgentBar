@@ -104,23 +104,46 @@ struct PopoverRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+                .padding(.horizontal, PopoverLayout.horizontalInset)
+                .padding(.vertical, 12)
+            hairline
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     quickSummarySection
                     accountSection
                 }
-                .padding(.vertical, PopoverLayout.horizontalInset)
+                .padding(.horizontal, PopoverLayout.horizontalInset)
+                .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
+            hairline
             footer
+                .padding(.horizontal, PopoverLayout.horizontalInset)
+                .frame(height: 52)
+                .background(.ultraThinMaterial)
         }
-        .padding(.horizontal, PopoverLayout.horizontalInset)
-        .background(.regularMaterial)
+        .background(popoverBackground)
         .preferredColorScheme(store.settings.useDarkAppearance ? .dark : .light)
         .animation(nil, value: store.settings.useDarkAppearance)
+    }
+
+    private var popoverBackground: some View {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(0.72),
+                AgentBarDesign.appBackground,
+                Color(red: 0.93, green: 0.96, blue: 1.0).opacity(0.55)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var hairline: some View {
+        Rectangle()
+            .fill(AgentBarDesign.hairline)
+            .frame(height: 1)
     }
 
     private var dataSourceHealth: DataSourceHealthSummary {
@@ -128,16 +151,21 @@ struct PopoverRootView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
+            Image(nsImage: AppLogo.image())
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 30, height: 30)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text("AgentBar")
-                    .font(.headline)
+                    .font(.system(size: 17, weight: .bold))
                 Text(store.popoverHeaderQuotaTitle)
-                    .font(.caption)
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 if let activeAccount = store.activeAccount {
                     Text("\(L.text("current_account", store.language)): \(activeAccount.displayNameWithWorkspace(language: store.language))")
-                        .font(.caption2.weight(.semibold))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -153,17 +181,20 @@ struct PopoverRootView: View {
                     Image(systemName: "arrow.clockwise")
                 }
             }
-            .buttonStyle(.borderless)
-            .pointingHandCursor()
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(store.settings.themeColor.primary)
+            .frame(width: 32, height: 32)
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .tactilePlainButton()
+            .agentBarPanel(cornerRadius: 10)
             .help(L.text("refresh", store.language))
         }
-        .padding(.vertical, PopoverLayout.horizontalInset)
     }
 
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L.text("accounts", store.language))
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 13, weight: .bold))
             if store.isLoadingAccountInformation && store.accounts.isEmpty {
                 PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
             } else {
@@ -184,13 +215,13 @@ struct PopoverRootView: View {
     }
 
     private var quickSummarySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(L.text("overview", store.language))
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 13, weight: .bold))
             HStack(spacing: 8) {
-                KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), tint: store.settings.themeColor.primary)
-                KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), tint: store.settings.themeColor.secondary)
-                KPIPill(title: L.text("data_sources", store.language), value: dataSourceSummaryText, tint: dataSourceHealth.issueCount == 0 ? .green : .orange)
+                KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), systemImage: "cylinder.split.1x2.fill", tint: store.settings.themeColor.primary)
+                KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), systemImage: "dollarsign", tint: store.settings.themeColor.secondary)
+                KPIPill(title: L.text("data_sources", store.language), value: dataSourceSummaryText, systemImage: dataSourceHealth.issueCount == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill", tint: dataSourceHealth.issueCount == 0 ? .green : .orange)
             }
 
             if !store.uiDataSourceSnapshots.isEmpty {
@@ -236,9 +267,11 @@ struct PopoverRootView: View {
                     Label(L.text("settings", store.language), systemImage: "gearshape")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .pointingHandCursor()
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(store.settings.themeColor.primary)
+                .tactilePlainButton()
+                .agentBarPanel(cornerRadius: 10)
+                .help(L.text("settings", store.language))
             }
 
             PopoverToolbarButton(title: L.text("quit_app", store.language), systemImage: "power") {
@@ -317,7 +350,7 @@ struct PopoverLoadingRow: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .agentBarPanel(cornerRadius: 10)
     }
 }
 
@@ -442,12 +475,12 @@ struct AccountRowView: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
         }
-        .padding(8)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(account.needsLogin ? Color.red.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(account.needsLogin ? Color.red.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .agentBarPanel(cornerRadius: 10)
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(account.needsLogin ? Color.red.opacity(0.70) : Color.clear, lineWidth: 1.5)
         }
         .confirmationDialog(L.text("remove_account", language), isPresented: $isConfirmingRemoval) {
@@ -505,21 +538,30 @@ struct UsageWindowGauge: View {
 struct KPIPill: View {
     var title: String
     var value: String
+    var systemImage: String
     var tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 22, height: 22)
+                .background(tint.opacity(0.12), in: Circle())
             Text(title)
-                .font(.caption2)
+                .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.secondary)
-            Text(value)
-                .font(.callout.weight(.semibold))
+                .textCase(.uppercase)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+            Text(value)
+                .font(.system(size: 13, weight: .bold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.70)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+        .agentBarPanel(cornerRadius: 12)
     }
 }
 
@@ -556,12 +598,13 @@ struct PopoverToolbarButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
+                .font(.system(size: 12, weight: .bold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
-        .pointingHandCursor()
+        .foregroundStyle(.primary)
+        .tactilePlainButton()
+        .agentBarPanel(cornerRadius: 10)
         .help(title)
     }
 }

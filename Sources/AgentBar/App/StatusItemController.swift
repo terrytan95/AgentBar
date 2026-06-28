@@ -13,7 +13,7 @@ final class StatusItemController: NSObject {
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
-        let settings = SettingsStore()
+        let settings = SettingsStore.shared
         self.settings = settings
         self.store = UsageStore(settings: settings)
         super.init()

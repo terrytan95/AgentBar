@@ -30,6 +30,8 @@ enum AccountSortMode: String, CaseIterable, Identifiable {
 
 @MainActor
 final class SettingsStore: ObservableObject {
+    static let shared = SettingsStore()
+
     @Published var language: AppLanguage {
         didSet { defaults.set(language.rawValue, forKey: Keys.language) }
     }

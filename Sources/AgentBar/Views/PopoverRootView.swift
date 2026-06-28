@@ -120,7 +120,7 @@ struct PopoverRootView: View {
             hairline
             footer
                 .padding(.horizontal, PopoverLayout.horizontalInset)
-                .frame(height: 52)
+                .frame(height: 62)
                 .background(.ultraThinMaterial)
         }
         .background(popoverBackground)
@@ -265,7 +265,7 @@ struct PopoverRootView: View {
             } else {
                 SettingsLink {
                     Label(L.text("settings", store.language), systemImage: "gearshape")
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, minHeight: 36)
                 }
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(store.settings.themeColor.primary)
@@ -600,7 +600,7 @@ struct PopoverToolbarButton: View {
             Label(title, systemImage: systemImage)
                 .font(.system(size: 12, weight: .bold))
                 .lineLimit(1)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, minHeight: 36)
         }
         .foregroundStyle(.primary)
         .tactilePlainButton()

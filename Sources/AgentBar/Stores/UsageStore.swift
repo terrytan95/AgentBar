@@ -25,6 +25,7 @@ final class UsageStore: ObservableObject {
     private let manualCodexAppRestarter: @Sendable () -> Void
     private let codexAccountSwitchFailurePrompter: @Sendable (CodexAccountSwitchRecovery) -> Void
     private let codexAccountRecoveryLoginLauncher: @Sendable (String, String) -> Void
+    private let quotaResetNotifier: @Sendable (QuotaResetNotification) -> Void
     private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
     private var accountRemovalObserver: NSObjectProtocol?
@@ -66,6 +67,9 @@ final class UsageStore: ObservableObject {
         codexAccountRecoveryLoginLauncher: @escaping @Sendable (String, String) -> Void = { accountID, accountLabel in
             AccountLoginLauncher.openCodexRecoveryLogin(accountID: accountID, accountLabel: accountLabel)
         },
+        quotaResetNotifier: @escaping @Sendable (QuotaResetNotification) -> Void = { notification in
+            QuotaResetDesktopNotifier.notify(notification)
+        },
         quotaCapacityHistoryStore: QuotaCapacityHistoryStore = QuotaCapacityHistoryStore()
     ) {
         self.settings = settings
@@ -88,6 +92,7 @@ final class UsageStore: ObservableObject {
         self.manualCodexAppRestarter = manualCodexAppRestarter
         self.codexAccountSwitchFailurePrompter = codexAccountSwitchFailurePrompter
         self.codexAccountRecoveryLoginLauncher = codexAccountRecoveryLoginLauncher
+        self.quotaResetNotifier = quotaResetNotifier
         accountRemovalObserver = NotificationCenter.default.addObserver(
             forName: Self.accountRemovalNotification,
             object: nil,
@@ -234,10 +239,13 @@ final class UsageStore: ObservableObject {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                let previousAccounts = self.accounts
+                let wasLoaded = self.hasLoadedAccountInformation
                 self.snapshots = refreshed.snapshots
                 self.accounts = refreshed.accounts
                 self.points = refreshed.points
                 self.recordQuotaCapacitySample()
+                self.sendQuotaResetNotifications(previousAccounts: previousAccounts, wasLoaded: wasLoaded)
                 self.hasLoadedAccountInformation = true
                 self.isRefreshing = false
                 self.refreshInFlight = false
@@ -462,6 +470,18 @@ final class UsageStore: ObservableObject {
         guard history != quotaCapacityHistory else { return }
         quotaCapacityHistory = history
         quotaCapacityHistoryStore.save(history)
+    }
+
+    private func sendQuotaResetNotifications(previousAccounts: [UsageAccount], wasLoaded: Bool, now: Date = Date()) {
+        guard wasLoaded, settings.quotaResetNotificationsEnabled else { return }
+        for notification in QuotaResetNotifications.refreshedQuotaWindows(
+            previous: previousAccounts,
+            current: accounts,
+            now: now,
+            language: language
+        ) {
+            quotaResetNotifier(notification)
+        }
     }
 
     private struct PendingCodexSwitchRecovery {

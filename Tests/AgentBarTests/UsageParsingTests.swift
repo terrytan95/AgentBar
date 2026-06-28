@@ -47,6 +47,7 @@ final class UsageParsingTests: XCTestCase {
         checkMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows()
         checkBudgetSettingsPersistAndWarnInMenuBarTitle()
         checkRapidUsageAlertWarnsInMenuBarTitle()
+        checkQuotaResetNotificationsDetectWindowRefreshes()
         checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta()
         checkStatisticsBucketsAggregateExpectedRanges()
         checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod()
@@ -1292,6 +1293,38 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(second.samples[1].tokensSincePreviousSample, 1_000)
         XCTAssertEqual(second.samples[1].estimatedFiveHourTotalTokens, 20_000)
         XCTAssertEqual(second.samples[1].estimatedWeeklyTotalTokens, 50_000)
+    }
+
+    private func checkQuotaResetNotificationsDetectWindowRefreshes() {
+        let reset = Date(timeIntervalSince1970: 1_781_388_300)
+        let now = reset.addingTimeInterval(60)
+        var previous = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 99, weeklyUsed: 20, now: reset)
+        previous.weeklyWindow?.resetsAt = now.addingTimeInterval(3_600)
+        var current = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 1, weeklyUsed: 20, now: reset.addingTimeInterval(5 * 3_600))
+        current.weeklyWindow?.resetsAt = previous.weeklyWindow?.resetsAt
+
+        let notifications = QuotaResetNotifications.refreshedQuotaWindows(
+            previous: [previous],
+            current: [current],
+            now: now,
+            language: .english
+        )
+
+        XCTAssertEqual(notifications.count, 1)
+        XCTAssertTrue(notifications[0].id.contains("fiveHour"))
+        XCTAssertEqual(notifications[0].title, "5-hour quota refreshed")
+
+        let futureAdjustment = QuotaResetNotifications.refreshedQuotaWindows(
+            previous: [current],
+            current: [{
+                var account = current
+                account.fiveHourWindow?.resetsAt = now.addingTimeInterval(6 * 3_600)
+                return account
+            }()],
+            now: now,
+            language: .english
+        )
+        XCTAssertTrue(futureAdjustment.isEmpty)
     }
 
     private func checkStatisticsBucketsAggregateExpectedRanges() {

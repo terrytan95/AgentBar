@@ -627,6 +627,9 @@ struct StatisticsView: View {
                     .labelsHidden()
                     .settingsControl(width: SettingsControlLayout.compactPickerWidth)
                 }
+                SettingsRow(title: L.text("quota_reset_notifications", store.language), subtitle: L.text("quota_reset_notifications_subtitle", store.language)) {
+                    Toggle("", isOn: $settings.quotaResetNotificationsEnabled).labelsHidden()
+                }
                 SettingsRow(title: L.text("login_item", store.language), subtitle: settings.loginItemMessage ?? L.text("open_at_login_subtitle", store.language)) {
                     Toggle("", isOn: $settings.launchAtLogin).labelsHidden()
                 }

@@ -9,6 +9,7 @@ struct StatisticsView: View {
     @State private var topTab: DashboardTopTab
     @State private var selectedSessionLabel: String?
     @State private var showsAccountPopover = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let dashboardContentTopPadding: CGFloat = 12
     private static let dashboardContentBottomPadding: CGFloat = 26
@@ -30,19 +31,10 @@ struct StatisticsView: View {
                 .frame(width: 236)
 
             VStack(spacing: 0) {
-                if topTab == .usage {
-                    usageContent
-                } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        settingsHeader
-                            .padding(.top, 24)
-                            .padding(.horizontal, 26)
-                        settingsContent
-                            .padding(.top, 12)
-                            .padding(.horizontal, 26)
-                            .padding(.bottom, 28)
-                    }
-                }
+                pageContent
+                    .id(pageTransitionID)
+                    .transition(pageTransition)
+                    .animation(pageAnimation, value: pageTransitionID)
                 appFooter
                     .padding(.horizontal, 26)
                     .frame(height: 42)
@@ -60,9 +52,6 @@ struct StatisticsView: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .transaction { transaction in
-                transaction.animation = nil
-            }
         }
         .tint(settings.themeColor.primary)
         .background(AgentBarDesign.appBackground)
@@ -82,19 +71,16 @@ struct StatisticsView: View {
 
             sidebarGroup(title: L.text("usage_statistics", store.language)) {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
-                    topTab = .usage
-                    viewMode = .overview
+                    setPage(tab: .usage, viewMode: .overview)
                 }
                 sidebarItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
-                    topTab = .usage
-                    viewMode = .resets
+                    setPage(tab: .usage, viewMode: .resets)
                 }
                 sidebarItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
-                    topTab = .usage
-                    viewMode = .audit
+                    setPage(tab: .usage, viewMode: .audit)
                 }
                 sidebarItem(L.text("settings", store.language), systemImage: "gearshape", active: topTab == .settings) {
-                    topTab = .settings
+                    setPage(tab: .settings)
                 }
             }
 
@@ -209,11 +195,53 @@ struct StatisticsView: View {
     }
 
     private func setTopTab(_ tab: DashboardTopTab) {
-        var transaction = Transaction()
-        transaction.animation = nil
-        withTransaction(transaction) {
+        setPage(tab: tab)
+    }
+
+    private func setPage(tab: DashboardTopTab, viewMode: DashboardViewMode? = nil) {
+        withAnimation(pageAnimation) {
             topTab = tab
+            if let viewMode {
+                self.viewMode = viewMode
+            }
         }
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
+        if topTab == .usage {
+            usageContent
+        } else {
+            ScrollView(.vertical, showsIndicators: false) {
+                settingsHeader
+                    .padding(.top, 24)
+                    .padding(.horizontal, 26)
+                settingsContent
+                    .padding(.top, 12)
+                    .padding(.horizontal, 26)
+                    .padding(.bottom, 28)
+            }
+        }
+    }
+
+    private var pageTransitionID: String {
+        switch topTab {
+        case .usage:
+            return "usage-\(viewMode)"
+        case .settings:
+            return DashboardTopTab.settings.rawValue
+        }
+    }
+
+    private var pageAnimation: Animation? {
+        AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion, duration: AgentBarDesign.durationFast)
+    }
+
+    private var pageTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+        return .opacity.combined(with: .move(edge: .trailing))
     }
 
     private func sidebarGroup<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

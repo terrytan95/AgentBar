@@ -36,7 +36,7 @@ final class UsageStore: ObservableObject {
     private var pendingCodexSwitchRecovery: PendingCodexSwitchRecovery?
 
     init(
-        settings: SettingsStore = SettingsStore(),
+        settings: SettingsStore = .shared,
         codexUsageSynchronizer: @escaping @Sendable () -> CodexUsageSyncResult = {
             CodexUsageAPISyncer().refreshUsage()
         },

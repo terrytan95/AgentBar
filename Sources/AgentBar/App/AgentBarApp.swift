@@ -3,11 +3,11 @@ import SwiftUI
 @main
 struct AgentBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var settings = SettingsStore()
+    @StateObject private var settings: SettingsStore
     @StateObject private var store: UsageStore
 
     init() {
-        let settings = SettingsStore()
+        let settings = SettingsStore.shared
         _settings = StateObject(wrappedValue: settings)
         _store = StateObject(wrappedValue: UsageStore(settings: settings))
     }

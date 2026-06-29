@@ -903,11 +903,12 @@ struct StatisticsView: View {
     }
 
     private var totalResetCreditsCount: Int {
-        store.activeAccount?.resetCredits?.visibleCount ?? 0
+        store.accounts.reduce(0) { $0 + ($1.resetCredits?.visibleCount ?? 0) }
     }
 
     private var nextResetExpiry: Date? {
-        (store.activeAccount?.resetCredits?.resets ?? [])
+        store.accounts
+            .flatMap { $0.resetCredits?.resets ?? [] }
             .compactMap(\.expiresAt)
             .filter { $0 > Date() }
             .sorted()
@@ -1017,7 +1018,7 @@ struct StatisticsView: View {
     }
 
     private var resetExpiryDisplayGroups: [UsageAccountDisplayGroup] {
-        [store.activeAccount].compactMap { $0 }
+        store.accounts
             .filter { !($0.resetCredits?.resets ?? []).isEmpty }
             .displayGroupsByIdentity(sortMode: settings.accountSortMode)
     }

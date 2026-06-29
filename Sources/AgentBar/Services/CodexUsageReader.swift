@@ -46,11 +46,6 @@ struct CodexUsageReader {
         let sessionRoot = homeDirectory.appending(path: ".codex/sessions")
         let metrics = readSessionMetrics(root: sessionRoot)
         points.append(contentsOf: metrics.points)
-        do {
-            try CodexUsageIndexStore.defaultStore(homeDirectory: homeDirectory).replaceAll(points: metrics.points)
-        } catch {
-            notes.append("Codex aggregate usage index could not be refreshed: \(error.localizedDescription)")
-        }
 
         if !accounts.isEmpty {
             accounts = accounts.map { account in

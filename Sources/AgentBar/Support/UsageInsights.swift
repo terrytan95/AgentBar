@@ -431,7 +431,7 @@ enum UsageInsights {
                     detail: row.note?.redactedForCredentialWords ?? row.status.label(language: language),
                     workspaceLines: [],
                     accountID: nil,
-                    severity: row.status == .error ? .critical : .warning
+                    severity: .warning
                 )
             }
         return AccountHealthCenter(rows: loginRows + sourceRows)

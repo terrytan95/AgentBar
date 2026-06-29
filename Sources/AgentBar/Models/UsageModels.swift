@@ -11,18 +11,12 @@ enum DataSourceStatus: String, Codable, Equatable, Sendable {
     case live
     case unavailable
     case needsAuthorization
-    case error
-
-    var label: String {
-        label(language: .english)
-    }
 
     func label(language: AppLanguage) -> String {
         switch self {
         case .live: language == .chinese ? "正常" : "Live"
         case .unavailable: language == .chinese ? "不可用" : "Unavailable"
         case .needsAuthorization: language == .chinese ? "需授权" : "Needs auth"
-        case .error: language == .chinese ? "错误" : "Error"
         }
     }
 }
@@ -202,10 +196,6 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         return "\(displayName) · \(workspaceDisplayValue)"
     }
 
-    var accountTypeValue: String {
-        accountTypeValue(language: .english)
-    }
-
     func accountTypeValue(language: AppLanguage) -> String {
         if let plan, !plan.isEmpty {
             return plan.uppercased()
@@ -254,15 +244,6 @@ private extension Optional where Wrapped == String {
 }
 
 extension Array where Element == UsageAccount {
-    func sortedByActiveThenName() -> [UsageAccount] {
-        sorted { lhs, rhs in
-            if lhs.isActive != rhs.isActive {
-                return lhs.isActive && !rhs.isActive
-            }
-            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-        }
-    }
-
     func sorted(using mode: AccountSortMode) -> [UsageAccount] {
         sorted { lhs, rhs in
             if lhs.isActive != rhs.isActive {
@@ -328,10 +309,6 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     var securityNotes: [String]
     var refreshedAt: Date
     var pricingFingerprint: String
-
-    static func empty(service: UsageService, status: DataSourceStatus, note: String) -> UsageSnapshot {
-        UsageSnapshot(service: service, status: status, accounts: [], points: [], securityNotes: [note], refreshedAt: Date(), pricingFingerprint: Pricing.fingerprint)
-    }
 }
 
 struct UsagePoint: Codable, Equatable, Identifiable, Sendable {

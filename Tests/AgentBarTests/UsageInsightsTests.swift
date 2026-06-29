@@ -30,7 +30,7 @@ final class UsageInsightsTests: XCTestCase {
             points: points,
             snapshots: [
                 .codex: UsageSnapshot(service: .codex, status: .live, accounts: [], points: [], securityNotes: [], refreshedAt: now, pricingFingerprint: Pricing.fingerprint),
-                .claudeCode: UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "No Claude data")
+                .claudeCode: UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [], securityNotes: ["No Claude data"], refreshedAt: now, pricingFingerprint: Pricing.fingerprint)
             ],
             selectedSessionLabel: nil,
             rotationThresholdRemainingPercent: 10,

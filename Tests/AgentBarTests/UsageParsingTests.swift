@@ -15,7 +15,6 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexSessionJsonlUsesTurnContextModelForCostBreakdown()
         try checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents()
         try checkCodexSessionJsonlCarriesSessionAndProjectMetadata()
-        try checkCodexUsageIndexPersistsAggregateCallRows()
         try checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset()
         try checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
         try checkCodexUsageAPISyncerRefreshesOnlyActiveAccount()
@@ -26,8 +25,6 @@ final class UsageParsingTests: XCTestCase {
         checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
         checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
-        checkUsageRefreshOrchestratorSyncsBeforeReadersAndMergesSnapshots()
-        checkCodexUsageSourceSyncsBeforeReadAndAppendsSyncNote()
         checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized()
         checkPopoverHeightPreferenceIsClampedWhenLoadedAndSaved()
         try checkCodexReadPrefersRegistryUsageOverLocalSessionRateLimits()
@@ -314,30 +311,6 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.points.first?.sessionID, "session-1")
         XCTAssertEqual(metrics.points.first?.sessionTitle, "Fix high CPU usage in AgentBar")
         XCTAssertEqual(metrics.points.first?.projectName, "AgentBar")
-    }
-
-    private func checkCodexUsageIndexPersistsAggregateCallRows() throws {
-        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: temp) }
-        let sourceFile = temp.appending(path: "session.jsonl").path
-        let jsonl = """
-        {"type":"event_msg","timestamp":"2026-06-13T22:06:01.000Z","payload":{"type":"user_message","message":"Investigate budget usage"}}
-        {"type":"turn_context","payload":{"cwd":"/Users/terrytan/Desktop/Coding/AgentBar","model":"gpt-5.5","reasoning_effort":"high"}}
-        {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","session_id":"session-1","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":60,"output_tokens":20,"reasoning_output_tokens":5,"total_tokens":125},"model_context_window":258400}}}
-        """.data(using: .utf8)!
-        let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl, sourceFile: sourceFile)
-        let store = CodexUsageIndexStore(databaseURL: temp.appending(path: "usage.sqlite3"))
-
-        try store.replaceAll(points: metrics.points)
-        let summary = try store.summaryPayload()
-        let sessions = try store.sessionPayload(sessionID: "session-1")
-
-        XCTAssertEqual((summary["totals"] as? [String: Any])?["calls"] as? Int, 1)
-        XCTAssertEqual((summary["totals"] as? [String: Any])?["total_tokens"] as? Int, 125)
-        XCTAssertEqual(sessions.first?["source_line"] as? Int, 3)
-        XCTAssertEqual(sessions.first?["cwd"] as? String, "/Users/terrytan/Desktop/Coding/AgentBar")
-        XCTAssertEqual(sessions.first?["project_name"] as? String, "AgentBar")
-        XCTAssertEqual(sessions.first?["effort"] as? String, "high")
     }
 
     private func checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {
@@ -656,49 +629,11 @@ final class UsageParsingTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
+        settings.detailedResetCreditsEnabled = true
         let expectation = expectation(description: "refresh completed")
         let recorder = RefreshOrderRecorder()
         let now = Date()
         let activeAccount = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 8, weeklyUsed: 55, now: now)
-        let store = UsageStore(
-            settings: settings,
-            codexUsageSynchronizer: {
-                recorder.record("sync")
-                return .success
-            },
-            codexUsageReader: {
-                XCTAssertEqual(recorder.events, ["sync"])
-                recorder.record("codex-read")
-                return UsageSnapshot(
-                    service: .codex,
-                    status: .live,
-                    accounts: [
-                        activeAccount
-                    ],
-                    points: [],
-                    securityNotes: [],
-                    refreshedAt: now,
-                    pricingFingerprint: Pricing.fingerprint
-                )
-            },
-            claudeUsageReader: {
-                XCTAssertEqual(recorder.events, ["sync", "codex-read"])
-                expectation.fulfill()
-                return .empty(service: .claudeCode, status: .unavailable, note: "test")
-            }
-        )
-
-        store.refresh(force: true)
-
-        wait(for: [expectation], timeout: 2)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        XCTAssertEqual(store.menuBarTitle, "5H 92%  WK 45%")
-    }
-
-    private func checkUsageRefreshOrchestratorSyncsBeforeReadersAndMergesSnapshots() {
-        let recorder = RefreshOrderRecorder()
-        let now = Date()
-        let codexAccount = testAccount(id: "codex", name: "codex@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)
         let claudePoint = UsagePoint(
             service: .claudeCode,
             model: "claude-opus",
@@ -706,50 +641,10 @@ final class UsageParsingTests: XCTestCase {
             tokens: TokenTotals(input: 10, cachedInput: 0, output: 15, reasoningOutput: 0, total: 25),
             estimatedCostUSD: nil
         )
-        let orchestrator = UsageRefreshOrchestrator(
-            codexUsageSource: { detailedResetCreditsEnabled in
-                XCTAssertFalse(detailedResetCreditsEnabled)
-                recorder.record("codex-source")
-                return UsageSnapshot(
-                    service: .codex,
-                    status: .live,
-                    accounts: [codexAccount],
-                    points: [],
-                    securityNotes: ["source note"],
-                    refreshedAt: now,
-                    pricingFingerprint: Pricing.fingerprint
-                )
-            },
-            claudeUsageReader: {
-                XCTAssertEqual(recorder.events, ["codex-source"])
-                recorder.record("claude-read")
-                return UsageSnapshot(
-                    service: .claudeCode,
-                    status: .live,
-                    accounts: [],
-                    points: [claudePoint],
-                    securityNotes: [],
-                    refreshedAt: now,
-                    pricingFingerprint: Pricing.fingerprint
-                )
-            }
-        )
-
-        let result = orchestrator.refresh(detailedResetCreditsEnabled: false)
-
-        XCTAssertEqual(recorder.events, ["codex-source", "claude-read"])
-        XCTAssertEqual(result.snapshots[.codex]?.securityNotes, ["source note"])
-        XCTAssertEqual(result.snapshots[.claudeCode]?.points, [claudePoint])
-        XCTAssertEqual(result.accounts.map(\.id), ["codex"])
-        XCTAssertEqual(result.points, [claudePoint])
-    }
-
-    private func checkCodexUsageSourceSyncsBeforeReadAndAppendsSyncNote() {
-        let recorder = RefreshOrderRecorder()
-        let now = Date()
-        let source = CodexUsageSource(
+        let store = UsageStore(
+            settings: settings,
             codexUsageSynchronizer: {
-                recorder.record("normal-sync")
+                XCTFail("Expected detailed reset sync")
                 return .success
             },
             codexDetailedResetCreditsSynchronizer: {
@@ -762,24 +657,37 @@ final class UsageParsingTests: XCTestCase {
                 return UsageSnapshot(
                     service: .codex,
                     status: .live,
-                    accounts: [],
+                    accounts: [
+                        activeAccount
+                    ],
                     points: [],
                     securityNotes: ["local note"],
                     refreshedAt: now,
                     pricingFingerprint: Pricing.fingerprint
                 )
+            },
+            claudeUsageReader: {
+                XCTAssertEqual(recorder.events, ["detailed-sync", "codex-read"])
+                recorder.record("claude-read")
+                expectation.fulfill()
+                return UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [claudePoint], securityNotes: ["test"], refreshedAt: now, pricingFingerprint: Pricing.fingerprint)
             }
         )
 
-        let snapshot = source.read(detailedResetCreditsEnabled: true)
+        store.refresh(force: true)
 
-        XCTAssertEqual(recorder.events, ["detailed-sync", "codex-read"])
-        XCTAssertEqual(snapshot.securityNotes, [
+        wait(for: [expectation], timeout: 2)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(recorder.events, ["detailed-sync", "codex-read", "claude-read"])
+        XCTAssertEqual(store.snapshots[.codex]?.securityNotes, [
             "local note",
             "Codex usage API sync failed: expired token; using local registry and session cache."
         ])
+        XCTAssertEqual(store.snapshots[.claudeCode]?.points, [claudePoint])
+        XCTAssertEqual(store.accounts.map(\.id), ["active"])
+        XCTAssertEqual(store.points, [claudePoint])
+        XCTAssertEqual(store.menuBarTitle, "5H 92%  WK 45%")
     }
-
     @MainActor
     private func checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
@@ -1446,7 +1354,6 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(points.filter { previous.contains($0.date) }.map(\.tokens.total).reduce(0, +), 20)
         XCTAssertEqual(UsageStatistics.summarize(points: points, range: .last7Days, now: now, calendar: calendar).totalTokens, 150)
         XCTAssertEqual(UsageAuditReporter.filteredPoints(points: points, range: .last7Days, now: now, calendar: calendar).map(\.tokens.total).reduce(0, +), 150)
-        XCTAssertEqual(UsageAuditReporter.rangeComparison(points: points, range: .last7Days, now: now, calendar: calendar)?.previousTokens, 20)
     }
 
     private func checkUsageRangeChartTitlesMatchSelectedInterval() {

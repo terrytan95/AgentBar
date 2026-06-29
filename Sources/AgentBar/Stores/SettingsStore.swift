@@ -82,6 +82,10 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
     }
 
+    @Published var showAggregatedAccountData: Bool {
+        didSet { defaults.set(showAggregatedAccountData, forKey: Keys.showAggregatedAccountData) }
+    }
+
     @Published var autoCodexAccountRotationEnabled: Bool {
         didSet { defaults.set(autoCodexAccountRotationEnabled, forKey: Keys.autoCodexAccountRotationEnabled) }
     }
@@ -187,6 +191,7 @@ final class SettingsStore: ObservableObject {
         themeColor = AppThemeColor(rawValue: defaults.string(forKey: Keys.themeColor) ?? "") ?? .blue
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
+        showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
         detailedResetCreditsEnabled = defaults.object(forKey: Keys.detailedResetCreditsEnabled) as? Bool ?? false
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
@@ -259,6 +264,7 @@ final class SettingsStore: ObservableObject {
         static let themeColor = "themeColor"
         static let useDarkAppearance = "useDarkAppearance"
         static let accountSortMode = "accountSortMode"
+        static let showAggregatedAccountData = "showAggregatedAccountData"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
         static let detailedResetCreditsEnabled = "detailedResetCreditsEnabled"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"

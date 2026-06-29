@@ -180,6 +180,10 @@ final class UsageStore: ObservableObject {
         accounts.first(where: \.isActive) ?? accounts.first
     }
 
+    var accountUsageTotalDisplayAccounts: [UsageAccount] {
+        settings.showAggregatedAccountData ? accounts.aggregatedTotalsForDisplay(language: language) : accounts
+    }
+
     var summary: UsageSummary {
         if let summaryCache { return summaryCache }
         let summary = UsageStatistics.summarize(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)

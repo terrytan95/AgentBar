@@ -971,79 +971,27 @@ struct StatisticsView: View {
     }
 
     private func budgetLocalized(_ key: String) -> String {
-        switch (key, store.language) {
-        case ("budgets", .chinese): "预算"
-        case ("budget_subtitle", .chinese): "为日/周 Token 和费用设置软阈值，超出时菜单栏提示。"
-        case ("daily_token_budget", .chinese): "每日 Token 预算"
-        case ("weekly_token_budget", .chinese): "每周 Token 预算"
-        case ("daily_cost_budget", .chinese): "每日费用预算"
-        case ("weekly_cost_budget", .chinese): "每周费用预算"
-        case ("daily_token_budget_subtitle", .chinese): "0 表示关闭每日 Token 提醒。"
-        case ("weekly_token_budget_subtitle", .chinese): "0 表示关闭每周 Token 提醒。"
-        case ("daily_cost_budget_subtitle", .chinese): "0 表示关闭每日费用提醒。"
-        case ("weekly_cost_budget_subtitle", .chinese): "0 表示关闭每周费用提醒。"
-        case ("budgets", _): "Budgets"
-        case ("budget_subtitle", _): "Set soft daily and weekly token/cost thresholds; AgentBar marks the menu bar when they are high."
-        case ("daily_token_budget", _): "Daily token budget"
-        case ("weekly_token_budget", _): "Weekly token budget"
-        case ("daily_cost_budget", _): "Daily cost budget"
-        case ("weekly_cost_budget", _): "Weekly cost budget"
-        case ("daily_token_budget_subtitle", _): "Set 0 to disable daily token alerts."
-        case ("weekly_token_budget_subtitle", _): "Set 0 to disable weekly token alerts."
-        case ("daily_cost_budget_subtitle", _): "Set 0 to disable daily cost alerts."
-        case ("weekly_cost_budget_subtitle", _): "Set 0 to disable weekly cost alerts."
-        default: key
-        }
+        L.text(key, store.language)
     }
 
     private func dataSourceLocalized(_ key: String) -> String {
-        switch (key, store.language) {
-        case ("data_source_health", .chinese): "数据源健康"
-        case ("data_source_health", _): "Data source health"
-        default: key
-        }
+        L.text(key, store.language)
     }
 
     private func usageLocalized(_ key: String) -> String {
-        switch (key, store.language) {
-        case ("top_usage", .chinese): "高消耗定位"
-        case ("session_drilldown", .chinese): "会话明细"
-        case ("top_usage", _): "Top usage"
-        case ("session_drilldown", _): "Session drilldown"
-        default: key
-        }
+        L.text(key, store.language)
     }
 
     private func yearActivityLocalized(_ key: String) -> String {
-        switch (key, store.language) {
-        case ("year_activity", .chinese): "年度活动"
-        case ("year_activity", _): "Year activity"
-        default: key
-        }
+        L.text(key, store.language)
     }
 
     private func healthLocalized(_ key: String) -> String {
-        switch (key, store.language) {
-        case ("account_health", .chinese): "账号健康"
-        case ("account_health_subtitle", .chinese): "集中处理重新登录、数据源异常和无效账号。"
-        case ("account_health", _): "Account health"
-        case ("account_health_subtitle", _): "Handle relogin, source issues, and stale accounts in one place."
-        default: key
-        }
+        L.text(key, store.language)
     }
 
     private func quotaCapacityLocalized(_ key: String) -> String {
-        switch (key, store.language) {
-        case ("quota_capacity_history", .chinese): "额度容量估算"
-        case ("quota_capacity_frequency", .chinese): "额度容量采样频率"
-        case ("quota_capacity_frequency_subtitle", .chinese): "按此间隔记录 5H/本周额度推算历史。"
-        case ("quota_capacity_history_tooltip", .chinese): "根据最近采样估算 5H 和本周额度窗口的总 Token 容量，用来观察容量变化趋势并判断当前使用节奏。"
-        case ("quota_capacity_history", _): "Quota capacity estimate"
-        case ("quota_capacity_frequency", _): "Quota capacity sampling"
-        case ("quota_capacity_frequency_subtitle", _): "Record estimated 5H and weekly capacity history on this cadence."
-        case ("quota_capacity_history_tooltip", _): "Estimates total token capacity for the 5H and weekly quota windows from recent samples, so you can track capacity trends and judge usage pace."
-        default: key
-        }
+        L.text(key, store.language)
     }
 
     private var currentLimitAccounts: [UsageAccount] {
@@ -1249,51 +1197,7 @@ private struct ResetSpendAdvice {
     }
 
     private static func localized(_ key: String, _ language: AppLanguage) -> String {
-        switch (key, language) {
-        case ("use_it_or_lose_it", .chinese): "用掉，否则失效"
-        case ("expires_today_message", .chinese): "有一张储备重置今天过期。如有重要任务排队，建议过期前使用。"
-        case ("expiry_warning", .chinese): "过期提醒"
-        case ("waiting_on_meters", .chinese): "等待额度数据"
-        case ("waiting_on_meters_message", .chinese): "已看到重置储备，但 Codex 用量窗口还没加载。"
-        case ("refresh_after_sign_in", .chinese): "Codex 登录后刷新"
-        case ("no_reset_cushion", .chinese): "没有重置缓冲"
-        case ("no_reset_cushion_message", .chinese): "当前没有可用储备重置，请留意本周额度。"
-        case ("let_5h_refill", .chinese): "等 5 小时额度恢复"
-        case ("let_5h_refill_message", .chinese): "本周余量还可以，短窗口也快恢复，先保留重置。"
-        case ("deadline_call", .chinese): "按截止期限判断"
-        case ("deadline_call_message", .chinese): "短窗口紧张但本周余量充足；只有真实工作被挡住时才用重置。"
-        case ("five_hour_nearly_empty", .chinese): "5 小时额度将尽"
-        case ("go_burn_tokens", .chinese): "可以消耗一些额度"
-        case ("go_burn_tokens_message", .chinese): "你有储备重置，本周额度偏低，距离刷新还有几天。"
-        case ("green_light_with_brakes", .chinese): "可以用，但别浪费"
-        case ("green_light_with_brakes_message", .chinese): "如果 Codex 阻塞真实工作，使用重置是合理的；不要只为清空仪表而消耗。"
-        case ("hold_that_reset", .chinese): "保留这次重置"
-        case ("hold_that_reset_message", .chinese): "本周余量健康，下次刷新也比较近。"
-        case ("cruise_mode", .chinese): "正常使用"
-        case ("cruise_mode_message", .chinese): "继续工作。大批量运行前再检查一次。"
-        case ("use_it_or_lose_it", _): "Use it or lose it"
-        case ("expires_today_message", _): "A banked reset expires today. If useful work is queued, spend it before it disappears."
-        case ("expiry_warning", _): "Expiry warning"
-        case ("waiting_on_meters", _): "Waiting on meters"
-        case ("waiting_on_meters_message", _): "Reset stash is visible, but Codex usage windows are not loaded yet."
-        case ("refresh_after_sign_in", _): "Refresh after Codex signs in"
-        case ("no_reset_cushion", _): "No reset cushion"
-        case ("no_reset_cushion_message", _): "No banked reset is available, so keep an eye on the weekly meter."
-        case ("let_5h_refill", _): "Let the 5H tank refill"
-        case ("let_5h_refill_message", _): "Weekly room is still decent and the short window is close. Save the reset."
-        case ("deadline_call", _): "Deadline call"
-        case ("deadline_call_message", _): "The short window is tight but weekly runway is healthy. Spend a reset only if real work is blocked."
-        case ("five_hour_nearly_empty", _): "5H nearly empty"
-        case ("go_burn_tokens", _): "Go burn some tokens"
-        case ("go_burn_tokens_message", _): "You have resets banked, weekly room is thin, and refresh is days away."
-        case ("green_light_with_brakes", _): "Green light, with brakes"
-        case ("green_light_with_brakes_message", _): "If Codex blocks real work, spending a reset makes sense. Do not burn it just to tidy the meter."
-        case ("hold_that_reset", _): "Hold that reset"
-        case ("hold_that_reset_message", _): "Weekly room is healthy and the next refresh is close."
-        case ("cruise_mode", _): "Cruise mode"
-        case ("cruise_mode_message", _): "Keep working. Re-check before a big run."
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -2213,19 +2117,7 @@ private struct CurrentLimitSummaryStrip: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("most_constrained", .chinese): "最紧张"
-        case ("lowest_5h", .chinese): "最低 5 小时"
-        case ("lowest_weekly", .chinese): "最低本周"
-        case ("resets", .chinese): "重置次数"
-        case ("accounts", .chinese): "账号"
-        case ("most_constrained", _): "Most constrained"
-        case ("lowest_5h", _): "Lowest 5H"
-        case ("lowest_weekly", _): "Lowest weekly"
-        case ("resets", _): "Resets"
-        case ("accounts", _): "Accounts"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -2373,23 +2265,7 @@ private struct QuotaPressurePanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("quota_pressure", .chinese): "额度压力"
-        case ("view_details", .chinese): "查看详情"
-        case ("best_account", .chinese): "推荐账号"
-        case ("five_hour_exhausts", .chinese): "预计 5 小时额度耗尽于"
-        case ("five_hour_healthy", .chinese): "5 小时额度暂无风险"
-        case ("rotation_ready", .chinese): "自动轮换会触发"
-        case ("rotation_standby", .chinese): "自动轮换待命"
-        case ("quota_pressure", _): "Quota pressure"
-        case ("view_details", _): "View details"
-        case ("best_account", _): "Best account"
-        case ("five_hour_exhausts", _): "5H may exhaust"
-        case ("five_hour_healthy", _): "5H quota is healthy"
-        case ("rotation_ready", _): "rotation will trigger"
-        case ("rotation_standby", _): "rotation on standby"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -2445,25 +2321,7 @@ private struct QuotaPressureDetailsPopover: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("quota_details", .chinese): "额度详情"
-        case ("active_account", .chinese): "当前账号"
-        case ("recommended_account", .chinese): "推荐账号"
-        case ("weekly", .chinese): "本周"
-        case ("rotation", .chinese): "自动轮换"
-        case ("will_trigger", .chinese): "会触发"
-        case ("standby", .chinese): "待命"
-        case ("not_projected", .chinese): "暂无预计耗尽时间"
-        case ("quota_details", _): "Quota details"
-        case ("active_account", _): "Active account"
-        case ("recommended_account", _): "Recommended"
-        case ("weekly", _): "Weekly"
-        case ("rotation", _): "Rotation"
-        case ("will_trigger", _): "Will trigger"
-        case ("standby", _): "Standby"
-        case ("not_projected", _): "No exhaustion estimate"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -2519,13 +2377,7 @@ private struct QuotaETAPanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("quota_eta", .chinese): "额度 ETA"
-        case ("now", .chinese): "现在"
-        case ("quota_eta", _): "Quota ETA"
-        case ("now", _): "now"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -2578,15 +2430,7 @@ private struct QuotaCapacityHistoryPanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("weekly", .chinese): "本周"
-        case ("samples", .chinese): "样本"
-        case ("waiting", .chinese): "等待至少两次同一额度窗口内的采样和 token 消耗后生成估算。"
-        case ("weekly", _): "Weekly"
-        case ("samples", _): "Samples"
-        case ("waiting", _): "Waiting for two samples in the same quota window with token usage."
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -2781,13 +2625,7 @@ private struct QuotaCapacityHoverCallout: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("weekly", .chinese): "本周"
-        case ("sample_usage", .chinese): "样本消耗"
-        case ("weekly", _): "Weekly"
-        case ("sample_usage", _): "Sample usage"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -2834,11 +2672,7 @@ private struct RapidUsageAlertPanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("rapid_burn", .chinese): "快速消耗提醒"
-        case ("rapid_burn", _): "Rapid usage burn"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -2928,19 +2762,7 @@ private struct TopUsagePanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("sessions", .chinese): "会话"
-        case ("projects", .chinese): "项目"
-        case ("days", .chinese): "日期"
-        case ("models", .chinese): "模型"
-        case ("latest", .chinese): "最新"
-        case ("sessions", _): "Sessions"
-        case ("projects", _): "Projects"
-        case ("days", _): "Days"
-        case ("models", _): "Models"
-        case ("latest", _): "Latest"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -3007,15 +2829,7 @@ private struct SessionDrilldownPanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("select_session", .chinese): "选择一个高消耗会话查看模型分布。"
-        case ("unknown_project", .chinese): "未知项目"
-        case ("latest", .chinese): "最新"
-        case ("select_session", _): "Select a top session to inspect model usage."
-        case ("unknown_project", _): "Unknown project"
-        case ("latest", _): "Latest"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -3114,17 +2928,7 @@ private struct AccountHealthCenterPanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("healthy", .chinese): "账号和数据源暂无需要处理的问题。"
-        case ("login", .chinese): "登录"
-        case ("remove", .chinese): "删除账号"
-        case ("refresh", .chinese): "刷新"
-        case ("healthy", _): "No account or source issue needs action."
-        case ("login", _): "Login"
-        case ("remove", _): "Remove account"
-        case ("refresh", _): "Refresh"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -3187,11 +2991,7 @@ private struct UsageAnomalyPanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("usage_anomalies", .chinese): "用量异常"
-        case ("usage_anomalies", _): "Usage anomalies"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -3209,13 +3009,7 @@ private struct BudgetStatusPanel: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("today", .chinese): "今日"
-        case ("week", .chinese): "本周"
-        case ("today", _): "Today"
-        case ("week", _): "Week"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -3310,11 +3104,9 @@ private struct DataSourceHealthPanel: View {
         case (.live, .chinese): "正常"
         case (.unavailable, .chinese): "不可用"
         case (.needsAuthorization, .chinese): "需授权"
-        case (.error, .chinese): "错误"
         case (.live, _): "Live"
         case (.unavailable, _): "Unavailable"
         case (.needsAuthorization, _): "Needs auth"
-        case (.error, _): "Error"
         }
     }
 
@@ -3323,20 +3115,11 @@ private struct DataSourceHealthPanel: View {
         case .live: theme.primary
         case .unavailable: .secondary
         case .needsAuthorization: .orange
-        case .error: .red
         }
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("no_sources", .chinese): "暂无数据源状态"
-        case ("live", .chinese): "正常"
-        case ("issues", .chinese): "问题"
-        case ("no_sources", _): "No source status"
-        case ("live", _): "Live"
-        case ("issues", _): "Issues"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 
@@ -3640,13 +3423,7 @@ private struct SidebarAccountPopover: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, language) {
-        case ("yes", .chinese): "是"
-        case ("no", .chinese): "否"
-        case ("yes", _): "Yes"
-        case ("no", _): "No"
-        default: key
-        }
+        L.text(key, language)
     }
 }
 

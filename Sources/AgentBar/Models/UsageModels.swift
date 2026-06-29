@@ -287,34 +287,6 @@ extension Array where Element == UsageAccount {
             return UsageAccountDisplayGroup(id: key, title: first.displayName, accounts: accounts)
         }
     }
-
-    func aggregatedTotalsForDisplay(language: AppLanguage) -> [UsageAccount] {
-        Dictionary(grouping: self, by: \.service)
-            .compactMap { service, accounts in
-                guard let first = accounts.first else { return nil }
-                let sortedAccounts = accounts.sorted(using: .activeFirst)
-                let costs = sortedAccounts.compactMap(\.estimatedCostUSD)
-
-                return UsageAccount(
-                    id: "__agentbar_aggregate__\(service.rawValue)",
-                    service: service,
-                    displayName: service == .codex ? L.text("all_codex_accounts", language) : L.text("all_claude_accounts", language),
-                    username: nil,
-                    maskedEmail: nil,
-                    plan: nil,
-                    sourceDescription: "\(accounts.count) \(L.text("accounts_loaded", language))",
-                    status: sortedAccounts.contains { $0.status == .live } ? .live : first.status,
-                    fiveHourWindow: nil,
-                    weeklyWindow: nil,
-                    resetCredits: nil,
-                    tokens: sortedAccounts.map(\.tokens).reduce(.zero, +),
-                    estimatedCostUSD: costs.isEmpty ? nil : costs.reduce(Decimal(0), +),
-                    lastUpdated: sortedAccounts.compactMap(\.lastUpdated).max(),
-                    isActive: sortedAccounts.contains(where: \.isActive)
-                )
-            }
-            .sorted(using: .activeFirst)
-    }
 }
 
 private extension UsageAccount {

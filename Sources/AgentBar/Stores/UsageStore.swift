@@ -180,8 +180,17 @@ final class UsageStore: ObservableObject {
         accounts.first(where: \.isActive) ?? accounts.first
     }
 
-    var accountUsageTotalDisplayAccounts: [UsageAccount] {
-        settings.showAggregatedAccountData ? accounts.aggregatedTotalsForDisplay(language: language) : accounts
+    var usageDataDisplayPoints: [UsagePoint] {
+        usageDataDisplayPoints(points)
+    }
+
+    func usageDataDisplayPoints(_ points: [UsagePoint]) -> [UsagePoint] {
+        guard !settings.showAggregatedAccountData,
+              let service = activeAccount?.service
+        else {
+            return points
+        }
+        return points.filter { $0.service == service }
     }
 
     var summary: UsageSummary {

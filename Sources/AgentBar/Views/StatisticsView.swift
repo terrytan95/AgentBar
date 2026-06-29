@@ -1,6 +1,12 @@
 import AppKit
 import SwiftUI
 
+private let settingsControlLeadingInset: CGFloat = 14
+private let settingsControlTrailingInset: CGFloat = 14
+private let settingsControlWidePickerWidth: CGFloat = 180
+private let settingsControlMediumPickerWidth: CGFloat = 140
+private let settingsControlCompactPickerWidth: CGFloat = 120
+
 struct StatisticsView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject private var settings: SettingsStore
@@ -269,8 +275,11 @@ struct StatisticsView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .frame(width: 14)
                 } else if service == .codex {
-                    OpenAILogoMark(size: 12)
-                        .frame(width: 14)
+                    Image(nsImage: AppLogo.image())
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 12, height: 12)
+                        .accessibilityHidden(true)
                 } else {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(tint ?? Color.secondary)
@@ -580,7 +589,7 @@ struct StatisticsView: View {
                         }
                     }
                     .labelsHidden()
-                    .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                    .settingsControl(width: settingsControlWidePickerWidth)
                 }
                 SettingsRow(title: L.text("account_data_display", store.language), subtitle: L.text("account_data_display_subtitle", store.language)) {
                     Toggle("", isOn: $settings.showAggregatedAccountData).labelsHidden()
@@ -594,7 +603,7 @@ struct StatisticsView: View {
                         isEnabled: settings.autoCodexAccountRotationEnabled,
                         language: store.language
                     )
-                    .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                    .settingsControl(width: settingsControlWidePickerWidth)
                 }
             }
 
@@ -619,26 +628,26 @@ struct StatisticsView: View {
                         Text(L.text("codex_only", store.language)).tag(MenuBarDisplayMode.codexRemaining)
                     }
                     .labelsHidden()
-                    .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                    .settingsControl(width: settingsControlWidePickerWidth)
                 }
             }
 
             SettingsGroup(title: budgetLocalized("budgets"), subtitle: budgetLocalized("budget_subtitle")) {
                 SettingsRow(title: budgetLocalized("daily_token_budget"), subtitle: budgetLocalized("daily_token_budget_subtitle")) {
                     BudgetIntegerField(value: $settings.dailyTokenBudget, language: store.language)
-                        .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                        .settingsControl(width: settingsControlMediumPickerWidth)
                 }
                 SettingsRow(title: budgetLocalized("weekly_token_budget"), subtitle: budgetLocalized("weekly_token_budget_subtitle")) {
                     BudgetIntegerField(value: $settings.weeklyTokenBudget, language: store.language)
-                        .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                        .settingsControl(width: settingsControlMediumPickerWidth)
                 }
                 SettingsRow(title: budgetLocalized("daily_cost_budget"), subtitle: budgetLocalized("daily_cost_budget_subtitle")) {
                     BudgetCostField(value: $settings.dailyCostBudgetUSD, language: store.language)
-                        .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                        .settingsControl(width: settingsControlMediumPickerWidth)
                 }
                 SettingsRow(title: budgetLocalized("weekly_cost_budget"), subtitle: budgetLocalized("weekly_cost_budget_subtitle")) {
                     BudgetCostField(value: $settings.weeklyCostBudgetUSD, language: store.language)
-                        .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                        .settingsControl(width: settingsControlMediumPickerWidth)
                 }
             }
 
@@ -651,7 +660,7 @@ struct StatisticsView: View {
                         Text("10m").tag(TimeInterval(600))
                     }
                     .labelsHidden()
-                    .settingsControl(width: SettingsControlLayout.compactPickerWidth)
+                    .settingsControl(width: settingsControlCompactPickerWidth)
                 }
                 SettingsRow(title: quotaCapacityLocalized("quota_capacity_frequency"), subtitle: quotaCapacityLocalized("quota_capacity_frequency_subtitle")) {
                     Picker("", selection: $settings.quotaCapacityHistoryInterval) {
@@ -662,7 +671,7 @@ struct StatisticsView: View {
                         Text("6h").tag(TimeInterval(21_600))
                     }
                     .labelsHidden()
-                    .settingsControl(width: SettingsControlLayout.compactPickerWidth)
+                    .settingsControl(width: settingsControlCompactPickerWidth)
                 }
                 SettingsRow(title: L.text("quota_reset_notifications", store.language), subtitle: L.text("quota_reset_notifications_subtitle", store.language)) {
                     Toggle("", isOn: $settings.quotaResetNotificationsEnabled).labelsHidden()
@@ -680,7 +689,7 @@ struct StatisticsView: View {
                         }
                     }
                     .labelsHidden()
-                    .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                    .settingsControl(width: settingsControlMediumPickerWidth)
                 }
                 SettingsRow(title: L.text("dark_theme", store.language), subtitle: L.text("dark_theme_subtitle", store.language)) {
                     Toggle("", isOn: $settings.useDarkAppearance)
@@ -693,7 +702,7 @@ struct StatisticsView: View {
                         }
                     }
                     .labelsHidden()
-                    .settingsControl(width: SettingsControlLayout.mediumPickerWidth)
+                    .settingsControl(width: settingsControlMediumPickerWidth)
                 }
             }
 
@@ -714,7 +723,7 @@ struct StatisticsView: View {
                                     .controlSize(.small)
                             }
                         }
-                        .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                        .settingsControl(width: settingsControlWidePickerWidth)
                     }
                 }
                 if updates.canInstallDownloadedUpdate {
@@ -723,7 +732,7 @@ struct StatisticsView: View {
                             updates.installDownloadedUpdate()
                         }
                         .pointingHandCursor()
-                        .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                        .settingsControl(width: settingsControlWidePickerWidth)
                     }
                 }
             }
@@ -1463,10 +1472,6 @@ private struct ResizablePanel<Content: View>: View {
         liveHeight ?? height
     }
 
-    private var bounds: PanelResizeBounds {
-        PanelResizeBounds(minHeight: Double(minHeight), maxHeight: Double(maxHeight))
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
@@ -1500,20 +1505,14 @@ private struct ResizablePanel<Content: View>: View {
                         .onChanged { value in
                             let startHeight = dragStartHeight ?? height
                             dragStartHeight = startHeight
-                            let nextHeight = CGFloat(bounds.height(
-                                startHeight: Double(startHeight),
-                                translation: Double(value.location.y - value.startLocation.y)
-                            ))
+                            let nextHeight = clampedHeight(startHeight: startHeight, translation: value.location.y - value.startLocation.y)
                             if abs((liveHeight ?? height) - nextHeight) >= 0.5 {
                                 liveHeight = nextHeight
                             }
                         }
                         .onEnded { value in
                             let startHeight = dragStartHeight ?? height
-                            let nextHeight = CGFloat(bounds.height(
-                                startHeight: Double(startHeight),
-                                translation: Double(value.location.y - value.startLocation.y)
-                            ))
+                            let nextHeight = clampedHeight(startHeight: startHeight, translation: value.location.y - value.startLocation.y)
                             liveHeight = nil
                             dragStartHeight = nil
                             height = nextHeight
@@ -1524,6 +1523,10 @@ private struct ResizablePanel<Content: View>: View {
             Spacer()
         }
         .padding(.top, 1)
+    }
+
+    private func clampedHeight(startHeight: CGFloat, translation: CGFloat) -> CGFloat {
+        min(max(startHeight + translation, minHeight), maxHeight)
     }
 }
 
@@ -1629,7 +1632,7 @@ private struct DashboardStackedBars: View {
                     }
 
                     if let hoveredBar, let hoverLocation {
-                        let tooltipPosition = ChartTooltipPlacement.position(cursor: hoverLocation, calloutSize: calloutSize, plotSize: hoverPlotSize)
+                        let tooltipPosition = chartTooltipPosition(cursor: hoverLocation, calloutSize: calloutSize, plotSize: hoverPlotSize)
                         ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
                             .frame(width: calloutSize.width, height: calloutSize.height)
                             .position(x: tooltipPosition.x + leftAxisWidth, y: tooltipPosition.y + 4)
@@ -1695,7 +1698,7 @@ private struct DashboardStackedBars: View {
     }
 
     private func barID(at x: CGFloat, plotWidth: CGFloat) -> Date? {
-        guard let index = ChartTooltipPlacement.barIndex(at: x, plotWidth: plotWidth, barCount: bars.count) else { return nil }
+        guard let index = chartSlotIndex(at: x, plotWidth: plotWidth, count: bars.count) else { return nil }
         guard bars.indices.contains(index) else { return nil }
         return bars[index].id
     }
@@ -1985,12 +1988,37 @@ private struct PlotHoverTrackingView: NSViewRepresentable {
         }
 
         private func swiftUILocation(for event: NSEvent) -> CGPoint {
-            ChartTooltipPlacement.swiftUILocation(
+            swiftUIChartLocation(
                 fromAppKit: convert(event.locationInWindow, from: nil),
                 plotHeight: bounds.height
             )
         }
     }
+}
+
+private func swiftUIChartLocation(fromAppKit location: CGPoint, plotHeight: CGFloat) -> CGPoint {
+    CGPoint(x: location.x, y: plotHeight - location.y)
+}
+
+private func chartTooltipPosition(cursor: CGPoint, calloutSize: CGSize, plotSize: CGSize) -> CGPoint {
+    let offset = CGSize(width: 16, height: 8)
+    let halfWidth = calloutSize.width / 2
+    let halfHeight = calloutSize.height / 2
+    let proposedX = cursor.x + calloutSize.width + offset.width <= plotSize.width
+        ? cursor.x + halfWidth + offset.width
+        : cursor.x - halfWidth - offset.width
+    let proposedY = cursor.y + calloutSize.height + offset.height <= plotSize.height
+        ? cursor.y + halfHeight + offset.height
+        : cursor.y - halfHeight - offset.height
+    return CGPoint(
+        x: min(max(halfWidth, proposedX), max(halfWidth, plotSize.width - halfWidth)),
+        y: min(max(halfHeight, proposedY), max(halfHeight, plotSize.height - halfHeight))
+    )
+}
+
+private func chartSlotIndex(at x: CGFloat, plotWidth: CGFloat, count: Int) -> Int? {
+    guard count > 0, plotWidth > 0, x >= 0, x < plotWidth else { return nil }
+    return min(Int(x / (plotWidth / CGFloat(count))), count - 1)
 }
 
 private struct ProgressRing<Center: View>: View {
@@ -2506,7 +2534,7 @@ private struct QuotaCapacityLineChart: View {
                     }
                     .overlay {
                         if let hoveredSample, let hoverLocation {
-                            let tooltipPosition = ChartTooltipPlacement.position(
+                            let tooltipPosition = chartTooltipPosition(
                                 cursor: hoverLocation,
                                 calloutSize: calloutSize,
                                 plotSize: hoverPlotSize
@@ -2537,7 +2565,7 @@ private struct QuotaCapacityLineChart: View {
     }
 
     private func sampleID(at x: CGFloat, plotWidth: CGFloat) -> Date? {
-        guard let index = ChartTooltipPlacement.barIndex(at: x, plotWidth: plotWidth, barCount: samples.count) else { return nil }
+        guard let index = chartSlotIndex(at: x, plotWidth: plotWidth, count: samples.count) else { return nil }
         guard samples.indices.contains(index) else { return nil }
         return samples[index].id
     }
@@ -3856,8 +3884,8 @@ private struct SettingsRow<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, SettingsControlLayout.leadingInset)
-        .padding(.trailing, SettingsControlLayout.trailingInset)
+        .padding(.leading, settingsControlLeadingInset)
+        .padding(.trailing, settingsControlTrailingInset)
         .padding(.vertical, 12)
     }
 }

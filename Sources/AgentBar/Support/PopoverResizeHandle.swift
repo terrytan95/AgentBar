@@ -3,7 +3,8 @@ import SwiftUI
 
 struct PopoverResizeHandle: NSViewRepresentable {
     var startHeight: CGFloat
-    var resize: PopoverResizeDrag
+    var minHeight: CGFloat = PopoverLayout.minimumHeight
+    var maxHeight: CGFloat = PopoverLayout.maximumHeight
     var onHeightChange: (CGFloat, Bool) -> Void
 
     func makeNSView(context: Context) -> PopoverResizeHandleView {
@@ -14,19 +15,18 @@ struct PopoverResizeHandle: NSViewRepresentable {
 
     func updateNSView(_ nsView: PopoverResizeHandleView, context: Context) {
         nsView.startHeight = startHeight
-        nsView.resize = resize
+        nsView.minHeight = minHeight
+        nsView.maxHeight = maxHeight
         nsView.onHeightChange = onHeightChange
     }
 }
 
 final class PopoverResizeHandleView: NSView {
+    private static let minimumIntermediateDelta: CGFloat = 2
+
     var startHeight: CGFloat = PopoverLayout.defaultHeight
-    var resize = PopoverResizeDrag(
-        bounds: PanelResizeBounds(
-            minHeight: Double(PopoverLayout.minimumHeight),
-            maxHeight: Double(PopoverLayout.maximumHeight)
-        )
-    )
+    var minHeight: CGFloat = PopoverLayout.minimumHeight
+    var maxHeight: CGFloat = PopoverLayout.maximumHeight
     var onHeightChange: ((CGFloat, Bool) -> Void)?
 
     private var dragStartHeight: CGFloat?
@@ -57,17 +57,12 @@ final class PopoverResizeHandleView: NSView {
 
     private func updateHeight(isFinal: Bool) {
         guard let dragStartHeight, let dragStartScreenY else { return }
-        let nextHeight = resize.height(
-            startHeight: Double(dragStartHeight),
-            startScreenY: Double(dragStartScreenY),
-            currentScreenY: Double(NSEvent.mouseLocation.y)
-        )
-        guard PopoverResizeDrag.shouldEmit(
-            previousHeight: lastEmittedHeight.map(Double.init),
-            nextHeight: nextHeight,
-            isFinal: isFinal
-        ) else { return }
-        lastEmittedHeight = CGFloat(nextHeight)
-        onHeightChange?(CGFloat(nextHeight), isFinal)
+        let translation = dragStartScreenY - NSEvent.mouseLocation.y
+        let nextHeight = min(max(dragStartHeight + translation, minHeight), maxHeight)
+        guard isFinal ||
+            lastEmittedHeight.map({ abs($0 - nextHeight) >= Self.minimumIntermediateDelta }) ?? true
+        else { return }
+        lastEmittedHeight = nextHeight
+        onHeightChange?(nextHeight, isFinal)
     }
 }

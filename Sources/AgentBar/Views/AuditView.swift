@@ -110,7 +110,7 @@ struct AuditView: View {
     }
 
     private var statusPill: some View {
-        Text("\(rangePoints.count) \(localized("calls")) · SQLite")
+        Text("\(rangePoints.count) \(localized("calls")) · JSONL")
             .font(.system(size: 12, weight: .bold))
             .foregroundStyle(theme.primary)
             .padding(.horizontal, 10)
@@ -177,13 +177,6 @@ struct AuditView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 220)
                 Spacer()
-                Button {
-                    copyDashboardLink()
-                } label: {
-                    Label(localized("copy_link"), systemImage: "link")
-                }
-                .buttonStyle(.bordered)
-                .pointingHandCursor()
                 Button {
                     export(format: .csv)
                 } label: {
@@ -510,12 +503,6 @@ struct AuditView: View {
         }
     }
 
-    private func copyDashboardLink() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("agentbar://usage/audit", forType: .string)
-        exportStatus = localized("link_copied")
-    }
-
     private func sourceLineText(_ point: UsagePoint) -> String {
         guard let sourceFile = point.sourceFile else { return "-" }
         if let sourceLine = point.sourceLine {
@@ -550,89 +537,7 @@ struct AuditView: View {
     }
 
     private func localized(_ key: String) -> String {
-        switch (key, store.language) {
-        case ("title", .chinese): "Codex 用量审计"
-        case ("subtitle", .chinese): "读取本机 JSONL，索引聚合用量到 SQLite，并定位 token 与额度去向。"
-        case ("visible_calls", .chinese): "可见调用"
-        case ("total_tokens", .chinese): "总 Token"
-        case ("cached_input", .chinese): "缓存输入"
-        case ("uncached_input", .chinese): "未缓存输入"
-        case ("reasoning_output", .chinese): "推理输出"
-        case ("estimated_cost", .chinese): "估算成本"
-        case ("model_calls", .chinese): "模型调用"
-        case ("threads", .chinese): "线程"
-        case ("calls", .chinese): "调用"
-        case ("calls_caption", .chinese): "显示当前筛选范围内的模型调用。点击任意行查看来源和 token 构成。"
-        case ("threads_caption", .chinese): "按线程聚合调用。点击线程展开其调用。"
-        case ("copy_link", .chinese): "复制链接"
-        case ("time", .chinese): "时间"
-        case ("thread", .chinese): "线程"
-        case ("duration", .chinese): "时长"
-        case ("initiated", .chinese): "发起"
-        case ("model", .chinese): "模型"
-        case ("effort", .chinese): "Effort"
-        case ("tokens", .chinese): "Token"
-        case ("cached", .chinese): "缓存"
-        case ("uncached", .chinese): "未缓存"
-        case ("output", .chinese): "输出"
-        case ("reasoning", .chinese): "推理"
-        case ("unknown_thread", .chinese): "未知线程"
-        case ("call_investigator", .chinese): "调用详情"
-        case ("show_source", .chinese): "显示来源"
-        case ("last_call_input", .chinese): "本次输入"
-        case ("exact_from_callback", .chinese): "来自 token callback"
-        case ("fresh_context", .chinese): "新上下文"
-        case ("assistant_output", .chinese): "助手输出"
-        case ("configured_price", .chinese): "按当前价格表估算"
-        case ("source_line", .chinese): "来源行"
-        case ("source_file_line", .chinese): "源文件和行号"
-        case ("privacy_note", .chinese): "SQLite/导出保存聚合字段和派生线程标题，不保存完整 prompt、回复或工具输出。"
-        case ("exported", .chinese): "已导出"
-        case ("export_failed", .chinese): "导出失败："
-        case ("link_copied", .chinese): "链接已复制。"
-        case ("page", .chinese): "页"
-        case ("title", _): "Codex Usage Audit"
-        case ("subtitle", _): "Indexes local JSONL aggregate usage into SQLite so token and credit spend is traceable."
-        case ("visible_calls", _): "Visible calls"
-        case ("total_tokens", _): "Total tokens"
-        case ("cached_input", _): "Cached input"
-        case ("uncached_input", _): "Uncached input"
-        case ("reasoning_output", _): "Reasoning output"
-        case ("estimated_cost", _): "Estimated cost"
-        case ("model_calls", _): "Model calls"
-        case ("threads", _): "Threads"
-        case ("calls", _): "calls"
-        case ("calls_caption", _): "Showing filtered model calls. Click any row for source and token details."
-        case ("threads_caption", _): "Grouped by thread. Click a thread to expand its calls."
-        case ("copy_link", _): "Copy link"
-        case ("time", _): "Time"
-        case ("thread", _): "Thread"
-        case ("duration", _): "Duration"
-        case ("initiated", _): "Initiated"
-        case ("model", _): "Model"
-        case ("effort", _): "Effort"
-        case ("tokens", _): "Tokens"
-        case ("cached", _): "Cached"
-        case ("uncached", _): "Uncached"
-        case ("output", _): "Output"
-        case ("reasoning", _): "Reasoning"
-        case ("unknown_thread", _): "Unknown thread"
-        case ("call_investigator", _): "Call investigator"
-        case ("show_source", _): "Show source"
-        case ("last_call_input", _): "Last call input"
-        case ("exact_from_callback", _): "Exact from callback"
-        case ("fresh_context", _): "Fresh context"
-        case ("assistant_output", _): "Assistant output"
-        case ("configured_price", _): "Configured price"
-        case ("source_line", _): "Source line"
-        case ("source_file_line", _): "Source file and line"
-        case ("privacy_note", _): "SQLite and exports store aggregate fields plus derived thread labels, not full prompts, replies, or tool output."
-        case ("exported", _): "Exported"
-        case ("export_failed", _): "Export failed:"
-        case ("link_copied", _): "Link copied."
-        case ("page", _): "Page"
-        default: key
-        }
+        L.text(key, store.language)
     }
 }
 

@@ -153,13 +153,13 @@ struct StatisticsView: View {
                     .fill(Color.green)
                     .frame(width: 10, height: 10)
                     .shadow(color: .green.opacity(0.36), radius: 5)
-                Text("数据每分钟自动更新")
+                Text(L.text("auto_update_status", store.language))
                 Spacer()
                 Text(footerDateTimeText(timeline.date))
                     .monospacedDigit()
                 Text(timeZoneText)
                 Image(systemName: "shield.checkered")
-                Text("数据安全保护中")
+                Text(L.text("secure_status", store.language))
             }
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
@@ -367,7 +367,7 @@ struct StatisticsView: View {
                         title: L.text("total_tokens", store.language),
                         value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language),
                         delta: DisplayFormatters.changePercentString(periodChange.tokenPercent),
-                        subtitle: "较昨日",
+                        subtitle: L.text("compared_to_yesterday", store.language),
                         systemImage: "cylinder.split.1x2.fill",
                         accent: settings.themeColor.primary,
                         theme: settings.themeColor
@@ -376,16 +376,16 @@ struct StatisticsView: View {
                         title: L.text("total_cost", store.language),
                         value: costText(summary.estimatedCostUSD),
                         delta: DisplayFormatters.changePercentString(periodChange.costPercent),
-                        subtitle: "较昨日",
+                        subtitle: L.text("compared_to_yesterday", store.language),
                         systemImage: "dollarsign",
                         accent: .green,
                         theme: settings.themeColor
                     )
                     DashboardKPI(
-                        title: "OpenAI 概览",
+                        title: L.text("openai_overview", store.language),
                         value: serviceCostText(.codex),
                         delta: serviceShareText(.codex),
-                        subtitle: "占总花费比例",
+                        subtitle: L.text("share_of_total_cost", store.language),
                         systemImage: "sparkles",
                         marker: settings.themeColor.tertiary,
                         accent: settings.themeColor.tertiary,
@@ -465,8 +465,8 @@ struct StatisticsView: View {
             }
 
             HStack(spacing: 14) {
-                LegendItem(title: "Token（万）", color: settings.themeColor.primary)
-                LegendItem(title: "花费（美元）", color: .orange)
+                LegendItem(title: L.text("tokens_ten_thousands", store.language), color: settings.themeColor.primary)
+                LegendItem(title: L.text("cost_usd", store.language), color: .orange)
                 Spacer()
             }
 
@@ -826,7 +826,7 @@ struct StatisticsView: View {
                     Button {
                         showsServiceBreakdownPopover.toggle()
                     } label: {
-                        Label("查看全部服务", systemImage: "chevron.right")
+                        Label(L.text("view_all_services", store.language), systemImage: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
                     }
                     .tactilePlainButton()
@@ -1044,7 +1044,7 @@ struct StatisticsView: View {
                 Button {
                     showsModelBreakdownPopover.toggle()
                 } label: {
-                    Label("查看全部模型", systemImage: "chevron.right")
+                    Label(L.text("view_all_models", store.language), systemImage: "chevron.right")
                         .font(.system(size: 11, weight: .bold))
                 }
                 .tactilePlainButton()

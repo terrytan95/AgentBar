@@ -22,6 +22,7 @@ final class PopoverLayoutTests: XCTestCase {
         checkChartTooltipTracksPointerAndClampsInsidePlot()
         checkChartTooltipConvertsAppKitHoverToSwiftUICoordinates()
         checkChartTooltipHitTestingUsesFullPlotWidthSlots()
+        checkAuditKpiGridHeightMatchesColumnCount()
     }
     @MainActor
     private func checkPointingHandCursorModifierIsAvailableForInteractiveViews() {
@@ -152,5 +153,12 @@ final class PopoverLayoutTests: XCTestCase {
         XCTAssertEqual(ChartTooltipPlacement.barIndex(at: 76, plotWidth: 1_800, barCount: 24), 1)
         XCTAssertNil(ChartTooltipPlacement.barIndex(at: -1, plotWidth: 1_800, barCount: 24))
         XCTAssertNil(ChartTooltipPlacement.barIndex(at: 1_800, plotWidth: 1_800, barCount: 24))
+    }
+
+    private func checkAuditKpiGridHeightMatchesColumnCount() {
+        XCTAssertEqual(AuditView.kpiGridColumns(for: 1_000), 6)
+        XCTAssertEqual(AuditView.kpiGridHeight(for: 1_000), 96)
+        XCTAssertEqual(AuditView.kpiGridColumns(for: 900), 3)
+        XCTAssertEqual(AuditView.kpiGridHeight(for: 900), 204)
     }
 }

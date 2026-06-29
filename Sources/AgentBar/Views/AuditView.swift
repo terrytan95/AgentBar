@@ -14,8 +14,12 @@ struct AuditView: View {
     @State private var exportStatus: String?
     @State private var callsPage = 0
     @State private var threadsPage = 0
+    @State private var kpiGridWidth: CGFloat = 980
 
     private let pageSize = 20
+    nonisolated private static let kpiCardCount = 6
+    nonisolated private static let kpiCardHeight: CGFloat = 96
+    nonisolated private static let kpiGridSpacing: CGFloat = 12
 
     private var rangePoints: [UsagePoint] {
         UsageAuditReporter.filteredPoints(
@@ -116,7 +120,8 @@ struct AuditView: View {
 
     private var kpiGrid: some View {
         GeometryReader { proxy in
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: proxy.size.width < 980 ? 3 : 6), spacing: 12) {
+            let width = proxy.size.width
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.kpiGridSpacing), count: Self.kpiGridColumns(for: width)), spacing: Self.kpiGridSpacing) {
                 metricCard(localized("visible_calls"), "\(rangePoints.count)")
                 metricCard(localized("total_tokens"), DisplayFormatters.compactTokenString(composition.total, language: store.language))
                 metricCard(localized("cached_input"), DisplayFormatters.compactTokenString(composition.cachedInput, language: store.language))
@@ -124,8 +129,22 @@ struct AuditView: View {
                 metricCard(localized("reasoning_output"), DisplayFormatters.compactTokenString(composition.reasoningOutput, language: store.language))
                 metricCard(localized("estimated_cost"), costText(totalCost(rangePoints)))
             }
+            .onAppear { kpiGridWidth = width }
+            .onChange(of: width) { _, width in
+                kpiGridWidth = width
+            }
         }
-        .frame(height: 104)
+        .frame(height: Self.kpiGridHeight(for: kpiGridWidth))
+    }
+
+    nonisolated static func kpiGridColumns(for width: CGFloat) -> Int {
+        width < 980 ? 3 : 6
+    }
+
+    nonisolated static func kpiGridHeight(for width: CGFloat) -> CGFloat {
+        let columns = kpiGridColumns(for: width)
+        let rows = CGFloat((kpiCardCount + columns - 1) / columns)
+        return rows * kpiCardHeight + max(0, rows - 1) * kpiGridSpacing
     }
 
     private func metricCard(_ title: String, _ value: String) -> some View {
@@ -141,7 +160,7 @@ struct AuditView: View {
             Spacer(minLength: 0)
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: Self.kpiCardHeight, alignment: .topLeading)
         .agentBarPanel(cornerRadius: 12)
     }
 

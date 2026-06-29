@@ -14,6 +14,8 @@ struct AuditView: View {
     @State private var exportStatus: String?
     @State private var callsPage = 0
     @State private var threadsPage = 0
+    @State private var sortColumn: AuditSortColumn = .time
+    @State private var sortAscending = false
     @State private var kpiGridWidth: CGFloat = 980
 
     private let pageSize = 20
@@ -32,27 +34,26 @@ struct AuditView: View {
     }
 
     private var threadRows: [AuditThreadRow] {
-        Dictionary(grouping: rangePoints) { point in
+        let rows = Dictionary(grouping: rangePoints) { point in
             point.sessionTitle ?? point.sessionID ?? "Unknown thread"
         }
         .map { title, calls in
             let sorted = calls.sorted { $0.date > $1.date }
             let totals = calls.reduce(TokenTotals.zero) { $0 + $1.tokens }
+            let durationSeconds = durationSeconds(calls: calls)
             return AuditThreadRow(
                 id: title,
                 title: title,
                 subtitle: "\(calls.count) calls · \(sorted.first?.projectName ?? "Unknown project")",
                 latest: sorted.first?.date ?? .distantPast,
-                duration: durationText(calls: calls),
+                durationSeconds: durationSeconds,
+                duration: durationText(seconds: durationSeconds),
                 tokens: totals,
                 cost: totalCost(calls),
                 calls: sorted
             )
         }
-        .sorted { lhs, rhs in
-            if lhs.tokens.total != rhs.tokens.total { return lhs.tokens.total > rhs.tokens.total }
-            return lhs.latest > rhs.latest
-        }
+        return sortedThreads(rows)
     }
 
     private var composition: TokenComposition {
@@ -60,7 +61,7 @@ struct AuditView: View {
     }
 
     private var pagedCalls: [UsagePoint] {
-        page(rangePoints, index: clampedPage(callsPage, total: rangePoints.count))
+        page(sortedCalls(rangePoints), index: clampedPage(callsPage, total: rangePoints.count))
     }
 
     private var pagedThreads: [AuditThreadRow] {
@@ -216,17 +217,17 @@ struct AuditView: View {
 
     private var tableHeader: some View {
         HStack(spacing: 8) {
-            column(localized("time"), width: 108, alignment: .leading)
-            threadColumn(localized("thread"), strong: true)
-            column(localized("duration"), width: 60)
-            column(localized("initiated"), width: 58)
-            column(localized("model"), width: 76)
-            column(localized("effort"), width: 50)
-            column(localized("tokens"), width: 68)
-            column(localized("cached"), width: 68)
-            column(localized("uncached"), width: 68)
-            column(localized("output"), width: 58)
-            column(localized("reasoning"), width: 58)
+            sortHeader(.time, localized("time"), width: 108, alignment: .leading)
+            sortThreadHeader(localized("thread"))
+            sortHeader(.duration, localized("duration"), width: 60)
+            sortHeader(.initiated, localized("initiated"), width: 58)
+            sortHeader(.model, localized("model"), width: 76)
+            sortHeader(.effort, localized("effort"), width: 50)
+            sortHeader(.tokens, localized("tokens"), width: 68)
+            sortHeader(.cached, localized("cached"), width: 68)
+            sortHeader(.uncached, localized("uncached"), width: 68)
+            sortHeader(.output, localized("output"), width: 58)
+            sortHeader(.reasoning, localized("reasoning"), width: 58)
         }
         .font(.system(size: 11, weight: .bold))
         .foregroundStyle(.secondary)
@@ -346,6 +347,46 @@ struct AuditView: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .foregroundStyle(.primary.opacity(0.9))
+    }
+
+    private func sortHeader(_ column: AuditSortColumn, _ text: String, width: CGFloat, alignment: Alignment = .trailing) -> some View {
+        Button {
+            setSort(column)
+        } label: {
+            HStack(spacing: 3) {
+                Text(text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                if sortColumn == column {
+                    Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                }
+            }
+            .frame(width: width, height: 18, alignment: alignment)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+    }
+
+    private func sortThreadHeader(_ text: String) -> some View {
+        Button {
+            setSort(.thread)
+        } label: {
+            HStack(spacing: 3) {
+                Text(text)
+                    .lineLimit(1)
+                if sortColumn == .thread {
+                    Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
     }
 
     private func callDetail(point: UsagePoint) -> some View {
@@ -484,6 +525,91 @@ struct AuditView: View {
         min(max(0, page), max(0, (total - 1) / pageSize))
     }
 
+    private func setSort(_ column: AuditSortColumn) {
+        if sortColumn == column {
+            sortAscending.toggle()
+        } else {
+            sortColumn = column
+            sortAscending = column.defaultAscending
+        }
+        callsPage = 0
+        threadsPage = 0
+    }
+
+    private func sortedCalls(_ calls: [UsagePoint]) -> [UsagePoint] {
+        if sortColumn == .time && !sortAscending { return calls }
+        return calls.sorted { lhs, rhs in
+            if let ordered = callOrder(lhs, rhs) { return ordered }
+            return lhs.date > rhs.date
+        }
+    }
+
+    private func sortedThreads(_ threads: [AuditThreadRow]) -> [AuditThreadRow] {
+        threads.sorted { lhs, rhs in
+            if let ordered = threadOrder(lhs, rhs) { return ordered }
+            return lhs.latest > rhs.latest
+        }
+    }
+
+    private func callOrder(_ lhs: UsagePoint, _ rhs: UsagePoint) -> Bool? {
+        switch sortColumn {
+        case .time:
+            ordered(lhs.date, rhs.date)
+        case .thread:
+            ordered(lhs.sessionTitle ?? lhs.sessionID ?? "", rhs.sessionTitle ?? rhs.sessionID ?? "")
+        case .duration:
+            nil
+        case .initiated:
+            ordered(lhs.initiator ?? lhs.service.rawValue, rhs.initiator ?? rhs.service.rawValue)
+        case .model:
+            ordered(lhs.model, rhs.model)
+        case .effort:
+            ordered(lhs.reasoningEffort ?? "", rhs.reasoningEffort ?? "")
+        case .tokens:
+            ordered(lhs.tokens.total, rhs.tokens.total)
+        case .cached:
+            ordered(lhs.tokens.cachedInput, rhs.tokens.cachedInput)
+        case .uncached:
+            ordered(lhs.uncachedInputTokens, rhs.uncachedInputTokens)
+        case .output:
+            ordered(lhs.tokens.output, rhs.tokens.output)
+        case .reasoning:
+            ordered(lhs.tokens.reasoningOutput, rhs.tokens.reasoningOutput)
+        }
+    }
+
+    private func threadOrder(_ lhs: AuditThreadRow, _ rhs: AuditThreadRow) -> Bool? {
+        switch sortColumn {
+        case .time:
+            ordered(lhs.latest, rhs.latest)
+        case .thread:
+            ordered(lhs.title, rhs.title)
+        case .duration:
+            ordered(lhs.durationSeconds, rhs.durationSeconds)
+        case .initiated:
+            ordered(lhs.calls.first?.initiator ?? lhs.calls.first?.service.rawValue ?? "", rhs.calls.first?.initiator ?? rhs.calls.first?.service.rawValue ?? "")
+        case .model:
+            ordered(lhs.calls.first?.model ?? "", rhs.calls.first?.model ?? "")
+        case .effort:
+            ordered(lhs.calls.first?.reasoningEffort ?? "", rhs.calls.first?.reasoningEffort ?? "")
+        case .tokens:
+            ordered(lhs.tokens.total, rhs.tokens.total)
+        case .cached:
+            ordered(lhs.tokens.cachedInput, rhs.tokens.cachedInput)
+        case .uncached:
+            ordered(max(0, lhs.tokens.input - lhs.tokens.cachedInput), max(0, rhs.tokens.input - rhs.tokens.cachedInput))
+        case .output:
+            ordered(lhs.tokens.output, rhs.tokens.output)
+        case .reasoning:
+            ordered(lhs.tokens.reasoningOutput, rhs.tokens.reasoningOutput)
+        }
+    }
+
+    private func ordered<T: Comparable>(_ lhs: T, _ rhs: T) -> Bool? {
+        guard lhs != rhs else { return nil }
+        return sortAscending ? lhs < rhs : lhs > rhs
+    }
+
     private func export(format: UsageExportFormat) {
         let rows = UsageAuditReporter.exportRows(
             points: rangePoints,
@@ -529,9 +655,12 @@ struct AuditView: View {
         return costs.isEmpty ? nil : costs.reduce(Decimal(0), +)
     }
 
-    private func durationText(calls: [UsagePoint]) -> String {
-        guard let first = calls.map(\.date).min(), let last = calls.map(\.date).max() else { return "-" }
-        let seconds = max(0, Int(last.timeIntervalSince(first)))
+    private func durationSeconds(calls: [UsagePoint]) -> Int {
+        guard let first = calls.map(\.date).min(), let last = calls.map(\.date).max() else { return 0 }
+        return max(0, Int(last.timeIntervalSince(first)))
+    }
+
+    private func durationText(seconds: Int) -> String {
         if seconds < 60 { return "\(seconds)s" }
         return "\(seconds / 60)m \(seconds % 60)s"
     }
@@ -557,11 +686,35 @@ private enum AuditUsageTab: String, CaseIterable, Identifiable {
     }
 }
 
+private enum AuditSortColumn {
+    case time
+    case thread
+    case duration
+    case initiated
+    case model
+    case effort
+    case tokens
+    case cached
+    case uncached
+    case output
+    case reasoning
+
+    var defaultAscending: Bool {
+        switch self {
+        case .thread, .initiated, .model, .effort:
+            true
+        case .time, .duration, .tokens, .cached, .uncached, .output, .reasoning:
+            false
+        }
+    }
+}
+
 private struct AuditThreadRow: Identifiable {
     var id: String
     var title: String
     var subtitle: String
     var latest: Date
+    var durationSeconds: Int
     var duration: String
     var tokens: TokenTotals
     var cost: Decimal?

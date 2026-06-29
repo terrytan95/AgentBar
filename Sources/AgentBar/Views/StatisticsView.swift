@@ -142,14 +142,7 @@ struct StatisticsView: View {
         .pointingHandCursor()
         .agentBarPanel(cornerRadius: 10)
         .popover(isPresented: $showsAccountPopover, arrowEdge: .bottom) {
-            SidebarAccountPopover(
-                account: account,
-                usageTotals: account.flatMap { selected in
-                    store.accountUsageTotalDisplayAccounts.first { $0.service == selected.service }
-                },
-                language: store.language,
-                theme: settings.themeColor
-            )
+            SidebarAccountPopover(account: account, language: store.language, theme: settings.themeColor)
         }
     }
 
@@ -739,19 +732,26 @@ struct StatisticsView: View {
     }
 
     private var summary: UsageSummary {
-        store.summary
+        UsageStatistics.summarize(points: usageDataDisplayPoints, range: store.selectedRange, customStart: store.customStart, customEnd: store.customEnd)
     }
 
     private var periodChange: UsagePeriodChange {
-        store.periodChange
+        UsageStatistics.periodChange(points: usageDataDisplayPoints, range: store.selectedRange, customStart: store.customStart, customEnd: store.customEnd)
     }
 
     private var filteredPoints: [UsagePoint] {
-        store.points
+        usageDataDisplayPoints
     }
 
     private var selectedRangePoints: [UsagePoint] {
-        store.selectedRangePoints
+        guard let interval = store.selectedRange.dateInterval(now: Date(), calendar: .current, customStart: store.customStart, customEnd: store.customEnd) else {
+            return usageDataDisplayPoints
+        }
+        return usageDataDisplayPoints.filter { interval.contains($0.date) }
+    }
+
+    private var usageDataDisplayPoints: [UsagePoint] {
+        store.usageDataDisplayPoints
     }
 
     private var codexAccounts: [UsageAccount] {
@@ -903,12 +903,11 @@ struct StatisticsView: View {
     }
 
     private var totalResetCreditsCount: Int {
-        store.accounts.reduce(0) { $0 + ($1.resetCredits?.visibleCount ?? 0) }
+        store.activeAccount?.resetCredits?.visibleCount ?? 0
     }
 
     private var nextResetExpiry: Date? {
-        store.accounts
-            .flatMap { $0.resetCredits?.resets ?? [] }
+        (store.activeAccount?.resetCredits?.resets ?? [])
             .compactMap(\.expiresAt)
             .filter { $0 > Date() }
             .sorted()
@@ -1018,7 +1017,7 @@ struct StatisticsView: View {
     }
 
     private var resetExpiryDisplayGroups: [UsageAccountDisplayGroup] {
-        store.accounts
+        [store.activeAccount].compactMap { $0 }
             .filter { !($0.resetCredits?.resets ?? []).isEmpty }
             .displayGroupsByIdentity(sortMode: settings.accountSortMode)
     }
@@ -3365,7 +3364,6 @@ private struct AccountAvatar: View {
 
 private struct SidebarAccountPopover: View {
     var account: UsageAccount?
-    var usageTotals: UsageAccount?
     var language: AppLanguage
     var theme: AppThemeColor
 
@@ -3399,8 +3397,8 @@ private struct SidebarAccountPopover: View {
                 if let resetCredits = account.resetCredits {
                     infoRow(L.text("resets", language), resetCredits.summaryLine(language: language))
                 }
-                infoRow(L.text("total_tokens", language), DisplayFormatters.compactTokenString((usageTotals ?? account).tokens.total, language: language))
-                infoRow(L.text("cost", language), (usageTotals ?? account).estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
+                infoRow(L.text("total_tokens", language), DisplayFormatters.compactTokenString(account.tokens.total, language: language))
+                infoRow(L.text("cost", language), account.estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
                 infoRow(L.text("last_activity", language), account.lastActivityLine(language: language).replacingOccurrences(of: "\(L.text("last_activity", language)): ", with: ""))
                 infoRow(language == .chinese ? "数据源" : "Source", account.sourceDescription)
             } else {

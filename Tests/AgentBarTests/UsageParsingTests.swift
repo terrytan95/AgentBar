@@ -57,7 +57,7 @@ final class UsageParsingTests: XCTestCase {
         checkAccountSortingUsesFiveHourThenWeeklyPressure()
         checkAccountSortingPrioritizesResetCreditsAfterActiveAccount()
         checkAccountSortingAlwaysKeepsActiveAccountOnTop()
-        checkAggregatedAccountDisplaySummarizesAccounts()
+        checkAccountDataDisplayScopesUsagePoints()
         checkEnglishCompactTokenFormattingUsesEnglishUnits()
         checkDailyUsageBarTooltipIncludesDateAndUsageDetails()
         checkAccountMetadataShowsResetActivityAndAccountType()
@@ -1413,33 +1413,22 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    private func checkAggregatedAccountDisplaySummarizesAccounts() {
-        let now = Date(timeIntervalSince1970: 1_000)
-        var first = testAccount(id: "first", name: "first@example.com", fiveHourUsed: 20, weeklyUsed: 40, now: now, resetCredits: 1)
-        first.isActive = true
-        first.tokens = TokenTotals(input: 10, cachedInput: 2, output: 20, reasoningOutput: 3, total: 30)
-        first.estimatedCostUSD = Decimal(string: "0.20")
-        var second = testAccount(id: "second", name: "second@example.com", fiveHourUsed: 60, weeklyUsed: 80, now: now.addingTimeInterval(60), resetCredits: 2)
-        second.tokens = TokenTotals(input: 30, cachedInput: 5, output: 40, reasoningOutput: 6, total: 70)
-        second.estimatedCostUSD = Decimal(string: "0.30")
-
-        let aggregate = [first, second].aggregatedTotalsForDisplay(language: .english)
-
-        XCTAssertEqual(aggregate.count, 1)
-        XCTAssertEqual(aggregate.first?.displayName, "All Codex accounts")
-        XCTAssertNil(aggregate.first?.fiveHourWindow)
-        XCTAssertNil(aggregate.first?.weeklyWindow)
-        XCTAssertNil(aggregate.first?.resetCredits)
-        XCTAssertEqual(aggregate.first?.tokens.total, 100)
-        XCTAssertEqual(aggregate.first?.estimatedCostUSD, Decimal(string: "0.50"))
-        XCTAssertTrue(aggregate.first?.isActive == true)
-
+    private func checkAccountDataDisplayScopesUsagePoints() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
-        XCTAssertFalse(settings.showAggregatedAccountData)
+        var account = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 20, weeklyUsed: 40, now: Date())
+        account.isActive = true
+        let store = UsageStore(settings: settings)
+        let codexPoint = UsagePoint(service: .codex, model: "codex-local", date: Date(), tokens: TokenTotals(input: 10, cachedInput: 0, output: 0, reasoningOutput: 0, total: 10), estimatedCostUSD: nil)
+        let claudePoint = UsagePoint(service: .claudeCode, model: "claude-local", date: Date(), tokens: TokenTotals(input: 20, cachedInput: 0, output: 0, reasoningOutput: 0, total: 20), estimatedCostUSD: nil)
+
+        store.applyTestData(accounts: [account], points: [codexPoint, claudePoint])
+
+        XCTAssertEqual(store.usageDataDisplayPoints.map(\.tokens.total), [10])
         settings.showAggregatedAccountData = true
+        XCTAssertEqual(store.usageDataDisplayPoints.map(\.tokens.total), [10, 20])
         XCTAssertTrue(SettingsStore(defaults: defaults).showAggregatedAccountData)
     }
 

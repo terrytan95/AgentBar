@@ -23,7 +23,7 @@ struct AuditView: View {
 
     private var rangePoints: [UsagePoint] {
         UsageAuditReporter.filteredPoints(
-            points: points.filter { $0.service == .codex },
+            points: points,
             range: store.selectedRange,
             customStart: store.customStart,
             customEnd: store.customEnd
@@ -271,7 +271,7 @@ struct AuditView: View {
                 column(dateText(point.date), width: 108, alignment: .leading)
                 threadColumn((nested ? "  " : "") + (point.sessionTitle ?? point.sessionID ?? localized("unknown_thread")), strong: true)
                 column("1", width: 60)
-                column(point.initiator ?? "Codex", width: 58)
+                column(point.initiator ?? point.service.rawValue, width: 58)
                 column(point.model, width: 76, pill: true)
                 column(point.reasoningEffort ?? "-", width: 50)
                 column(DisplayFormatters.compactTokenString(point.tokens.total, language: store.language), width: 68)
@@ -490,7 +490,7 @@ struct AuditView: View {
             range: .all
         )
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "AgentBar-codex-usage.\(format.fileExtension)"
+        panel.nameFieldStringValue = "AgentBar-usage.\(format.fileExtension)"
         panel.allowedContentTypes = format == .csv ? [.commaSeparatedText] : [.json]
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }

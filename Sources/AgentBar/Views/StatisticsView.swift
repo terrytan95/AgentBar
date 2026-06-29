@@ -9,6 +9,8 @@ struct StatisticsView: View {
     @State private var topTab: DashboardTopTab
     @State private var selectedSessionLabel: String?
     @State private var showsAccountPopover = false
+    @State private var showsServiceBreakdownPopover = false
+    @State private var showsModelBreakdownPopover = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let dashboardContentTopPadding: CGFloat = 12
@@ -820,6 +822,7 @@ struct StatisticsView: View {
                         }
                     }
                     Button {
+                        showsServiceBreakdownPopover.toggle()
                     } label: {
                         Label("查看全部服务", systemImage: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
@@ -827,6 +830,9 @@ struct StatisticsView: View {
                     .tactilePlainButton()
                     .foregroundStyle(settings.themeColor.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .popover(isPresented: $showsServiceBreakdownPopover, arrowEdge: .trailing) {
+                        ServiceBreakdownPopover(rows: rows, language: store.language)
+                    }
                 }
             }
         }
@@ -1086,6 +1092,7 @@ struct StatisticsView: View {
                     }
                 }
                 Button {
+                    showsModelBreakdownPopover.toggle()
                 } label: {
                     Label("查看全部模型", systemImage: "chevron.right")
                         .font(.system(size: 11, weight: .bold))
@@ -1093,6 +1100,9 @@ struct StatisticsView: View {
                 .tactilePlainButton()
                 .foregroundStyle(settings.themeColor.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .popover(isPresented: $showsModelBreakdownPopover, arrowEdge: .trailing) {
+                    ModelBreakdownPopover(rows: rows, language: store.language)
+                }
             }
         }
     }
@@ -1411,6 +1421,92 @@ private struct Panel<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .agentBarPanel()
+    }
+}
+
+private struct ServiceBreakdownPopover: View {
+    var rows: [ServiceMixRow]
+    var language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(language == .chinese ? "全部服务" : "All services")
+                .font(.system(size: 13, weight: .bold))
+            ForEach(rows, id: \.service) { row in
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(row.color)
+                        .frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.title)
+                            .font(.system(size: 12, weight: .bold))
+                        Text(row.subtitle)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
+                            .font(.system(size: 11, weight: .bold))
+                        Text("\(Int((row.share * 100).rounded()))% · \(row.cost)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 320, alignment: .leading)
+    }
+}
+
+private struct ModelBreakdownPopover: View {
+    var rows: [ModelBreakdownRow]
+    var language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(language == .chinese ? "全部模型" : "All models")
+                .font(.system(size: 13, weight: .bold))
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 9) {
+                    ForEach(rows) { row in
+                        if row.isHeader {
+                            Text(row.name)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            ModelBreakdownPopoverRow(row: row, language: language)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 320)
+        }
+        .padding(14)
+        .frame(width: 360, alignment: .leading)
+    }
+}
+
+private struct ModelBreakdownPopoverRow: View {
+    var row: ModelBreakdownRow
+    var language: AppLanguage
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(row.name)
+                .font(.system(size: 12, weight: .bold))
+                .lineLimit(1)
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(DisplayFormatters.compactTokenString(row.input + row.output, language: language))
+                    .font(.system(size: 11, weight: .bold))
+                Text(row.cost.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -2112,6 +2208,7 @@ private struct QuotaPressurePanel: View {
     var pressure: QuotaPressureInsight
     var language: AppLanguage
     var theme: AppThemeColor
+    @State private var showsDetails = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -2165,12 +2262,20 @@ private struct QuotaPressurePanel: View {
                 }
             }
 
-            HStack(spacing: 6) {
-                Text(localized("view_details"))
-                Image(systemName: "chevron.right")
+            Button {
+                showsDetails.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(localized("view_details"))
+                    Image(systemName: "chevron.right")
+                }
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(severityColor)
             }
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(severityColor)
+            .tactilePlainButton()
+            .popover(isPresented: $showsDetails, arrowEdge: .trailing) {
+                QuotaPressureDetailsPopover(pressure: pressure, language: language, tint: severityColor)
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -2258,6 +2363,80 @@ private struct QuotaPressurePanel: View {
         case ("five_hour_healthy", _): "5H quota is healthy"
         case ("rotation_ready", _): "rotation will trigger"
         case ("rotation_standby", _): "rotation on standby"
+        default: key
+        }
+    }
+}
+
+private struct QuotaPressureDetailsPopover: View {
+    var pressure: QuotaPressureInsight
+    var language: AppLanguage
+    var tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(localized("quota_details"), systemImage: "gauge.with.dots.needle.67percent")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(tint)
+            detailRow(localized("active_account"), accountText(pressure.activeAccount))
+            detailRow(localized("recommended_account"), accountText(pressure.recommendedAccount))
+            detailRow("5H", pressure.projectedFiveHourExhaustion.map(exhaustionText) ?? localized("not_projected"))
+            detailRow(localized("weekly"), pressure.projectedWeeklyExhaustion.map(exhaustionText) ?? localized("not_projected"))
+            detailRow(localized("rotation"), pressure.shouldTriggerRotation ? localized("will_trigger") : localized("standby"))
+            if let reason = pressure.recommendationReason, !reason.isEmpty {
+                Text(reason)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(14)
+        .frame(width: 340, alignment: .leading)
+    }
+
+    private func detailRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+            Text(value)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func accountText(_ account: UsageAccount?) -> String {
+        guard let account else { return "--" }
+        let five = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
+        let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
+        return "\(account.displayNameWithWorkspace(language: language)) · 5H \(five) · \(localized("weekly")) \(weekly)"
+    }
+
+    private func exhaustionText(_ date: Date) -> String {
+        DisplayFormatters.relativeString(for: date, language: language)
+    }
+
+    private func localized(_ key: String) -> String {
+        switch (key, language) {
+        case ("quota_details", .chinese): "额度详情"
+        case ("active_account", .chinese): "当前账号"
+        case ("recommended_account", .chinese): "推荐账号"
+        case ("weekly", .chinese): "本周"
+        case ("rotation", .chinese): "自动轮换"
+        case ("will_trigger", .chinese): "会触发"
+        case ("standby", .chinese): "待命"
+        case ("not_projected", .chinese): "暂无预计耗尽时间"
+        case ("quota_details", _): "Quota details"
+        case ("active_account", _): "Active account"
+        case ("recommended_account", _): "Recommended"
+        case ("weekly", _): "Weekly"
+        case ("rotation", _): "Rotation"
+        case ("will_trigger", _): "Will trigger"
+        case ("standby", _): "Standby"
+        case ("not_projected", _): "No exhaustion estimate"
         default: key
         }
     }

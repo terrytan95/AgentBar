@@ -403,10 +403,12 @@ struct StatisticsView: View {
                 YearActivityPanel(bars: yearActivityBars, language: store.language, theme: settings.themeColor)
             }
 
-            Panel(title: quotaCapacityLocalized("quota_capacity_history")) {
+            Panel(
+                title: quotaCapacityLocalized("quota_capacity_history"),
+                helpText: quotaCapacityLocalized("quota_capacity_history_tooltip")
+            ) {
                 QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language, theme: settings.themeColor)
             }
-            .help(quotaCapacityLocalized("quota_capacity_history_tooltip"))
 
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -1410,12 +1412,22 @@ private struct DashboardKPI: View {
 
 private struct Panel<Content: View>: View {
     var title: String
+    var helpText: String? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold))
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                if let helpText {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .help(helpText)
+                        .accessibilityLabel(Text(helpText))
+                }
+            }
             content()
         }
         .padding(16)

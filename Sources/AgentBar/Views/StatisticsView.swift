@@ -13,6 +13,7 @@ struct StatisticsView: View {
     @ObservedObject private var updates: AppUpdateStore
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
+    @State private var showsSidebarNavigation = true
     @State private var selectedSessionLabel: String?
     @State private var showsAccountPopover = false
     @State private var showsServiceBreakdownPopover = false
@@ -34,32 +35,19 @@ struct StatisticsView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-                .frame(width: 236)
-
-            VStack(spacing: 0) {
-                pageContent
-                    .id(pageTransitionID)
-                    .transition(pageTransition)
-                    .animation(pageAnimation, value: pageTransitionID)
-                appFooter
-                    .padding(.horizontal, 26)
-                    .frame(height: 42)
-                    .background(AgentBarDesign.panelHighlight)
+        Group {
+            if showsSidebarNavigation {
+                HStack(spacing: 0) {
+                    sidebar
+                        .frame(width: 236)
+                    contentColumn
+                }
+            } else {
+                VStack(spacing: 0) {
+                    topNavigationBar
+                    contentColumn
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                LinearGradient(
-                    colors: [
-                        AgentBarDesign.panelHighlight,
-                        AgentBarDesign.appBackground,
-                        settings.themeColor.primary.opacity(0.08)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
         }
         .tint(settings.themeColor.primary)
         .background(AgentBarDesign.appBackground)
@@ -69,6 +57,31 @@ struct StatisticsView: View {
             else { return }
             setTopTab(tab)
         }
+    }
+
+    private var contentColumn: some View {
+        VStack(spacing: 0) {
+            pageContent
+                .id(pageTransitionID)
+                .transition(pageTransition)
+                .animation(pageAnimation, value: pageTransitionID)
+            appFooter
+                .padding(.horizontal, 26)
+                .frame(height: 42)
+                .background(AgentBarDesign.panelHighlight)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            LinearGradient(
+                colors: [
+                    AgentBarDesign.panelHighlight,
+                    AgentBarDesign.appBackground,
+                    settings.themeColor.primary.opacity(0.08)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
     }
 
     private var sidebar: some View {
@@ -116,7 +129,72 @@ struct StatisticsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             Text("AgentBar")
                 .font(.system(size: 20, weight: .bold))
+            Spacer()
+            navigationLayoutButton(systemImage: "menubar.rectangle", helpKey: "show_top_menu_bar") {
+                showsSidebarNavigation = false
+            }
         }
+    }
+
+    private var topNavigationBar: some View {
+        HStack(spacing: 8) {
+            navigationLayoutButton(systemImage: "sidebar.left", helpKey: "show_sidebar_menu_bar") {
+                showsSidebarNavigation = true
+            }
+            topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
+                setPage(tab: .usage, viewMode: .overview)
+            }
+            topNavigationItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
+                setPage(tab: .usage, viewMode: .resets)
+            }
+            topNavigationItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
+                setPage(tab: .usage, viewMode: .audit)
+            }
+            topNavigationItem(L.text("settings", store.language), systemImage: "gearshape", active: topTab == .settings) {
+                setPage(tab: .settings)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 54)
+        .background(AgentBarDesign.cardBackground)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(AgentBarDesign.hairline)
+                .frame(height: 1)
+        }
+    }
+
+    private func navigationLayoutButton(systemImage: String, helpKey: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(settings.themeColor.primary)
+                .frame(width: 30, height: 30)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .background(settings.themeColor.primary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .help(L.text(helpKey, store.language))
+    }
+
+    private func topNavigationItem(_ title: String, systemImage: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(active ? settings.themeColor.primary : Color.primary.opacity(0.86))
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(active ? settings.themeColor.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .tactilePlainButton()
     }
 
     private var sidebarAccountSelector: some View {

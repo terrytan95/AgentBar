@@ -142,7 +142,14 @@ struct StatisticsView: View {
         .pointingHandCursor()
         .agentBarPanel(cornerRadius: 10)
         .popover(isPresented: $showsAccountPopover, arrowEdge: .bottom) {
-            SidebarAccountPopover(account: account, language: store.language, theme: settings.themeColor)
+            SidebarAccountPopover(
+                account: account,
+                usageTotals: account.flatMap { selected in
+                    store.accountUsageTotalDisplayAccounts.first { $0.service == selected.service }
+                },
+                language: store.language,
+                theme: settings.themeColor
+            )
         }
     }
 
@@ -581,6 +588,9 @@ struct StatisticsView: View {
                     }
                     .labelsHidden()
                     .settingsControl(width: SettingsControlLayout.widePickerWidth)
+                }
+                SettingsRow(title: L.text("account_data_display", store.language), subtitle: L.text("account_data_display_subtitle", store.language)) {
+                    Toggle("", isOn: $settings.showAggregatedAccountData).labelsHidden()
                 }
                 SettingsRow(title: L.text("auto_codex_rotation", store.language), subtitle: L.text("auto_codex_rotation_subtitle", store.language)) {
                     Toggle("", isOn: $settings.autoCodexAccountRotationEnabled).labelsHidden()
@@ -3355,6 +3365,7 @@ private struct AccountAvatar: View {
 
 private struct SidebarAccountPopover: View {
     var account: UsageAccount?
+    var usageTotals: UsageAccount?
     var language: AppLanguage
     var theme: AppThemeColor
 
@@ -3388,8 +3399,8 @@ private struct SidebarAccountPopover: View {
                 if let resetCredits = account.resetCredits {
                     infoRow(L.text("resets", language), resetCredits.summaryLine(language: language))
                 }
-                infoRow(L.text("total_tokens", language), DisplayFormatters.compactTokenString(account.tokens.total, language: language))
-                infoRow(L.text("cost", language), account.estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
+                infoRow(L.text("total_tokens", language), DisplayFormatters.compactTokenString((usageTotals ?? account).tokens.total, language: language))
+                infoRow(L.text("cost", language), (usageTotals ?? account).estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
                 infoRow(L.text("last_activity", language), account.lastActivityLine(language: language).replacingOccurrences(of: "\(L.text("last_activity", language)): ", with: ""))
                 infoRow(language == .chinese ? "数据源" : "Source", account.sourceDescription)
             } else {

@@ -26,7 +26,6 @@ private struct AgentBarPanelModifier: ViewModifier {
             .background(
                 shape
                     .fill(cornerRadius == 0 ? AgentBarDesign.appBackground.opacity(0.72) : AgentBarDesign.cardBackground)
-                    .background(.ultraThinMaterial, in: shape)
                     .overlay(alignment: .top) {
                         shape
                             .stroke(AgentBarDesign.panelHighlight.opacity(cornerRadius == 0 ? 0 : 0.72), lineWidth: 1)

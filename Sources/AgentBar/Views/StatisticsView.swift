@@ -38,7 +38,7 @@ struct StatisticsView: View {
                 appFooter
                     .padding(.horizontal, 26)
                     .frame(height: 42)
-                    .background(.ultraThinMaterial)
+                    .background(AgentBarDesign.panelHighlight)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
@@ -91,7 +91,7 @@ struct StatisticsView: View {
         }
         .padding(.horizontal, 16)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(.ultraThinMaterial)
+        .background(AgentBarDesign.cardBackground)
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(AgentBarDesign.hairline)
@@ -725,21 +725,11 @@ struct StatisticsView: View {
     }
 
     private var summary: UsageSummary {
-        UsageStatistics.summarize(
-            points: filteredPoints,
-            range: store.selectedRange,
-            customStart: store.customStart,
-            customEnd: store.customEnd
-        )
+        store.summary
     }
 
     private var periodChange: UsagePeriodChange {
-        UsageStatistics.periodChange(
-            points: filteredPoints,
-            range: store.selectedRange,
-            customStart: store.customStart,
-            customEnd: store.customEnd
-        )
+        store.periodChange
     }
 
     private var filteredPoints: [UsagePoint] {
@@ -747,10 +737,7 @@ struct StatisticsView: View {
     }
 
     private var selectedRangePoints: [UsagePoint] {
-        guard let interval = store.selectedRange.dateInterval(now: Date(), calendar: .current, customStart: store.customStart, customEnd: store.customEnd) else {
-            return filteredPoints
-        }
-        return filteredPoints.filter { interval.contains($0.date) }
+        store.selectedRangePoints
     }
 
     private var codexAccounts: [UsageAccount] {
@@ -781,7 +768,7 @@ struct StatisticsView: View {
     }
 
     private var yearActivityBars: [DailyUsageBar] {
-        UsageStatistics.yearActivityBars(points: filteredPoints)
+        store.yearActivityBars
     }
 
     private func serviceCostText(_ service: UsageService) -> String {
@@ -1726,6 +1713,7 @@ private struct YearActivityPanel: View {
 
                 GeometryReader { proxy in
                     let cells = activityCells
+                    let maximumTokens = maxTokens
                     let columns = max(1, Int(ceil(Double(cells.count) / 7.0)))
                     let cellSize = max(6, min(11, (proxy.size.width - CGFloat(max(0, columns - 1)) * spacing) / CGFloat(columns)))
                     let gridHeight = cellSize * 7 + spacing * 6
@@ -1742,25 +1730,28 @@ private struct YearActivityPanel: View {
                         }
                         .frame(height: 12)
 
-                        LazyHGrid(rows: Array(repeating: GridItem(.fixed(cellSize), spacing: spacing), count: 7), spacing: spacing) {
-                            ForEach(cells) { cell in
-                                if let bar = cell.bar {
-                                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                        .fill(color(for: bar))
-                                        .frame(width: cellSize, height: cellSize)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                                .stroke(Color.primary.opacity(totalTokens(for: bar) > 0 ? 0.10 : 0.06), lineWidth: 1)
-                                        )
-                                        .help(bar.tooltipText(language: language))
-                                        .accessibilityLabel(accessibilityText(for: bar))
-                                } else {
-                                    Color.clear
-                                        .frame(width: cellSize, height: cellSize)
-                                }
+                        Canvas(rendersAsynchronously: true) { context, _ in
+                            for cell in cells {
+                                guard let bar = cell.bar else { continue }
+                                let column = cell.index / 7
+                                let row = cell.index % 7
+                                let rect = CGRect(
+                                    x: CGFloat(column) * (cellSize + spacing),
+                                    y: CGFloat(row) * (cellSize + spacing),
+                                    width: cellSize,
+                                    height: cellSize
+                                )
+                                let path = Path(roundedRect: rect, cornerRadius: 3)
+                                context.fill(path, with: .color(color(for: bar, maximumTokens: maximumTokens)))
+                                context.stroke(
+                                    path,
+                                    with: .color(Color.primary.opacity(totalTokens(for: bar) > 0 ? 0.10 : 0.06)),
+                                    lineWidth: 1
+                                )
                             }
                         }
                         .frame(height: gridHeight, alignment: .topLeading)
+                        .accessibilityLabel(Text("\(rangeText), \(activeDaysText)"))
                     }
                 }
                 .frame(height: 116)
@@ -1807,10 +1798,10 @@ private struct YearActivityPanel: View {
         max(1, bars.map { totalTokens(for: $0) }.max() ?? 1)
     }
 
-    private func color(for bar: DailyUsageBar) -> Color {
+    private func color(for bar: DailyUsageBar, maximumTokens: Int) -> Color {
         let tokens = totalTokens(for: bar)
         guard tokens > 0 else { return Color.primary.opacity(0.07) }
-        let ratio = Double(tokens) / Double(maxTokens)
+        let ratio = Double(tokens) / Double(maximumTokens)
         if ratio >= 0.75 { return theme.tertiary }
         if ratio >= 0.50 { return theme.primary }
         if ratio >= 0.25 { return theme.primary.opacity(0.68) }
@@ -1822,15 +1813,9 @@ private struct YearActivityPanel: View {
     }
 
     private func monthText(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
-        formatter.setLocalizedDateFormatFromTemplate("MMM")
-        return formatter.string(from: date)
+        DisplayFormatters.localizedDateString(for: date, template: "MMM", language: language)
     }
 
-    private func accessibilityText(for bar: DailyUsageBar) -> Text {
-        Text("\(bar.tooltipText(language: language))")
-    }
 }
 
 private struct YearActivityCell: Identifiable {
@@ -2420,13 +2405,14 @@ private struct QuotaCapacityLineChart: View {
             let axisWidth: CGFloat = 52
             let labelHeight: CGFloat = 22
             let plotSize = CGSize(width: max(1, proxy.size.width - axisWidth), height: max(1, proxy.size.height - labelHeight))
+            let maximumValue = maxValue
 
             VStack(spacing: 4) {
                 HStack(alignment: .bottom, spacing: 8) {
                     VStack(alignment: .trailing) {
-                        Text(tokenText(maxValue))
+                        Text(tokenText(maximumValue))
                         Spacer()
-                        Text(tokenText(maxValue / 2))
+                        Text(tokenText(maximumValue / 2))
                         Spacer()
                         Text("0")
                     }
@@ -2444,8 +2430,8 @@ private struct QuotaCapacityLineChart: View {
                         }
                         .opacity(0.45)
 
-                        line(for: \.estimatedFiveHourTotalTokens, color: theme.primary, in: plotSize)
-                        line(for: \.estimatedWeeklyTotalTokens, color: theme.tertiary, in: plotSize)
+                        line(for: \.estimatedFiveHourTotalTokens, maximumValue: maximumValue, color: theme.primary, in: plotSize)
+                        line(for: \.estimatedWeeklyTotalTokens, maximumValue: maximumValue, color: theme.tertiary, in: plotSize)
                     }
                     .frame(width: plotSize.width, height: plotSize.height)
                     .overlay {
@@ -2498,8 +2484,8 @@ private struct QuotaCapacityLineChart: View {
         return samples[index].id
     }
 
-    private func line(for keyPath: KeyPath<QuotaCapacitySample, Int?>, color: Color, in size: CGSize) -> some View {
-        let points = plottedPoints(for: keyPath, in: size)
+    private func line(for keyPath: KeyPath<QuotaCapacitySample, Int?>, maximumValue: Int, color: Color, in size: CGSize) -> some View {
+        let points = plottedPoints(for: keyPath, maximumValue: maximumValue, in: size)
         return ZStack {
             Path { path in
                 for (index, point) in points.enumerated() {
@@ -2521,13 +2507,13 @@ private struct QuotaCapacityLineChart: View {
         }
     }
 
-    private func plottedPoints(for keyPath: KeyPath<QuotaCapacitySample, Int?>, in size: CGSize) -> [CGPoint] {
+    private func plottedPoints(for keyPath: KeyPath<QuotaCapacitySample, Int?>, maximumValue: Int, in size: CGSize) -> [CGPoint] {
         guard !samples.isEmpty else { return [] }
         let xDivisor = CGFloat(max(1, samples.count - 1))
         return samples.enumerated().compactMap { index, sample in
             guard let value = sample[keyPath: keyPath] else { return nil }
             let x = CGFloat(index) / xDivisor * size.width
-            let y = size.height - (CGFloat(value) / CGFloat(maxValue) * size.height)
+            let y = size.height - (CGFloat(value) / CGFloat(maximumValue) * size.height)
             return CGPoint(x: x, y: y)
         }
     }
@@ -2538,10 +2524,7 @@ private struct QuotaCapacityLineChart: View {
 
     private func dateText(_ date: Date?) -> String {
         guard let date else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
-        formatter.setLocalizedDateFormatFromTemplate("MMM d HH")
-        return formatter.string(from: date)
+        return DisplayFormatters.localizedDateString(for: date, template: "MMM d HH", language: language)
     }
 }
 
@@ -2590,10 +2573,7 @@ private struct QuotaCapacityHoverCallout: View {
     }
 
     private func dateText(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
-        formatter.setLocalizedDateFormatFromTemplate("yMMMd HH:mm")
-        return formatter.string(from: date)
+        DisplayFormatters.localizedDateString(for: date, template: "yMMMd HH:mm", language: language)
     }
 
     private func localized(_ key: String) -> String {

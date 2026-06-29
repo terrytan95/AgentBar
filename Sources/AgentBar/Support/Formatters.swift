@@ -14,6 +14,7 @@ enum DisplayFormatters {
         formatter.maximumFractionDigits = 4
         return formatter
     }()
+    private static let dateFormatterCache = DateFormatterCache()
 
     static func tokenString(_ value: Int) -> String {
         integer.string(from: NSNumber(value: value)) ?? "\(value)"
@@ -94,9 +95,36 @@ enum DisplayFormatters {
     }
 
     static func shortDayString(for date: Date, language: AppLanguage = .english) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
-        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        localizedDateString(for: date, template: "MMM d", language: language)
+    }
+
+    static func localizedDateString(
+        for date: Date,
+        template: String,
+        language: AppLanguage,
+        timeZone: TimeZone? = nil
+    ) -> String {
+        dateFormatterCache.string(for: date, template: template, language: language, timeZone: timeZone)
+    }
+}
+
+private final class DateFormatterCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var formatters: [String: DateFormatter] = [:]
+
+    func string(for date: Date, template: String, language: AppLanguage, timeZone: TimeZone?) -> String {
+        let key = "\(language.rawValue)|\(template)|\(timeZone?.identifier ?? "current")"
+        lock.lock()
+        defer { lock.unlock() }
+
+        let formatter = formatters[key] ?? {
+            let formatter = DateFormatter()
+            formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
+            formatter.timeZone = timeZone
+            formatter.setLocalizedDateFormatFromTemplate(template)
+            formatters[key] = formatter
+            return formatter
+        }()
         return formatter.string(from: date)
     }
 }

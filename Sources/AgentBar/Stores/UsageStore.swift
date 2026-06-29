@@ -6,16 +6,24 @@ final class UsageStore: ObservableObject {
 
     @Published private(set) var snapshots: [UsageService: UsageSnapshot] = [:]
     @Published private(set) var accounts: [UsageAccount] = []
-    @Published private(set) var points: [UsagePoint] = []
+    @Published private(set) var points: [UsagePoint] = [] {
+        didSet { invalidateStatisticsCaches() }
+    }
     @Published private(set) var quotaCapacityHistory: QuotaCapacityHistory
     @Published private(set) var isRefreshing = false
     @Published private(set) var isManualRefreshFeedbackVisible = false
     @Published private(set) var hasLoadedAccountInformation = false
     @Published private(set) var lastError: String?
     @Published private(set) var switchingAccountID: String?
-    @Published var selectedRange: UsageRange = .today
-    @Published var customStart = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-    @Published var customEnd = Date()
+    @Published var selectedRange: UsageRange = .today {
+        didSet { invalidateStatisticsCaches() }
+    }
+    @Published var customStart = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date() {
+        didSet { invalidateStatisticsCaches() }
+    }
+    @Published var customEnd = Date() {
+        didSet { invalidateStatisticsCaches() }
+    }
 
     let settings: SettingsStore
     private let usageRefreshOrchestrator: UsageRefreshOrchestrator
@@ -34,6 +42,10 @@ final class UsageStore: ObservableObject {
     private var manualRefreshQueued = false
     private var manualCodexRotationOverrideAccountID: String?
     private var pendingCodexSwitchRecovery: PendingCodexSwitchRecovery?
+    private var summaryCache: UsageSummary?
+    private var periodChangeCache: UsagePeriodChange?
+    private var selectedRangePointsCache: [UsagePoint]?
+    private var yearActivityBarsCache: [DailyUsageBar]?
 
     init(
         settings: SettingsStore = .shared,
@@ -169,7 +181,35 @@ final class UsageStore: ObservableObject {
     }
 
     var summary: UsageSummary {
-        UsageStatistics.summarize(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
+        if let summaryCache { return summaryCache }
+        let summary = UsageStatistics.summarize(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
+        summaryCache = summary
+        return summary
+    }
+
+    var periodChange: UsagePeriodChange {
+        if let periodChangeCache { return periodChangeCache }
+        let change = UsageStatistics.periodChange(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
+        periodChangeCache = change
+        return change
+    }
+
+    var selectedRangePoints: [UsagePoint] {
+        if let selectedRangePointsCache { return selectedRangePointsCache }
+        guard let interval = selectedRange.dateInterval(now: Date(), calendar: .current, customStart: customStart, customEnd: customEnd) else {
+            selectedRangePointsCache = points
+            return points
+        }
+        let rangePoints = points.filter { interval.contains($0.date) }
+        selectedRangePointsCache = rangePoints
+        return rangePoints
+    }
+
+    var yearActivityBars: [DailyUsageBar] {
+        if let yearActivityBarsCache { return yearActivityBarsCache }
+        let bars = UsageStatistics.yearActivityBars(points: points)
+        yearActivityBarsCache = bars
+        return bars
     }
 
     var hasBudgetWarning: Bool {
@@ -347,6 +387,13 @@ final class UsageStore: ObservableObject {
 
     private var budgetWarningPrefix: String {
         (hasBudgetWarning || rapidUsageAlert != nil) ? "! " : ""
+    }
+
+    private func invalidateStatisticsCaches() {
+        summaryCache = nil
+        periodChangeCache = nil
+        selectedRangePointsCache = nil
+        yearActivityBarsCache = nil
     }
 
     private func switchCodexAccount(_ account: UsageAccount, restartMode: CodexSwitchRestartMode) {

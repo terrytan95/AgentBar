@@ -53,6 +53,7 @@ final class UsageParsingTests: XCTestCase {
         checkYearActivityBarsFillLast365Days()
         checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod()
         checkPeriodChangeHasNoPercentWithoutComparableBaseline()
+        checkUsageStoreStatisticsCachesInvalidateWhenInputsChange()
         try checkUsageRangeIntervalsDriveStatisticsAndAuditFiltering()
         checkUsageRangeChartTitlesMatchSelectedInterval()
         checkChangePercentFormattingShowsDirectionAndMissingBaseline()
@@ -1403,6 +1404,27 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(todayChange.costPercent)
         XCTAssertNil(allChange.tokenPercent)
         XCTAssertNil(allChange.costPercent)
+    }
+
+    @MainActor
+    private func checkUsageStoreStatisticsCachesInvalidateWhenInputsChange() {
+        let now = Date()
+        let older = now.addingTimeInterval(-2 * 24 * 60 * 60)
+        let store = UsageStore(codexUsageSynchronizer: { .success })
+        store.applyTestData(points: [
+            UsagePoint(service: .codex, model: "gpt-5", date: now, tokens: TokenTotals(input: 10, cachedInput: 0, output: 0, reasoningOutput: 0, total: 10), estimatedCostUSD: nil),
+            UsagePoint(service: .codex, model: "gpt-5", date: older, tokens: TokenTotals(input: 20, cachedInput: 0, output: 0, reasoningOutput: 0, total: 20), estimatedCostUSD: nil)
+        ])
+
+        XCTAssertEqual(store.summary.totalTokens, 10)
+        store.selectedRange = .last7Days
+        XCTAssertEqual(store.summary.totalTokens, 30)
+
+        store.applyTestData(points: [
+            UsagePoint(service: .codex, model: "gpt-5", date: now, tokens: TokenTotals(input: 5, cachedInput: 0, output: 0, reasoningOutput: 0, total: 5), estimatedCostUSD: nil)
+        ])
+        XCTAssertEqual(store.summary.totalTokens, 5)
+        XCTAssertEqual(store.selectedRangePoints.map(\.tokens.total), [5])
     }
 
     private func checkUsageRangeIntervalsDriveStatisticsAndAuditFiltering() throws {

@@ -1414,6 +1414,7 @@ private struct Panel<Content: View>: View {
     var title: String
     var helpText: String? = nil
     @ViewBuilder var content: () -> Content
+    @State private var showsHelpPopover = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -1421,11 +1422,23 @@ private struct Panel<Content: View>: View {
                 Text(title)
                     .font(.system(size: 14, weight: .bold))
                 if let helpText {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .help(helpText)
-                        .accessibilityLabel(Text(helpText))
+                    Button {
+                        showsHelpPopover.toggle()
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showsHelpPopover, arrowEdge: .top) {
+                        Text(helpText)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(12)
+                            .frame(width: 300, alignment: .leading)
+                    }
+                    .accessibilityLabel(Text(helpText))
                 }
             }
             content()

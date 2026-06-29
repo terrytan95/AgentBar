@@ -69,40 +69,104 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let store = CodexUsageIndexStore.defaultStore()
-        do {
-            _ = CodexUsageReader().read()
-            let payload: Any
-            if let index = arguments.firstIndex(of: "--usage-mcp"),
-               arguments.indices.contains(index + 1) {
-                payload = try usageMCPPayload(tool: arguments[index + 1], store: store, arguments: arguments)
-            } else {
-                payload = try store.summaryPayload()
-            }
-            printJSON(payload)
-        } catch {
-            printJSON(["error": error.localizedDescription])
+        let snapshot = CodexUsageReader().read()
+        let payload: Any
+        if let index = arguments.firstIndex(of: "--usage-mcp"),
+           arguments.indices.contains(index + 1) {
+            payload = usageMCPPayload(tool: arguments[index + 1], points: snapshot.points, arguments: arguments)
+        } else {
+            payload = usageSummaryPayload(points: snapshot.points)
         }
+        printJSON(payload)
         return true
     }
 
-    private func usageMCPPayload(tool: String, store: CodexUsageIndexStore, arguments: [String]) throws -> Any {
+    private func usageMCPPayload(tool: String, points: [UsagePoint], arguments: [String]) -> Any {
         switch tool {
         case "usage_summary":
-            return try store.summaryPayload()
+            return usageSummaryPayload(points: points)
         case "session_usage":
-            return try store.sessionPayload(sessionID: value(after: "--session-id", in: arguments))
+            return usageSessionPayload(points: points, sessionID: value(after: "--session-id", in: arguments))
         case "expensive_calls":
-            return try store.sessionPayload(limit: 25)
-                .sorted { lhs, rhs in
-                    (lhs["total_tokens"] as? Int ?? 0) > (rhs["total_tokens"] as? Int ?? 0)
-                }
+            return usageSessionPayload(points: points, limit: 25)
+                .sorted { ($0["total_tokens"] as? Int ?? 0) > ($1["total_tokens"] as? Int ?? 0) }
         default:
             return [
                 "error": "Unknown usage MCP tool.",
                 "tools": ["usage_summary", "session_usage", "expensive_calls"]
             ]
         }
+    }
+
+    private func usageSummaryPayload(points: [UsagePoint], limit: Int = 20) -> [String: Any] {
+        let costs = points.compactMap(\.estimatedCostUSD)
+        let totals = points.reduce(TokenTotals.zero) { $0 + $1.tokens }
+        let threads = Dictionary(grouping: points) { point in
+            point.sessionTitle ?? point.sessionID ?? "Unknown"
+        }
+        .map { thread, points in
+            let cost = points.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
+            return [
+                "thread": thread,
+                "calls": points.count,
+                "total_tokens": points.reduce(0) { $0 + $1.tokens.total },
+                "estimated_cost_usd": NSDecimalNumber(decimal: cost).doubleValue
+            ] as [String: Any]
+        }
+        .sorted { ($0["total_tokens"] as? Int ?? 0) > ($1["total_tokens"] as? Int ?? 0) }
+        .prefix(max(1, min(limit, 100)))
+
+        return [
+            "totals": [
+                "calls": points.count,
+                "total_tokens": totals.total,
+                "cached_input_tokens": totals.cachedInput,
+                "uncached_input_tokens": max(0, totals.input - totals.cachedInput),
+                "output_tokens": totals.output,
+                "reasoning_output_tokens": totals.reasoningOutput,
+                "estimated_cost_usd": NSDecimalNumber(decimal: costs.reduce(Decimal(0), +)).doubleValue
+            ],
+            "threads": Array(threads)
+        ]
+    }
+
+    private func usageSessionPayload(points: [UsagePoint], sessionID: String? = nil, limit: Int = 100) -> [[String: Any]] {
+        let normalizedLimit = max(1, min(limit, 500))
+        return points
+            .filter { sessionID?.isEmpty != false || $0.sessionID == sessionID }
+            .sorted { $0.date > $1.date }
+            .prefix(normalizedLimit)
+            .map(usageEventRow)
+    }
+
+    private func usageEventRow(_ point: UsagePoint) -> [String: Any] {
+        [
+            "record_id": point.callID,
+            "session_id": point.sessionID as Any? ?? NSNull(),
+            "thread_name": point.sessionTitle as Any? ?? NSNull(),
+            "event_timestamp": iso8601String(from: point.date),
+            "source_file": point.sourceFile as Any? ?? NSNull(),
+            "source_line": point.sourceLine as Any? ?? NSNull(),
+            "cwd": point.cwd as Any? ?? NSNull(),
+            "project_name": point.projectName as Any? ?? NSNull(),
+            "model": point.model,
+            "effort": point.reasoningEffort as Any? ?? NSNull(),
+            "initiator": point.initiator as Any? ?? NSNull(),
+            "input_tokens": point.tokens.input,
+            "cached_input_tokens": point.tokens.cachedInput,
+            "uncached_input_tokens": point.uncachedInputTokens,
+            "output_tokens": point.tokens.output,
+            "reasoning_output_tokens": point.tokens.reasoningOutput,
+            "total_tokens": point.tokens.total,
+            "estimated_cost_usd": point.estimatedCostUSD.map { NSDecimalNumber(decimal: $0).doubleValue } as Any? ?? NSNull(),
+            "model_context_window": point.modelContextWindow as Any? ?? NSNull()
+        ]
+    }
+
+    private func iso8601String(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
     }
 
     private func value(after flag: String, in arguments: [String]) -> String? {

@@ -375,7 +375,7 @@ final class AccountRotationTests: XCTestCase {
                 return codexSnapshot
             },
             claudeUsageReader: {
-                UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "test")
+                UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [], securityNotes: ["test"], refreshedAt: Date(), pricingFingerprint: Pricing.fingerprint)
             },
             codexAccountSwitcher: { accountID in
                 recorder.recordSwitch(accountID)
@@ -421,7 +421,7 @@ final class AccountRotationTests: XCTestCase {
             codexUsageSynchronizer: { .success },
             codexUsageReader: { codexSnapshot },
             claudeUsageReader: {
-                UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "test")
+                UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [], securityNotes: ["test"], refreshedAt: Date(), pricingFingerprint: Pricing.fingerprint)
             },
             codexAccountSwitcher: { accountID in
                 recorder.recordSwitch(accountID)
@@ -522,7 +522,7 @@ final class AccountRotationTests: XCTestCase {
                 )
             },
             claudeUsageReader: {
-                UsageSnapshot.empty(service: .claudeCode, status: .unavailable, note: "test")
+                UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [], securityNotes: ["test"], refreshedAt: Date(), pricingFingerprint: Pricing.fingerprint)
             }
         )
         store.applyTestData(accounts: [

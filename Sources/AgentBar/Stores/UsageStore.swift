@@ -26,7 +26,8 @@ final class UsageStore: ObservableObject {
     }
 
     let settings: SettingsStore
-    private let usageRefreshOrchestrator: UsageRefreshOrchestrator
+    private let codexUsageSource: @Sendable (Bool) -> UsageSnapshot
+    private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
     private let codexAccountRemover: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
@@ -87,17 +88,16 @@ final class UsageStore: ObservableObject {
         self.settings = settings
         self.quotaCapacityHistoryStore = quotaCapacityHistoryStore
         quotaCapacityHistory = quotaCapacityHistoryStore.load()
-        let codexUsageSource = CodexUsageSource(
-            codexUsageSynchronizer: codexUsageSynchronizer,
-            codexDetailedResetCreditsSynchronizer: codexDetailedResetCreditsSynchronizer,
-            codexUsageReader: codexUsageReader
-        )
-        usageRefreshOrchestrator = UsageRefreshOrchestrator(
-            codexUsageSource: { detailedResetCreditsEnabled in
-                codexUsageSource.read(detailedResetCreditsEnabled: detailedResetCreditsEnabled)
-            },
-            claudeUsageReader: claudeUsageReader
-        )
+        self.codexUsageSource = { detailedResetCreditsEnabled in
+            let syncCodexUsage = detailedResetCreditsEnabled ? codexDetailedResetCreditsSynchronizer : codexUsageSynchronizer
+            let syncResult = syncCodexUsage()
+            var snapshot = codexUsageReader()
+            if let note = syncResult.note {
+                snapshot.securityNotes.append(note)
+            }
+            return snapshot
+        }
+        self.claudeUsageReader = claudeUsageReader
         self.codexAccountSwitcher = codexAccountSwitcher
         self.codexAccountRemover = codexAccountRemover
         self.automaticCodexRestarter = automaticCodexRestarter
@@ -271,19 +271,21 @@ final class UsageStore: ObservableObject {
         refreshInFlight = true
         isRefreshing = true
         lastError = nil
-        let orchestrator = usageRefreshOrchestrator
+        let codexUsageSource = codexUsageSource
+        let claudeUsageReader = claudeUsageReader
         let detailedResetCreditsEnabled = settings.detailedResetCreditsEnabled
 
         DispatchQueue.global(qos: .utility).async {
-            let refreshed = orchestrator.refresh(detailedResetCreditsEnabled: detailedResetCreditsEnabled)
+            let codex = codexUsageSource(detailedResetCreditsEnabled)
+            let claude = claudeUsageReader()
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 let previousAccounts = self.accounts
                 let wasLoaded = self.hasLoadedAccountInformation
-                self.snapshots = refreshed.snapshots
-                self.accounts = refreshed.accounts
-                self.points = refreshed.points
+                self.snapshots = [.codex: codex, .claudeCode: claude]
+                self.accounts = codex.accounts + claude.accounts
+                self.points = codex.points + claude.points
                 self.recordQuotaCapacitySample()
                 self.sendQuotaResetNotifications(previousAccounts: previousAccounts, wasLoaded: wasLoaded)
                 self.hasLoadedAccountInformation = true

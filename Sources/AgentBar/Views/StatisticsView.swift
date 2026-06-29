@@ -137,23 +137,28 @@ struct StatisticsView: View {
     }
 
     private var topNavigationBar: some View {
-        HStack(spacing: 8) {
-            navigationLayoutButton(systemImage: "sidebar.left", helpKey: "show_sidebar_menu_bar") {
-                showsSidebarNavigation = true
+        ZStack {
+            HStack {
+                navigationLayoutButton(systemImage: "sidebar.left", helpKey: "show_sidebar_menu_bar") {
+                    showsSidebarNavigation = true
+                }
+                Spacer(minLength: 0)
             }
-            topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
-                setPage(tab: .usage, viewMode: .overview)
+
+            HStack(spacing: 8) {
+                topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
+                    setPage(tab: .usage, viewMode: .overview)
+                }
+                topNavigationItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
+                    setPage(tab: .usage, viewMode: .resets)
+                }
+                topNavigationItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
+                    setPage(tab: .usage, viewMode: .audit)
+                }
+                topNavigationItem(L.text("settings", store.language), systemImage: "gearshape", active: topTab == .settings) {
+                    setPage(tab: .settings)
+                }
             }
-            topNavigationItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
-                setPage(tab: .usage, viewMode: .resets)
-            }
-            topNavigationItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
-                setPage(tab: .usage, viewMode: .audit)
-            }
-            topNavigationItem(L.text("settings", store.language), systemImage: "gearshape", active: topTab == .settings) {
-                setPage(tab: .settings)
-            }
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .frame(height: 54)

@@ -27,15 +27,6 @@ struct ResizablePopoverRootView: View {
         self.settings = store.settings
     }
 
-    private var resize: PopoverResizeDrag {
-        PopoverResizeDrag(
-            bounds: PanelResizeBounds(
-                minHeight: Double(PopoverLayout.minimumHeight),
-                maxHeight: Double(maximumHeight)
-            )
-        )
-    }
-
     var body: some View {
         PopoverRootView(
             store: store,
@@ -71,7 +62,7 @@ struct ResizablePopoverRootView: View {
         ZStack(alignment: .bottom) {
             PopoverResizeHandle(
                 startHeight: CGFloat(settings.popoverHeight),
-                resize: resize
+                maxHeight: maximumHeight
             ) { height, isFinal in
                 onHeightChange(height)
                 if isFinal {

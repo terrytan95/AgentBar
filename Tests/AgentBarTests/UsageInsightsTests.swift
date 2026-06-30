@@ -28,14 +28,8 @@ final class UsageInsightsTests: XCTestCase {
         let projection = UsageInsights.dashboardOverviewProjection(
             accounts: [active, better, locked],
             points: points,
-            snapshots: [
-                .codex: UsageSnapshot(service: .codex, status: .live, accounts: [], points: [], securityNotes: [], refreshedAt: now, pricingFingerprint: Pricing.fingerprint),
-                .claudeCode: UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [], securityNotes: ["No Claude data"], refreshedAt: now, pricingFingerprint: Pricing.fingerprint)
-            ],
-            selectedSessionLabel: nil,
             rotationThresholdRemainingPercent: 10,
             autoRotationEnabled: true,
-            language: .english,
             now: now,
             calendar: calendar
         )
@@ -43,16 +37,8 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(projection.quotaPressure.activeAccount?.id, "active")
         XCTAssertEqual(projection.quotaPressure.recommendedAccount?.id, "better")
         XCTAssertTrue(projection.quotaPressure.shouldTriggerRotation)
-        XCTAssertEqual(projection.quotaETA?.windows.first { $0.minutes == 15 }?.tokens, 6_000)
         XCTAssertEqual(projection.topUsage.sessions.first?.label, "Fix dashboard")
         XCTAssertEqual(projection.topUsage.sessions.first?.tokens, 6_000)
-        XCTAssertEqual(projection.selectedSessionDetail?.projectName, "AgentBar")
-        XCTAssertEqual(projection.rapidUsageAlert?.recentTokens, 6_000)
-        XCTAssertEqual(projection.usageAnomalies.first?.kind, .dailyTokens)
-        XCTAssertEqual(projection.dataSourceHealth.liveCount, 1)
-        XCTAssertEqual(projection.dataSourceHealth.issueCount, 1)
-        XCTAssertEqual(projection.accountHealthCenter.rows.map(\.kind), [.login, .dataSource])
-        XCTAssertEqual(projection.accountHealthCenter.rows.first?.workspaceLines, ["Workspace: Team Workspace · workspac"])
     }
 
     private func account(

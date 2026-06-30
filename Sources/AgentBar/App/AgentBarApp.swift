@@ -43,14 +43,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLog("AgentBar launched with menu bar status item")
     }
 
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            NSLog("AgentBar handling reopen")
-            LaunchStatusWindowController.shared.show()
-        }
-        return true
-    }
-
     private func smokeReportURL() -> URL? {
         guard let index = CommandLine.arguments.firstIndex(of: "--smoke-report"),
               CommandLine.arguments.indices.contains(index + 1)

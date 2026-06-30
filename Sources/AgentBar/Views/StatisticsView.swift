@@ -1039,19 +1039,9 @@ struct StatisticsView: View {
         UsageInsights.dashboardOverviewProjection(
             accounts: store.accounts,
             points: filteredPoints,
-            snapshots: store.snapshots,
-            selectedSessionLabel: selectedSessionLabel,
             rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
-            autoRotationEnabled: settings.autoCodexAccountRotationEnabled,
-            language: store.language
+            autoRotationEnabled: settings.autoCodexAccountRotationEnabled
         )
-    }
-
-    private var hasConfiguredBudgets: Bool {
-        settings.dailyTokenBudget > 0 ||
-            settings.weeklyTokenBudget > 0 ||
-            settings.dailyCostBudgetUSD > 0 ||
-            settings.weeklyCostBudgetUSD > 0
     }
 
     private var dataSourceHealth: DataSourceHealthSummary {
@@ -1550,6 +1540,7 @@ private struct ResizablePanel<Content: View>: View {
     @ViewBuilder var content: () -> Content
     @State private var dragStartHeight: CGFloat?
     @State private var liveHeight: CGFloat?
+    @State private var isHoveringResizeHandle = false
 
     private var effectiveHeight: CGFloat {
         liveHeight ?? height
@@ -1601,7 +1592,20 @@ private struct ResizablePanel<Content: View>: View {
                             height = nextHeight
                         }
                 )
-                .verticalResizeCursor()
+                .onHover { hovering in
+                    guard hovering != isHoveringResizeHandle else { return }
+                    isHoveringResizeHandle = hovering
+                    if hovering {
+                        NSCursor.resizeUpDown.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .onDisappear {
+                    guard isHoveringResizeHandle else { return }
+                    NSCursor.pop()
+                    isHoveringResizeHandle = false
+                }
                 .accessibilityLabel("Resize Current limits")
             Spacer()
         }
@@ -2161,23 +2165,6 @@ private struct EmptyPanelMessage: View {
     }
 }
 
-private struct LoadingStatusPill: View {
-    var message: String
-
-    var body: some View {
-        HStack(spacing: 7) {
-            ProgressView()
-                .controlSize(.small)
-            Text(message)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 24)
-        .agentBarPanel(cornerRadius: 12)
-    }
-}
-
 private struct LoadingAccountPanel: View {
     var title: String
     var subtitle: String
@@ -2446,62 +2433,6 @@ private struct QuotaPressureDetailsPopover: View {
     }
 }
 
-private struct QuotaETAPanel: View {
-    var eta: QuotaETA
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        Panel(title: localized("quota_eta")) {
-            HStack(spacing: 10) {
-                ForEach(eta.windows) { window in
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Text("\(window.minutes)m")
-                                .font(.system(size: 11, weight: .bold))
-                            Spacer()
-                            Text(DisplayFormatters.compactTokenString(window.tokens, language: language))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        Divider()
-                        etaLine(title: "5H", minutes: window.minutesUntilFiveHourExhaustion, color: theme.primary)
-                        etaLine(title: "WK", minutes: window.minutesUntilWeeklyExhaustion, color: theme.tertiary)
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-            }
-        }
-    }
-
-    private func etaLine(title: String, minutes: Double?, color: Color) -> some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(color)
-            Spacer()
-            Text(durationText(minutes))
-                .font(.system(size: 12, weight: .bold))
-                .monospacedDigit()
-        }
-    }
-
-    private func durationText(_ minutes: Double?) -> String {
-        guard let minutes else { return "--" }
-        if minutes < 1 { return localized("now") }
-        if minutes < 60 { return "\(Int(ceil(minutes)))m" }
-        let whole = Int(ceil(minutes))
-        return "\(whole / 60)h \(whole % 60)m"
-    }
-
-    private func localized(_ key: String) -> String {
-        L.text(key, language)
-    }
-}
-
 private struct QuotaCapacityHistoryPanel: View {
     var history: QuotaCapacityHistory
     var language: AppLanguage
@@ -2750,53 +2681,6 @@ private struct QuotaCapacityHoverCallout: View {
     }
 }
 
-private struct RapidUsageAlertPanel: View {
-    var alert: RapidUsageAlert
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "bolt.trianglebadge.exclamationmark.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.orange)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(localized("rapid_burn"))
-                    .font(.system(size: 13, weight: .bold))
-                Text(detail)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text("\(Int((alert.todayShare * 100).rounded()))%")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(theme.primary)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.orange.opacity(0.22), lineWidth: 0.5)
-        )
-    }
-
-    private var detail: String {
-        let recent = DisplayFormatters.compactTokenString(alert.recentTokens, language: language)
-        let total = DisplayFormatters.compactTokenString(alert.todayTokens, language: language)
-        return switch language {
-        case .chinese: "最近 10 分钟 \(recent) / 今日 \(total) tokens"
-        case .english: "\(recent) of \(total) tokens in the last 10 minutes"
-        }
-    }
-
-    private func localized(_ key: String) -> String {
-        L.text(key, language)
-    }
-}
-
 private struct TopUsagePanel: View {
     var breakdown: TopUsageBreakdown
     var selectedSessionLabel: String?
@@ -2880,73 +2764,6 @@ private struct TopUsagePanel: View {
         .padding(.vertical, isSelected ? 5 : 0)
         .background(isSelected ? color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         .contentShape(Rectangle())
-    }
-
-    private func localized(_ key: String) -> String {
-        L.text(key, language)
-    }
-}
-
-private struct SessionDrilldownPanel: View {
-    var detail: SessionDrilldown?
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        if let detail {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(detail.title)
-                            .font(.system(size: 13, weight: .bold))
-                            .lineLimit(1)
-                        Text(subtitle(for: detail))
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(DisplayFormatters.compactTokenString(detail.totalTokens, language: language))
-                            .font(.system(size: 14, weight: .bold))
-                            .monospacedDigit()
-                        Text(detail.estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                ForEach(detail.models) { row in
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(theme.primary)
-                            .frame(width: 7, height: 7)
-                        Text(row.label)
-                            .font(.system(size: 12, weight: .semibold))
-                            .lineLimit(1)
-                        Spacer()
-                        Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
-                            .font(.system(size: 12, weight: .bold))
-                            .monospacedDigit()
-                        Text("\(Int((row.share * 100).rounded()))%")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 34, alignment: .trailing)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 7)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-            }
-        } else {
-            EmptyPanelMessage(localized("select_session"))
-        }
-    }
-
-    private func subtitle(for detail: SessionDrilldown) -> String {
-        let project = detail.projectName ?? localized("unknown_project")
-        let latest = detail.lastUsedAt.map { DisplayFormatters.relativeString(for: $0, language: language) } ?? "--"
-        return "\(project) · \(localized("latest")) \(latest)"
     }
 
     private func localized(_ key: String) -> String {
@@ -3050,296 +2867,6 @@ private struct AccountHealthCenterPanel: View {
 
     private func localized(_ key: String) -> String {
         L.text(key, language)
-    }
-}
-
-private struct UsageAnomalyPanel: View {
-    var anomalies: [UsageAnomaly]
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        Panel(title: localized("usage_anomalies")) {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(anomalies.prefix(3)) { anomaly in
-                    HStack(spacing: 10) {
-                        Image(systemName: "waveform.path.ecg")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.orange)
-                            .frame(width: 16)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(title(for: anomaly))
-                                .font(.system(size: 12, weight: .bold))
-                                .lineLimit(1)
-                            Text(detail(for: anomaly))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Text(String(format: "%.1fx", anomaly.multiple))
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(theme.primary)
-                            .monospacedDigit()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-            }
-        }
-    }
-
-    private func title(for anomaly: UsageAnomaly) -> String {
-        switch (anomaly.kind, language) {
-        case (.dailyTokens, .chinese): "今日 Token 激增"
-        case (.modelTokens, .chinese): "\(anomaly.label) 用量激增"
-        case (.dailyTokens, _): "Daily token spike"
-        case (.modelTokens, _): "\(anomaly.label) spike"
-        }
-    }
-
-    private func detail(for anomaly: UsageAnomaly) -> String {
-        let tokens = DisplayFormatters.compactTokenString(anomaly.tokens, language: language)
-        let baseline = DisplayFormatters.compactTokenString(anomaly.baselineTokens, language: language)
-        let cost = anomaly.estimatedCostUSD.map { " · \(DisplayFormatters.costString($0))" } ?? ""
-        switch language {
-        case .chinese:
-            return "\(tokens) \(L.text("tokens", language))\(cost)，近期基线 \(baseline)"
-        case .english:
-            return "\(tokens) \(L.text("tokens", language))\(cost), baseline \(baseline)"
-        }
-    }
-
-    private func localized(_ key: String) -> String {
-        L.text(key, language)
-    }
-}
-
-private struct BudgetStatusPanel: View {
-    var today: BudgetStatus
-    var weekly: BudgetStatus
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        VStack(spacing: 8) {
-            BudgetStatusRow(title: localized("today"), status: today, language: language, theme: theme)
-            BudgetStatusRow(title: localized("week"), status: weekly, language: language, theme: theme)
-        }
-    }
-
-    private func localized(_ key: String) -> String {
-        L.text(key, language)
-    }
-}
-
-private struct DataSourceHealthPanel: View {
-    var health: DataSourceHealthSummary
-    var language: AppLanguage
-    var theme: AppThemeColor
-    @State private var expandedRows: Set<UsageService> = []
-
-    var body: some View {
-        if health.rows.isEmpty {
-            EmptyPanelMessage(localized("no_sources"))
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    HealthCountPill(title: localized("live"), value: health.liveCount, color: theme.primary)
-                    HealthCountPill(title: localized("issues"), value: health.issueCount, color: health.issueCount > 0 ? .orange : theme.tertiary)
-                }
-
-                ForEach(health.rows) { row in
-                    dataSourceRow(row)
-                }
-            }
-        }
-    }
-
-    private func dataSourceRow(_ row: DataSourceHealthSummary.Row) -> some View {
-        let detailText = detail(for: row)
-        let isExpanded = expandedRows.contains(row.id)
-
-        return HStack(alignment: .top, spacing: 10) {
-            Circle()
-                .fill(color(for: row.status))
-                .frame(width: 8, height: 8)
-                .padding(.top, 6)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.service.rawValue)
-                    .font(.system(size: 12, weight: .bold))
-                Text(detailText)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(isExpanded ? nil : 1)
-                    .fixedSize(horizontal: false, vertical: isExpanded)
-            }
-            Spacer(minLength: 8)
-            if detailText.count > Self.compactDetailLimit {
-                Button {
-                    toggleExpanded(row.id)
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10, weight: .bold))
-                        .frame(width: 18, height: 18)
-                }
-                .tactilePlainButton()
-                .foregroundStyle(.secondary)
-                .help(L.text(isExpanded ? "hide_full_text" : "show_full_text", language))
-                .accessibilityLabel(L.text(isExpanded ? "hide_full_text" : "show_full_text", language))
-            }
-            Text(statusTitle(row.status))
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(color(for: row.status))
-                .padding(.top, 2)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private func toggleExpanded(_ id: UsageService) {
-        if expandedRows.contains(id) {
-            expandedRows.remove(id)
-        } else {
-            expandedRows.insert(id)
-        }
-    }
-
-    private static let compactDetailLimit = 86
-
-    private func detail(for row: DataSourceHealthSummary.Row) -> String {
-        let refreshed = DisplayFormatters.relativeString(for: row.refreshedAt, language: language)
-        if let note = row.note, !note.isEmpty {
-            return "\(refreshed) · \(note.redactedForCredentialWords)"
-        }
-        switch language {
-        case .chinese: return "\(refreshed) 刷新"
-        case .english: return "Refreshed \(refreshed)"
-        }
-    }
-
-    private func statusTitle(_ status: DataSourceStatus) -> String {
-        switch (status, language) {
-        case (.live, .chinese): "正常"
-        case (.unavailable, .chinese): "不可用"
-        case (.needsAuthorization, .chinese): "需授权"
-        case (.live, _): "Live"
-        case (.unavailable, _): "Unavailable"
-        case (.needsAuthorization, _): "Needs auth"
-        }
-    }
-
-    private func color(for status: DataSourceStatus) -> Color {
-        switch status {
-        case .live: theme.primary
-        case .unavailable: .secondary
-        case .needsAuthorization: .orange
-        }
-    }
-
-    private func localized(_ key: String) -> String {
-        L.text(key, language)
-    }
-}
-
-private struct HealthCountPill: View {
-    var title: String
-    var value: Int
-    var color: Color
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.secondary)
-            Text("\(value)")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(color)
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 24)
-        .background(.thinMaterial, in: Capsule())
-    }
-}
-
-private struct BudgetStatusRow: View {
-    var title: String
-    var status: BudgetStatus
-    var language: AppLanguage
-    var theme: AppThemeColor
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12, weight: .bold))
-                Spacer()
-                Text(severityTitle)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(severityColor)
-            }
-
-            HStack(spacing: 10) {
-                budgetMeter(label: L.text("tokens", language), fraction: status.tokenUsageFraction)
-                budgetMeter(label: L.text("cost", language), fraction: status.costUsageFraction)
-            }
-        }
-        .padding(10)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private func budgetMeter(label: String, fraction: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(label)
-                Spacer()
-                Text(percentText(fraction))
-                    .monospacedDigit()
-            }
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.secondary)
-            ProgressView(value: min(1, max(0, fraction ?? 0)))
-                .tint(color(for: fraction))
-        }
-    }
-
-    private var severityTitle: String {
-        switch (worstSeverity, language) {
-        case (.critical, .chinese): "超出预算"
-        case (.warning, .chinese): "接近预算"
-        case (.ok, .chinese): "正常"
-        case (.critical, _): "Over budget"
-        case (.warning, _): "Near budget"
-        case (.ok, _): "On track"
-        }
-    }
-
-    private var worstSeverity: InsightSeverity {
-        if status.tokenSeverity == .critical || status.costSeverity == .critical { return .critical }
-        if status.tokenSeverity == .warning || status.costSeverity == .warning { return .warning }
-        return .ok
-    }
-
-    private var severityColor: Color {
-        switch worstSeverity {
-        case .critical: .red
-        case .warning: .orange
-        case .ok: theme.primary
-        }
-    }
-
-    private func color(for fraction: Double?) -> Color {
-        guard let fraction else { return .secondary }
-        if fraction >= 1 { return .red }
-        if fraction >= 0.8 { return .orange }
-        return theme.primary
-    }
-
-    private func percentText(_ fraction: Double?) -> String {
-        guard let fraction else { return "--" }
-        return "\(Int((fraction * 100).rounded()))%"
     }
 }
 

@@ -5,7 +5,7 @@ import XCTest
 final class UsageParsingTests: XCTestCase {
 
     @MainActor
-    func testUsageParsingCoverage() throws {
+    func testUsageParsingCoverage() async throws {
         try checkCodexRegistryParsesMultipleAccountsWithoutSecrets()
         try checkCodexRegistryParsesMultipleWorkspacesForOneAccount()
         checkAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows()
@@ -16,15 +16,15 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents()
         try checkCodexSessionJsonlCarriesSessionAndProjectMetadata()
         try checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset()
-        try checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
-        try checkCodexUsageAPISyncerRefreshesOnlyActiveAccount()
-        try checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates()
-        try checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess()
-        try checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
+        try await checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
+        try await checkCodexUsageAPISyncerRefreshesOnlyActiveAccount()
+        try await checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates()
+        try await checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess()
+        try await checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
         checkCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot()
         checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
-        checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
+        await checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
         checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized()
         checkPopoverHeightPreferenceIsClampedWhenLoadedAndSaved()
         try checkCodexReadPrefersRegistryUsageOverLocalSessionRateLimits()
@@ -334,7 +334,8 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(tooltip.contains("285"))
     }
 
-    private func checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime() throws {
+    @MainActor
+    private func checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime() async throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -394,7 +395,8 @@ final class UsageParsingTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(syncer.refreshUsage(), .success)
+        let result = await syncer.refreshUsage()
+        XCTAssertEqual(result, .success)
 
         XCTAssertEqual(requestRecorder.authorization, "Bearer secret-access-token")
         XCTAssertEqual(requestRecorder.accountID, "chatgpt-account-id")
@@ -418,7 +420,8 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(String(data: data, encoding: .utf8)?.contains("secret-access-token") ?? true)
     }
 
-    private func checkCodexUsageAPISyncerRefreshesOnlyActiveAccount() throws {
+    @MainActor
+    private func checkCodexUsageAPISyncerRefreshesOnlyActiveAccount() async throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -446,7 +449,8 @@ final class UsageParsingTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(syncer.refreshUsage(), .success)
+        let result = await syncer.refreshUsage()
+        XCTAssertEqual(result, .success)
         XCTAssertEqual(requestRecorder.requestCount, 1)
         XCTAssertEqual(requestRecorder.accountID, "active-chatgpt-id")
         let accounts = try registryAccounts(from: registryURL)
@@ -455,7 +459,8 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["agentbar_auth_error"])
     }
 
-    private func checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates() throws {
+    @MainActor
+    private func checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates() async throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -499,7 +504,8 @@ final class UsageParsingTests: XCTestCase {
             detailedResetCreditsEnabled: true
         )
 
-        XCTAssertEqual(syncer.refreshUsage(), .success)
+        let result = await syncer.refreshUsage()
+        XCTAssertEqual(result, .success)
         XCTAssertEqual(urlRecorder.urls, [
             "https://chatgpt.com/backend-api/wham/usage",
             "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
@@ -512,7 +518,8 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(resets.map { $0["expires_at"] as? Double }, [1_783_881_480, 1_784_387_760])
     }
 
-    private func checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess() throws {
+    @MainActor
+    private func checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess() async throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -532,7 +539,8 @@ final class UsageParsingTests: XCTestCase {
             usageClient: { _, _ in unauthorizedResponse }
         )
 
-        XCTAssertEqual(unauthorizedSyncer.refreshUsage(), .failed("HTTP 401"))
+        let unauthorizedResult = await unauthorizedSyncer.refreshUsage()
+        XCTAssertEqual(unauthorizedResult, .failed("HTTP 401"))
         var account = try registryAccount(from: registryURL)
         XCTAssertEqual((account["agentbar_auth_error"] as? [String: Any])?["status_code"] as? Int, 401)
 
@@ -548,12 +556,14 @@ final class UsageParsingTests: XCTestCase {
             usageClient: { _, _ in successResponse }
         )
 
-        XCTAssertEqual(successSyncer.refreshUsage(), .success)
+        let successResult = await successSyncer.refreshUsage()
+        XCTAssertEqual(successResult, .success)
         account = try registryAccount(from: registryURL)
         XCTAssertNil(account["agentbar_auth_error"])
     }
 
-    private func checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount() throws {
+    @MainActor
+    private func checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount() async throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -584,7 +594,8 @@ final class UsageParsingTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(syncer.refreshUsage(), .success)
+        let result = await syncer.refreshUsage()
+        XCTAssertEqual(result, .success)
         XCTAssertTrue((try String(contentsOf: staleSnapshotURL)).contains("new-token"))
         XCTAssertNil(try registryAccount(from: registryURL)["agentbar_auth_error"])
     }
@@ -625,7 +636,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    private func checkRefreshSyncsCodexUsageAPIBeforeReadingUsage() {
+    private func checkRefreshSyncsCodexUsageAPIBeforeReadingUsage() async {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -677,8 +688,8 @@ final class UsageParsingTests: XCTestCase {
 
         store.refresh(force: true)
 
-        wait(for: [expectation], timeout: 2)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        await fulfillment(of: [expectation], timeout: 2)
+        await waitForStoreRefresh(store)
         XCTAssertEqual(recorder.events, ["detailed-sync", "codex-read", "claude-read"])
         XCTAssertEqual(store.snapshots[.codex]?.securityNotes, [
             "local note",
@@ -689,6 +700,14 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(store.points, [claudePoint])
         XCTAssertEqual(store.menuBarTitle, "5H 92%  WK 45%")
     }
+
+    @MainActor
+    private func waitForStoreRefresh(_ store: UsageStore) async {
+        for _ in 0..<20 where store.accounts.isEmpty {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
     @MainActor
     private func checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"

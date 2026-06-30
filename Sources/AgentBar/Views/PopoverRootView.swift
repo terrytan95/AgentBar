@@ -254,15 +254,12 @@ struct PopoverRootView: View {
                     onOpenSettings()
                 }
             } else {
-                SettingsLink {
-                    Label(L.text("settings", store.language), systemImage: "gearshape")
-                        .frame(maxWidth: .infinity, minHeight: 36)
+                PopoverToolbarButton(title: L.text("settings", store.language), systemImage: "gearshape") {
+                    openWindow(id: "statistics")
+                    DispatchQueue.main.async {
+                        DashboardNavigation.request(.settings)
+                    }
                 }
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(store.settings.themeColor.primary)
-                .tactilePlainButton()
-                .agentBarPanel(cornerRadius: 10)
-                .help(L.text("settings", store.language))
             }
 
             PopoverToolbarButton(title: L.text("quit_app", store.language), systemImage: "power") {
@@ -553,31 +550,6 @@ struct KPIPill: View {
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
         .agentBarPanel(cornerRadius: 12)
-    }
-}
-
-struct MiniStackedBars: View {
-    var bars: [DailyUsageBar]
-
-    var body: some View {
-        GeometryReader { proxy in
-            let maxValue = max(1, bars.map { $0.codexTokens + $0.claudeTokens }.max() ?? 1)
-            HStack(alignment: .bottom, spacing: 5) {
-                ForEach(bars) { bar in
-                    VStack(spacing: 0) {
-                        Rectangle()
-                            .fill(.purple.opacity(0.65))
-                            .frame(height: proxy.size.height * CGFloat(bar.claudeTokens) / CGFloat(maxValue))
-                        Rectangle()
-                            .fill(.blue.opacity(0.75))
-                            .frame(height: proxy.size.height * CGFloat(bar.codexTokens) / CGFloat(maxValue))
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .accessibilityLabel(L.text("stacked_usage_bars", .english))
     }
 }
 

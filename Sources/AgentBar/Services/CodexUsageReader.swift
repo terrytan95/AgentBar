@@ -1,9 +1,5 @@
 import Foundation
 
-enum UsageReadError: Error {
-    case invalidRegistry
-}
-
 struct CodexUsageReader {
     var homeDirectory: URL
     var fileManager: FileManager = .default

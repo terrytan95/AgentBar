@@ -26,7 +26,7 @@ struct CodexUsageAPIResponse: Sendable {
 }
 
 struct CodexUsageAPISyncer {
-    typealias UsageClient = @Sendable (URLRequest, TimeInterval) throws -> CodexUsageAPIResponse
+    typealias UsageClient = @Sendable (URLRequest, TimeInterval) async throws -> CodexUsageAPIResponse
 
     static let usageEndpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
     static let resetCreditsEndpoint = URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!
@@ -54,7 +54,7 @@ struct CodexUsageAPISyncer {
         self.detailedResetCreditsEnabled = detailedResetCreditsEnabled
     }
 
-    func refreshUsage() -> CodexUsageSyncResult {
+    func refreshUsage() async -> CodexUsageSyncResult {
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
         guard let data = try? Data(contentsOf: registryURL),
@@ -104,8 +104,8 @@ struct CodexUsageAPISyncer {
 
             let response: CodexUsageAPIResponse
             do {
-                response = try usageClient(request, timeout)
-            } catch CodexUsageSyncError.timedOut {
+                response = try await usageClient(request, timeout)
+            } catch let error as URLError where error.code == .timedOut {
                 lastFailure = .timedOut
                 continue
             } catch {
@@ -129,7 +129,7 @@ struct CodexUsageAPISyncer {
                 continue
             }
             if detailedResetCreditsEnabled,
-               let detailedResetCredits = fetchDetailedResetCredits(authInfo: authInfo) {
+               let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
                 usage["reset_credits"] = detailedResetCredits
             }
 
@@ -181,7 +181,7 @@ struct CodexUsageAPISyncer {
         return attributes[.modificationDate] as? Date
     }
 
-    private static func defaultUsageClient(request: URLRequest, timeout: TimeInterval) throws -> CodexUsageAPIResponse {
+    private static func defaultUsageClient(request: URLRequest, timeout: TimeInterval) async throws -> CodexUsageAPIResponse {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = timeout
         configuration.timeoutIntervalForResource = timeout
@@ -190,29 +190,9 @@ struct CodexUsageAPISyncer {
             session.invalidateAndCancel()
         }
 
-        let semaphore = DispatchSemaphore(value: 0)
-        let resultBox = CodexUsageAPIResultBox()
-        let task = session.dataTask(with: request) { data, response, error in
-            let resolved: Result<CodexUsageAPIResponse, Error>
-            if let error {
-                resolved = .failure(error)
-            } else {
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-                resolved = .success(CodexUsageAPIResponse(statusCode: statusCode, data: data ?? Data()))
-            }
-
-            resultBox.store(resolved)
-            semaphore.signal()
-        }
-        task.resume()
-
-        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
-            task.cancel()
-            throw CodexUsageSyncError.timedOut
-        }
-
-        let resolved = resultBox.result
-        return try resolved?.get() ?? CodexUsageAPIResponse(statusCode: 0, data: Data())
+        let (data, response) = try await session.data(for: request)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        return CodexUsageAPIResponse(statusCode: statusCode, data: data)
     }
 
     private static func parseAuthInfo(data: Data) -> CodexUsageAuthInfo? {
@@ -316,7 +296,7 @@ struct CodexUsageAPISyncer {
         return output.isEmpty ? nil : output
     }
 
-    private func fetchDetailedResetCredits(authInfo: CodexUsageAuthInfo) -> [String: Any]? {
+    private func fetchDetailedResetCredits(authInfo: CodexUsageAuthInfo) async -> [String: Any]? {
         var request = URLRequest(url: Self.resetCreditsEndpoint)
         request.httpMethod = "GET"
         request.timeoutInterval = timeout
@@ -327,7 +307,7 @@ struct CodexUsageAPISyncer {
         request.setValue("Codex Desktop", forHTTPHeaderField: "originator")
         request.setValue("CODEX", forHTTPHeaderField: "OAI-Product-Sku")
 
-        guard let response = try? usageClient(request, timeout),
+        guard let response = try? await usageClient(request, timeout),
               200..<300 ~= response.statusCode
         else { return nil }
         return Self.parseDetailedResetCreditsResponse(data: response.data)
@@ -438,25 +418,4 @@ struct CodexUsageAPISyncer {
 private struct CodexUsageAuthInfo {
     var accessToken: String
     var accountID: String
-}
-
-private enum CodexUsageSyncError: Error {
-    case timedOut
-}
-
-private final class CodexUsageAPIResultBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storedResult: Result<CodexUsageAPIResponse, Error>?
-
-    var result: Result<CodexUsageAPIResponse, Error>? {
-        lock.lock()
-        defer { lock.unlock() }
-        return storedResult
-    }
-
-    func store(_ result: Result<CodexUsageAPIResponse, Error>) {
-        lock.lock()
-        storedResult = result
-        lock.unlock()
-    }
 }

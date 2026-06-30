@@ -78,8 +78,8 @@ final class StatusItemController: NSObject {
         let content = ResizablePopoverRootView(
             store: store,
             maximumHeight: maximumHeight,
-            onOpenStatistics: { MainWindowPresenter.showMainWindow() },
-            onOpenSettings: { MainWindowPresenter.showMainWindow(initialTab: .settings) },
+            onOpenStatistics: nil,
+            onOpenSettings: nil,
             onQuit: { NSApplication.shared.terminate(nil) },
             onHeightChange: { [weak popover] height in
                 popover?.contentSize = NSSize(

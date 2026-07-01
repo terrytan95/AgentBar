@@ -7,6 +7,7 @@ final class UsageAuditReporterTests: XCTestCase {
     func testUsageAuditReporterCoverage() throws {
         try checkExportRowsFilterRangeAndSerializeCSVWithEscaping()
         try checkJSONSerializationUsesNullForMissingCost()
+        try checkAuditSnapshotPreparesResizeDataOnce()
     }
 
     private func checkExportRowsFilterRangeAndSerializeCSVWithEscaping() throws {
@@ -38,6 +39,50 @@ final class UsageAuditReporterTests: XCTestCase {
         let json = UsageAuditReporter.serialize(rows: rows, format: .json)
         XCTAssertTrue(json.contains(#""estimated_cost_usd" : null"#) || json.contains(#""estimated_cost_usd": null"#))
         XCTAssertTrue(json.contains(#""model" : "gpt-5""#) || json.contains(#""model": "gpt-5""#))
+    }
+
+    private func checkAuditSnapshotPreparesResizeDataOnce() throws {
+        let older = UsagePoint(
+            service: .codex,
+            model: "gpt-5",
+            date: now.addingTimeInterval(-60),
+            tokens: TokenTotals(input: 100, cachedInput: 40, output: 20, reasoningOutput: 10, total: 170),
+            estimatedCostUSD: Decimal(string: "0.10"),
+            sessionID: "thread-a",
+            sessionTitle: "Resize Audit",
+            projectName: "AgentBar"
+        )
+        let newer = UsagePoint(
+            service: .codex,
+            model: "gpt-5",
+            date: now,
+            tokens: TokenTotals(input: 180, cachedInput: 60, output: 40, reasoningOutput: 20, total: 300),
+            estimatedCostUSD: Decimal(string: "0.20"),
+            sessionID: "thread-a",
+            sessionTitle: "Resize Audit",
+            projectName: "AgentBar"
+        )
+
+        let snapshot = AuditUsageSnapshot.make(
+            points: [older, newer],
+            range: .all,
+            customStart: nil,
+            customEnd: nil,
+            sortColumn: .tokens,
+            sortAscending: false
+        )
+
+        XCTAssertEqual(snapshot.rangePoints.map(\.callID), [newer.callID, older.callID])
+        XCTAssertEqual(snapshot.sortedCalls.map(\.tokens.total), [300, 170])
+        XCTAssertEqual(snapshot.callIDs, snapshot.rangePoints.map(\.callID))
+        XCTAssertEqual(snapshot.composition.total, 470)
+        XCTAssertEqual(NSDecimalNumber(decimal: try XCTUnwrap(snapshot.totalCost)).stringValue, "0.3")
+
+        let thread = try XCTUnwrap(snapshot.threadRows.first)
+        XCTAssertEqual(snapshot.threadRows.count, 1)
+        XCTAssertEqual(thread.calls.map(\.callID), [newer.callID, older.callID])
+        XCTAssertEqual(thread.tokens.total, 470)
+        XCTAssertEqual(thread.duration, "1m 0s")
     }
 
     private var calendar: Calendar {

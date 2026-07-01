@@ -16,72 +16,40 @@ struct AuditView: View {
     @State private var threadsPage = 0
     @State private var sortColumn: AuditSortColumn = .time
     @State private var sortAscending = false
-    @State private var kpiGridWidth: CGFloat = 980
+    @State private var kpiGridColumns = 6
 
     private let pageSize = 20
     nonisolated private static let kpiCardCount = 6
     nonisolated private static let kpiCardHeight: CGFloat = 96
     nonisolated private static let kpiGridSpacing: CGFloat = 12
 
-    private var rangePoints: [UsagePoint] {
-        UsageAuditReporter.filteredPoints(
+    private var snapshot: AuditUsageSnapshot {
+        AuditUsageSnapshot.make(
             points: points,
             range: store.selectedRange,
             customStart: store.customStart,
-            customEnd: store.customEnd
+            customEnd: store.customEnd,
+            sortColumn: sortColumn,
+            sortAscending: sortAscending
         )
-        .sorted { $0.date > $1.date }
-    }
-
-    private var threadRows: [AuditThreadRow] {
-        let rows = Dictionary(grouping: rangePoints) { point in
-            point.sessionTitle ?? point.sessionID ?? "Unknown thread"
-        }
-        .map { title, calls in
-            let sorted = calls.sorted { $0.date > $1.date }
-            let totals = calls.reduce(TokenTotals.zero) { $0 + $1.tokens }
-            let durationSeconds = durationSeconds(calls: calls)
-            return AuditThreadRow(
-                id: title,
-                title: title,
-                subtitle: "\(calls.count) calls · \(sorted.first?.projectName ?? "Unknown project")",
-                latest: sorted.first?.date ?? .distantPast,
-                durationSeconds: durationSeconds,
-                duration: durationText(seconds: durationSeconds),
-                tokens: totals,
-                cost: totalCost(calls),
-                calls: sorted
-            )
-        }
-        return sortedThreads(rows)
-    }
-
-    private var composition: TokenComposition {
-        UsageAuditReporter.tokenComposition(points: rangePoints)
-    }
-
-    private var pagedCalls: [UsagePoint] {
-        page(sortedCalls(rangePoints), index: clampedPage(callsPage, total: rangePoints.count))
-    }
-
-    private var pagedThreads: [AuditThreadRow] {
-        page(threadRows, index: clampedPage(threadsPage, total: threadRows.count))
     }
 
     var body: some View {
+        let preparedSnapshot = snapshot
+
         VStack(alignment: .leading, spacing: 14) {
-            header
-            kpiGrid
-            tablePanel
-            exportPanel
+            header(preparedSnapshot)
+            kpiGrid(preparedSnapshot)
+            tablePanel(preparedSnapshot)
+            exportPanel(preparedSnapshot)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .onAppear {
-            selectedCallID = selectedCallID ?? rangePoints.first?.callID
+            selectedCallID = selectedCallID ?? preparedSnapshot.callIDs.first
         }
-        .onChange(of: rangePoints.map(\.callID)) { _, ids in
+        .onChange(of: preparedSnapshot.callIDs) { _, ids in
             callsPage = clampedPage(callsPage, total: ids.count)
-            threadsPage = clampedPage(threadsPage, total: threadRows.count)
+            threadsPage = clampedPage(threadsPage, total: preparedSnapshot.threadRows.count)
             guard let selectedCallID, ids.contains(selectedCallID) else {
                 self.selectedCallID = ids.first
                 return
@@ -89,7 +57,7 @@ struct AuditView: View {
         }
     }
 
-    private var header: some View {
+    private func header(_ snapshot: AuditUsageSnapshot) -> some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(localized("title"))
@@ -106,12 +74,12 @@ struct AuditView: View {
             }
             .buttonStyle(.bordered)
             .pointingHandCursor()
-            statusPill
+            statusPill(snapshot)
         }
     }
 
-    private var statusPill: some View {
-        Text("\(rangePoints.count) \(localized("calls")) · JSONL")
+    private func statusPill(_ snapshot: AuditUsageSnapshot) -> some View {
+        Text("\(snapshot.rangePoints.count) \(localized("calls")) · JSONL")
             .font(.system(size: 12, weight: .bold))
             .foregroundStyle(theme.primary)
             .padding(.horizontal, 10)
@@ -119,23 +87,21 @@ struct AuditView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private var kpiGrid: some View {
+    private func kpiGrid(_ snapshot: AuditUsageSnapshot) -> some View {
         GeometryReader { proxy in
-            let width = proxy.size.width
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.kpiGridSpacing), count: Self.kpiGridColumns(for: width)), spacing: Self.kpiGridSpacing) {
-                metricCard(localized("visible_calls"), "\(rangePoints.count)")
-                metricCard(localized("total_tokens"), DisplayFormatters.compactTokenString(composition.total, language: store.language))
-                metricCard(localized("cached_input"), DisplayFormatters.compactTokenString(composition.cachedInput, language: store.language))
-                metricCard(localized("uncached_input"), DisplayFormatters.compactTokenString(max(0, composition.input - composition.cachedInput), language: store.language))
-                metricCard(localized("reasoning_output"), DisplayFormatters.compactTokenString(composition.reasoningOutput, language: store.language))
-                metricCard(localized("estimated_cost"), costText(totalCost(rangePoints)))
+            let columns = Self.kpiGridColumns(for: proxy.size.width)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.kpiGridSpacing), count: columns), spacing: Self.kpiGridSpacing) {
+                metricCard(localized("visible_calls"), "\(snapshot.rangePoints.count)")
+                metricCard(localized("total_tokens"), DisplayFormatters.compactTokenString(snapshot.composition.total, language: store.language))
+                metricCard(localized("cached_input"), DisplayFormatters.compactTokenString(snapshot.composition.cachedInput, language: store.language))
+                metricCard(localized("uncached_input"), DisplayFormatters.compactTokenString(max(0, snapshot.composition.input - snapshot.composition.cachedInput), language: store.language))
+                metricCard(localized("reasoning_output"), DisplayFormatters.compactTokenString(snapshot.composition.reasoningOutput, language: store.language))
+                metricCard(localized("estimated_cost"), costText(snapshot.totalCost))
             }
-            .onAppear { kpiGridWidth = width }
-            .onChange(of: width) { _, width in
-                kpiGridWidth = width
-            }
+            .onAppear { setKpiGridColumns(columns) }
+            .onChange(of: columns) { _, columns in setKpiGridColumns(columns) }
         }
-        .frame(height: Self.kpiGridHeight(for: kpiGridWidth))
+        .frame(height: Self.kpiGridHeight(columns: kpiGridColumns))
     }
 
     nonisolated static func kpiGridColumns(for width: CGFloat) -> Int {
@@ -143,9 +109,17 @@ struct AuditView: View {
     }
 
     nonisolated static func kpiGridHeight(for width: CGFloat) -> CGFloat {
-        let columns = kpiGridColumns(for: width)
+        kpiGridHeight(columns: kpiGridColumns(for: width))
+    }
+
+    nonisolated static func kpiGridHeight(columns: Int) -> CGFloat {
         let rows = CGFloat((kpiCardCount + columns - 1) / columns)
         return rows * kpiCardHeight + max(0, rows - 1) * kpiGridSpacing
+    }
+
+    private func setKpiGridColumns(_ columns: Int) {
+        guard kpiGridColumns != columns else { return }
+        kpiGridColumns = columns
     }
 
     private func metricCard(_ title: String, _ value: String) -> some View {
@@ -165,7 +139,7 @@ struct AuditView: View {
         .agentBarPanel(cornerRadius: 12)
     }
 
-    private var tablePanel: some View {
+    private func tablePanel(_ snapshot: AuditUsageSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Text(selectedTab == .calls ? localized("model_calls") : localized("threads"))
@@ -179,7 +153,7 @@ struct AuditView: View {
                 .frame(width: 220)
                 Spacer()
                 Button {
-                    export(format: .csv)
+                    export(format: .csv, snapshot: snapshot)
                 } label: {
                     Label("CSV", systemImage: "tablecells")
                 }
@@ -206,9 +180,9 @@ struct AuditView: View {
                 Divider()
 
                 if selectedTab == .calls {
-                    callsTable
+                    callsTable(snapshot)
                 } else {
-                    threadsTable
+                    threadsTable(snapshot)
                 }
             }
         }
@@ -233,22 +207,22 @@ struct AuditView: View {
         .foregroundStyle(.secondary)
     }
 
-    private var callsTable: some View {
+    private func callsTable(_ snapshot: AuditUsageSnapshot) -> some View {
         VStack(spacing: 0) {
-            ForEach(pagedCalls) { point in
+            ForEach(page(snapshot.sortedCalls, index: clampedPage(callsPage, total: snapshot.rangePoints.count))) { point in
                 callRow(point, nested: false)
                 if selectedCallID == point.callID {
                     callDetail(point: point)
                 }
                 Divider()
             }
-            paginationFooter(total: rangePoints.count, page: $callsPage, itemName: localized("calls"))
+            paginationFooter(total: snapshot.rangePoints.count, page: $callsPage, itemName: localized("calls"))
         }
     }
 
-    private var threadsTable: some View {
+    private func threadsTable(_ snapshot: AuditUsageSnapshot) -> some View {
         VStack(spacing: 0) {
-            ForEach(pagedThreads) { thread in
+            ForEach(page(snapshot.threadRows, index: clampedPage(threadsPage, total: snapshot.threadRows.count))) { thread in
                 threadRow(thread)
                 if expandedThreadID == thread.id {
                     ForEach(thread.calls.prefix(20)) { point in
@@ -260,7 +234,7 @@ struct AuditView: View {
                 }
                 Divider()
             }
-            paginationFooter(total: threadRows.count, page: $threadsPage, itemName: localized("threads"))
+            paginationFooter(total: snapshot.threadRows.count, page: $threadsPage, itemName: localized("threads"))
         }
     }
 
@@ -450,7 +424,7 @@ struct AuditView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private var exportPanel: some View {
+    private func exportPanel(_ snapshot: AuditUsageSnapshot) -> some View {
         HStack(spacing: 10) {
             Text(localized("privacy_note"))
                 .font(.system(size: 11, weight: .semibold))
@@ -462,7 +436,7 @@ struct AuditView: View {
                     .foregroundStyle(theme.primary)
             }
             Button {
-                export(format: .json)
+                export(format: .json, snapshot: snapshot)
             } label: {
                 Label("JSON", systemImage: "curlybraces")
             }
@@ -536,83 +510,9 @@ struct AuditView: View {
         threadsPage = 0
     }
 
-    private func sortedCalls(_ calls: [UsagePoint]) -> [UsagePoint] {
-        if sortColumn == .time && !sortAscending { return calls }
-        return calls.sorted { lhs, rhs in
-            if let ordered = callOrder(lhs, rhs) { return ordered }
-            return lhs.date > rhs.date
-        }
-    }
-
-    private func sortedThreads(_ threads: [AuditThreadRow]) -> [AuditThreadRow] {
-        threads.sorted { lhs, rhs in
-            if let ordered = threadOrder(lhs, rhs) { return ordered }
-            return lhs.latest > rhs.latest
-        }
-    }
-
-    private func callOrder(_ lhs: UsagePoint, _ rhs: UsagePoint) -> Bool? {
-        switch sortColumn {
-        case .time:
-            ordered(lhs.date, rhs.date)
-        case .thread:
-            ordered(lhs.sessionTitle ?? lhs.sessionID ?? "", rhs.sessionTitle ?? rhs.sessionID ?? "")
-        case .duration:
-            nil
-        case .initiated:
-            ordered(lhs.initiator ?? lhs.service.rawValue, rhs.initiator ?? rhs.service.rawValue)
-        case .model:
-            ordered(lhs.model, rhs.model)
-        case .effort:
-            ordered(lhs.reasoningEffort ?? "", rhs.reasoningEffort ?? "")
-        case .tokens:
-            ordered(lhs.tokens.total, rhs.tokens.total)
-        case .cached:
-            ordered(lhs.tokens.cachedInput, rhs.tokens.cachedInput)
-        case .uncached:
-            ordered(lhs.uncachedInputTokens, rhs.uncachedInputTokens)
-        case .output:
-            ordered(lhs.tokens.output, rhs.tokens.output)
-        case .reasoning:
-            ordered(lhs.tokens.reasoningOutput, rhs.tokens.reasoningOutput)
-        }
-    }
-
-    private func threadOrder(_ lhs: AuditThreadRow, _ rhs: AuditThreadRow) -> Bool? {
-        switch sortColumn {
-        case .time:
-            ordered(lhs.latest, rhs.latest)
-        case .thread:
-            ordered(lhs.title, rhs.title)
-        case .duration:
-            ordered(lhs.durationSeconds, rhs.durationSeconds)
-        case .initiated:
-            ordered(lhs.calls.first?.initiator ?? lhs.calls.first?.service.rawValue ?? "", rhs.calls.first?.initiator ?? rhs.calls.first?.service.rawValue ?? "")
-        case .model:
-            ordered(lhs.calls.first?.model ?? "", rhs.calls.first?.model ?? "")
-        case .effort:
-            ordered(lhs.calls.first?.reasoningEffort ?? "", rhs.calls.first?.reasoningEffort ?? "")
-        case .tokens:
-            ordered(lhs.tokens.total, rhs.tokens.total)
-        case .cached:
-            ordered(lhs.tokens.cachedInput, rhs.tokens.cachedInput)
-        case .uncached:
-            ordered(max(0, lhs.tokens.input - lhs.tokens.cachedInput), max(0, rhs.tokens.input - rhs.tokens.cachedInput))
-        case .output:
-            ordered(lhs.tokens.output, rhs.tokens.output)
-        case .reasoning:
-            ordered(lhs.tokens.reasoningOutput, rhs.tokens.reasoningOutput)
-        }
-    }
-
-    private func ordered<T: Comparable>(_ lhs: T, _ rhs: T) -> Bool? {
-        guard lhs != rhs else { return nil }
-        return sortAscending ? lhs < rhs : lhs > rhs
-    }
-
-    private func export(format: UsageExportFormat) {
+    private func export(format: UsageExportFormat, snapshot: AuditUsageSnapshot) {
         let rows = UsageAuditReporter.exportRows(
-            points: rangePoints,
+            points: snapshot.rangePoints,
             range: .all
         )
         let panel = NSSavePanel()
@@ -638,11 +538,7 @@ struct AuditView: View {
     }
 
     private func dateText(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = store.language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        DisplayFormatters.localizedDateString(for: date, template: "MMM d, h:mm a", language: store.language)
     }
 
     private func costText(_ value: Decimal?) -> String {
@@ -650,23 +546,159 @@ struct AuditView: View {
         return "$\(NSDecimalNumber(decimal: value).stringValue)"
     }
 
-    private func totalCost(_ calls: [UsagePoint]) -> Decimal? {
+    private func localized(_ key: String) -> String {
+        L.text(key, store.language)
+    }
+}
+
+struct AuditUsageSnapshot {
+    var rangePoints: [UsagePoint]
+    var sortedCalls: [UsagePoint]
+    var threadRows: [AuditThreadRow]
+    var composition: TokenComposition
+    var totalCost: Decimal?
+    var callIDs: [String]
+
+    static func make(
+        points: [UsagePoint],
+        range: UsageRange,
+        customStart: Date?,
+        customEnd: Date?,
+        sortColumn: AuditSortColumn,
+        sortAscending: Bool
+    ) -> AuditUsageSnapshot {
+        let rangePoints = UsageAuditReporter.filteredPoints(
+            points: points,
+            range: range,
+            customStart: customStart,
+            customEnd: customEnd
+        )
+        .sorted { $0.date > $1.date }
+        let threadRows = sortedThreads(
+            makeThreadRows(rangePoints),
+            sortColumn: sortColumn,
+            sortAscending: sortAscending
+        )
+
+        return AuditUsageSnapshot(
+            rangePoints: rangePoints,
+            sortedCalls: sortedCalls(rangePoints, sortColumn: sortColumn, sortAscending: sortAscending),
+            threadRows: threadRows,
+            composition: UsageAuditReporter.tokenComposition(points: rangePoints),
+            totalCost: totalCost(rangePoints),
+            callIDs: rangePoints.map(\.callID)
+        )
+    }
+
+    private static func makeThreadRows(_ points: [UsagePoint]) -> [AuditThreadRow] {
+        Dictionary(grouping: points) { point in
+            point.sessionTitle ?? point.sessionID ?? "Unknown thread"
+        }
+        .map { title, calls in
+            let sorted = calls.sorted { $0.date > $1.date }
+            let totals = calls.reduce(TokenTotals.zero) { $0 + $1.tokens }
+            let durationSeconds = durationSeconds(calls: calls)
+            return AuditThreadRow(
+                id: title,
+                title: title,
+                subtitle: "\(calls.count) calls · \(sorted.first?.projectName ?? "Unknown project")",
+                latest: sorted.first?.date ?? .distantPast,
+                durationSeconds: durationSeconds,
+                duration: durationText(seconds: durationSeconds),
+                tokens: totals,
+                cost: totalCost(calls),
+                calls: sorted
+            )
+        }
+    }
+
+    private static func sortedCalls(_ calls: [UsagePoint], sortColumn: AuditSortColumn, sortAscending: Bool) -> [UsagePoint] {
+        if sortColumn == .time && !sortAscending { return calls }
+        return calls.sorted { lhs, rhs in
+            if let ordered = callOrder(lhs, rhs, sortColumn: sortColumn, sortAscending: sortAscending) { return ordered }
+            return lhs.date > rhs.date
+        }
+    }
+
+    private static func sortedThreads(_ threads: [AuditThreadRow], sortColumn: AuditSortColumn, sortAscending: Bool) -> [AuditThreadRow] {
+        threads.sorted { lhs, rhs in
+            if let ordered = threadOrder(lhs, rhs, sortColumn: sortColumn, sortAscending: sortAscending) { return ordered }
+            return lhs.latest > rhs.latest
+        }
+    }
+
+    private static func callOrder(_ lhs: UsagePoint, _ rhs: UsagePoint, sortColumn: AuditSortColumn, sortAscending: Bool) -> Bool? {
+        switch sortColumn {
+        case .time:
+            ordered(lhs.date, rhs.date, sortAscending: sortAscending)
+        case .thread:
+            ordered(lhs.sessionTitle ?? lhs.sessionID ?? "", rhs.sessionTitle ?? rhs.sessionID ?? "", sortAscending: sortAscending)
+        case .duration:
+            nil
+        case .initiated:
+            ordered(lhs.initiator ?? lhs.service.rawValue, rhs.initiator ?? rhs.service.rawValue, sortAscending: sortAscending)
+        case .model:
+            ordered(lhs.model, rhs.model, sortAscending: sortAscending)
+        case .effort:
+            ordered(lhs.reasoningEffort ?? "", rhs.reasoningEffort ?? "", sortAscending: sortAscending)
+        case .tokens:
+            ordered(lhs.tokens.total, rhs.tokens.total, sortAscending: sortAscending)
+        case .cached:
+            ordered(lhs.tokens.cachedInput, rhs.tokens.cachedInput, sortAscending: sortAscending)
+        case .uncached:
+            ordered(lhs.uncachedInputTokens, rhs.uncachedInputTokens, sortAscending: sortAscending)
+        case .output:
+            ordered(lhs.tokens.output, rhs.tokens.output, sortAscending: sortAscending)
+        case .reasoning:
+            ordered(lhs.tokens.reasoningOutput, rhs.tokens.reasoningOutput, sortAscending: sortAscending)
+        }
+    }
+
+    private static func threadOrder(_ lhs: AuditThreadRow, _ rhs: AuditThreadRow, sortColumn: AuditSortColumn, sortAscending: Bool) -> Bool? {
+        switch sortColumn {
+        case .time:
+            ordered(lhs.latest, rhs.latest, sortAscending: sortAscending)
+        case .thread:
+            ordered(lhs.title, rhs.title, sortAscending: sortAscending)
+        case .duration:
+            ordered(lhs.durationSeconds, rhs.durationSeconds, sortAscending: sortAscending)
+        case .initiated:
+            ordered(lhs.calls.first?.initiator ?? lhs.calls.first?.service.rawValue ?? "", rhs.calls.first?.initiator ?? rhs.calls.first?.service.rawValue ?? "", sortAscending: sortAscending)
+        case .model:
+            ordered(lhs.calls.first?.model ?? "", rhs.calls.first?.model ?? "", sortAscending: sortAscending)
+        case .effort:
+            ordered(lhs.calls.first?.reasoningEffort ?? "", rhs.calls.first?.reasoningEffort ?? "", sortAscending: sortAscending)
+        case .tokens:
+            ordered(lhs.tokens.total, rhs.tokens.total, sortAscending: sortAscending)
+        case .cached:
+            ordered(lhs.tokens.cachedInput, rhs.tokens.cachedInput, sortAscending: sortAscending)
+        case .uncached:
+            ordered(max(0, lhs.tokens.input - lhs.tokens.cachedInput), max(0, rhs.tokens.input - rhs.tokens.cachedInput), sortAscending: sortAscending)
+        case .output:
+            ordered(lhs.tokens.output, rhs.tokens.output, sortAscending: sortAscending)
+        case .reasoning:
+            ordered(lhs.tokens.reasoningOutput, rhs.tokens.reasoningOutput, sortAscending: sortAscending)
+        }
+    }
+
+    private static func ordered<T: Comparable>(_ lhs: T, _ rhs: T, sortAscending: Bool) -> Bool? {
+        guard lhs != rhs else { return nil }
+        return sortAscending ? lhs < rhs : lhs > rhs
+    }
+
+    private static func totalCost(_ calls: [UsagePoint]) -> Decimal? {
         let costs = calls.compactMap(\.estimatedCostUSD)
         return costs.isEmpty ? nil : costs.reduce(Decimal(0), +)
     }
 
-    private func durationSeconds(calls: [UsagePoint]) -> Int {
+    private static func durationSeconds(calls: [UsagePoint]) -> Int {
         guard let first = calls.map(\.date).min(), let last = calls.map(\.date).max() else { return 0 }
         return max(0, Int(last.timeIntervalSince(first)))
     }
 
-    private func durationText(seconds: Int) -> String {
+    private static func durationText(seconds: Int) -> String {
         if seconds < 60 { return "\(seconds)s" }
         return "\(seconds / 60)m \(seconds % 60)s"
-    }
-
-    private func localized(_ key: String) -> String {
-        L.text(key, store.language)
     }
 }
 
@@ -686,7 +718,7 @@ private enum AuditUsageTab: String, CaseIterable, Identifiable {
     }
 }
 
-private enum AuditSortColumn {
+enum AuditSortColumn {
     case time
     case thread
     case duration
@@ -709,7 +741,7 @@ private enum AuditSortColumn {
     }
 }
 
-private struct AuditThreadRow: Identifiable {
+struct AuditThreadRow: Identifiable {
     var id: String
     var title: String
     var subtitle: String

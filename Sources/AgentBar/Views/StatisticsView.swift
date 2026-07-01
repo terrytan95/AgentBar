@@ -1900,6 +1900,7 @@ private struct YearActivityPanel: View {
                             heatmapHoverLayer(cells: cells, cellSize: cellSize, gridWidth: gridWidth, gridHeight: gridHeight)
                         }
                     }
+                    .zIndex(1)
 
                     HStack(spacing: 6) {
                         Spacer()
@@ -1914,6 +1915,7 @@ private struct YearActivityPanel: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: dayLabelWidth + 10 + gridWidth, alignment: .trailing)
+                    .zIndex(0)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             }

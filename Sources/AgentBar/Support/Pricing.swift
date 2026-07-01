@@ -96,10 +96,6 @@ enum Pricing {
         )
     }
 
-    static func hasPrice(model: String) -> Bool {
-        table[normalize(model: model)] != nil
-    }
-
     static let fingerprint: String = {
         let body = table.keys.sorted().map { key -> String in
             let price = table[key]!

@@ -1,17 +1,7 @@
 import Foundation
 
 struct CodexSessionMetricsReader {
-    typealias Parser = (Data, String?, String?, String?) throws -> CodexSessionMetrics
-
     var fileManager: FileManager = .default
-    var parseSessionJsonl: Parser = { data, sessionID, projectName, sourceFile in
-        try CodexUsageReader.parseSessionJsonl(
-            data: data,
-            sessionID: sessionID,
-            projectName: projectName,
-            sourceFile: sourceFile
-        )
-    }
 
     private static let sessionMetricsCache = CodexSessionMetricsCache()
 
@@ -40,11 +30,11 @@ struct CodexSessionMetricsReader {
                 metrics = cachedMetrics
             } else {
                 guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
-                      let parsedMetrics = try? parseSessionJsonl(
-                        data,
-                        fileURL.deletingPathExtension().lastPathComponent,
-                        nil,
-                        fileURL.path
+                      let parsedMetrics = try? CodexUsageReader.parseSessionJsonl(
+                        data: data,
+                        sessionID: fileURL.deletingPathExtension().lastPathComponent,
+                        projectName: nil,
+                        sourceFile: fileURL.path
                       )
                 else { continue }
                 metrics = parsedMetrics

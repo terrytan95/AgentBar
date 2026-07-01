@@ -2,7 +2,7 @@ import XCTest
 @testable import AgentBar
 
 final class UsageInsightsTests: XCTestCase {
-    func testDashboardOverviewProjectionComposesStatisticsInsights() {
+    func testDashboardOverviewUsesStatisticsInsights() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         var active = account(id: "active", name: "active@example.com", fiveHourUsed: 96, weeklyUsed: 20, now: now, active: true)
         active.workspaces = [UsageWorkspace(name: "Active Workspace", workspaceID: "active-123456")]
@@ -25,20 +25,24 @@ final class UsageInsightsTests: XCTestCase {
             point(total: 1_000, minutesAgo: 25, now: now, model: "gpt-5-mini", sessionID: "session-b", sessionTitle: "Audit release", projectName: "Other", cost: "0.10")
         ]
 
-        let projection = UsageInsights.dashboardOverviewProjection(
+        let pressure = UsageInsights.quotaPressure(
             accounts: [active, better, locked],
             points: points,
             rotationThresholdRemainingPercent: 10,
             autoRotationEnabled: true,
+            now: now
+        )
+        let topUsage = UsageInsights.topUsage(
+            points: points,
             now: now,
             calendar: calendar
         )
 
-        XCTAssertEqual(projection.quotaPressure.activeAccount?.id, "active")
-        XCTAssertEqual(projection.quotaPressure.recommendedAccount?.id, "better")
-        XCTAssertTrue(projection.quotaPressure.shouldTriggerRotation)
-        XCTAssertEqual(projection.topUsage.sessions.first?.label, "Fix dashboard")
-        XCTAssertEqual(projection.topUsage.sessions.first?.tokens, 6_000)
+        XCTAssertEqual(pressure.activeAccount?.id, "active")
+        XCTAssertEqual(pressure.recommendedAccount?.id, "better")
+        XCTAssertTrue(pressure.shouldTriggerRotation)
+        XCTAssertEqual(topUsage.sessions.first?.label, "Fix dashboard")
+        XCTAssertEqual(topUsage.sessions.first?.tokens, 6_000)
     }
 
     private func account(

@@ -2,7 +2,6 @@ import Foundation
 
 struct ClaudeUsageReader {
     var homeDirectory: URL
-    var fileManager: FileManager = .default
 
     init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.homeDirectory = homeDirectory

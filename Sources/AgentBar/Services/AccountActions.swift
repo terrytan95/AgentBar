@@ -66,9 +66,8 @@ struct CodexAccountSwitcher {
             try? fileManager.setAttributes([.posixPermissions: activeAuthPermissions], ofItemAtPath: activeAuthURL.path)
         }
 
-        let output = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         do {
-            try output.write(to: registryURL, options: [.atomic])
+            try storage.writeRegistry(json)
         } catch {
             restoreAuth(previousAuth, to: activeAuthURL, permissions: activeAuthPermissions)
             throw error
@@ -121,8 +120,7 @@ struct CodexAccountRemover {
             json.removeValue(forKey: "previous_active_account_key")
         }
 
-        let output = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try output.write(to: registryURL, options: [.atomic])
+        try storage.writeRegistry(json)
         if fileManager.fileExists(atPath: accountSnapshotURL.path) {
             try fileManager.removeItem(at: accountSnapshotURL)
         }
@@ -187,16 +185,6 @@ enum AccountLoginLauncher {
           activate
           do script \(appleScriptString(command))
         end tell
-        """
-        runAppleScript(script)
-    }
-
-    static func restartIntegration(for service: UsageService) {
-        let appName = service == .codex ? "Codex" : "Claude"
-        let script = """
-        tell application "\(appName)" to quit
-        delay 1
-        tell application "\(appName)" to activate
         """
         runAppleScript(script)
     }

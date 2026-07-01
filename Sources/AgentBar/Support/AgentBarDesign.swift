@@ -39,12 +39,22 @@ enum AgentBarDesign {
 
 private struct AgentBarPanelModifier: ViewModifier {
     var cornerRadius: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
 
+    @ViewBuilder
     func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            darkBody(content: content)
+        } else {
+            lightBody(content: content)
+        }
+    }
+
+    private func darkBody(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         let shadowOpacity: Double = cornerRadius == 0 ? 0 : 1
 
-        content
+        return content
             .background {
                 shape
                     .fill(.regularMaterial)
@@ -64,6 +74,28 @@ private struct AgentBarPanelModifier: ViewModifier {
             .clipShape(shape)
             .shadow(color: .black.opacity(0.14 * shadowOpacity), radius: 24, y: 12)
             .shadow(color: .black.opacity(0.05 * shadowOpacity), radius: 4, y: 1)
+    }
+
+    private func lightBody(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let shadowOpacity: Double = cornerRadius == 0 ? 0 : 1
+
+        return content
+            .background(
+                shape
+                    .fill(cornerRadius == 0 ? Color(nsColor: .windowBackgroundColor).opacity(0.72) : Color(nsColor: .controlBackgroundColor).opacity(0.78))
+                    .overlay(alignment: .top) {
+                        shape
+                            .stroke(Color(nsColor: .controlBackgroundColor).opacity(cornerRadius == 0 ? 0 : 0.72), lineWidth: 1)
+                            .blur(radius: 0.4)
+                    }
+            )
+            .overlay {
+                shape.strokeBorder(Color(nsColor: .separatorColor).opacity(0.72), lineWidth: 0.8)
+            }
+            .clipShape(shape)
+            .shadow(color: .black.opacity(0.07 * shadowOpacity), radius: 16, y: 8)
+            .shadow(color: .black.opacity(0.035 * shadowOpacity), radius: 3, y: 1)
     }
 }
 

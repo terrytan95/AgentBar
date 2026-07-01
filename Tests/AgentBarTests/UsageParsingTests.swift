@@ -1373,7 +1373,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(points.filter { current.contains($0.date) }.map(\.tokens.total).reduce(0, +), 150)
         XCTAssertEqual(points.filter { previous.contains($0.date) }.map(\.tokens.total).reduce(0, +), 20)
         XCTAssertEqual(UsageStatistics.summarize(points: points, range: .last7Days, now: now, calendar: calendar).totalTokens, 150)
-        XCTAssertEqual(UsageAuditReporter.filteredPoints(points: points, range: .last7Days, now: now, calendar: calendar).map(\.tokens.total).reduce(0, +), 150)
+        XCTAssertEqual(UsageRangeProjection.filteredPoints(points: points, range: .last7Days, now: now, calendar: calendar).map(\.tokens.total).reduce(0, +), 150)
     }
 
     private func checkUsageRangeChartTitlesMatchSelectedInterval() {

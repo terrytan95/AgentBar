@@ -20,10 +20,6 @@ enum DisplayFormatters {
         integer.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
-    static func compactTokenString(_ value: Int) -> String {
-        compactTokenString(value, language: .chinese)
-    }
-
     static func compactTokenString(_ value: Int, language: AppLanguage) -> String {
         guard language == .chinese else {
             return englishCompactTokenString(value)

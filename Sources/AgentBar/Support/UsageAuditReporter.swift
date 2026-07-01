@@ -47,7 +47,7 @@ enum UsageAuditReporter {
         customStart: Date? = nil,
         customEnd: Date? = nil
     ) -> [UsageRecordExportRow] {
-        filteredPoints(points: points, range: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd)
+        UsageRangeProjection.filteredPoints(points: points, range: range, now: now, calendar: calendar, customStart: customStart, customEnd: customEnd)
             .sorted { $0.date < $1.date }
             .map { point in
                 UsageRecordExportRow(
@@ -71,24 +71,6 @@ enum UsageAuditReporter {
         case .json:
             return serializeJSON(rows: rows)
         }
-    }
-
-    static func filteredPoints(
-        points: [UsagePoint],
-        range: UsageRange,
-        now: Date = Date(),
-        calendar: Calendar = .current,
-        customStart: Date? = nil,
-        customEnd: Date? = nil
-    ) -> [UsagePoint] {
-        UsageRangeProjection.filteredPoints(
-            points: points,
-            range: range,
-            now: now,
-            calendar: calendar,
-            customStart: customStart,
-            customEnd: customEnd
-        )
     }
 
     private static func serializeCSV(rows: [UsageRecordExportRow]) -> String {

@@ -85,11 +85,6 @@ struct DataSourceHealthSummary: Equatable, Sendable {
     var issueCount: Int
 }
 
-struct DashboardOverviewProjection: Equatable, Sendable {
-    var quotaPressure: QuotaPressureInsight
-    var topUsage: TopUsageBreakdown
-}
-
 enum UsageInsights {
     static func currentLimitSummary(accounts: [UsageAccount]) -> CurrentLimitSummary {
         let quotaAccounts = accounts.filter { $0.fiveHourWindow != nil || $0.weeklyWindow != nil }
@@ -103,29 +98,6 @@ enum UsageInsights {
             mostConstrainedAccount: constrained,
             lowestFiveHourRemaining: quotaAccounts.compactMap(\.fiveHourWindow?.remainingPercent).min(),
             lowestWeeklyRemaining: quotaAccounts.compactMap(\.weeklyWindow?.remainingPercent).min()
-        )
-    }
-
-    static func dashboardOverviewProjection(
-        accounts: [UsageAccount],
-        points: [UsagePoint],
-        rotationThresholdRemainingPercent: Double,
-        autoRotationEnabled: Bool,
-        now: Date = Date(),
-        calendar: Calendar = .current
-    ) -> DashboardOverviewProjection {
-        let pressure = quotaPressure(
-            accounts: accounts,
-            points: points,
-            rotationThresholdRemainingPercent: rotationThresholdRemainingPercent,
-            autoRotationEnabled: autoRotationEnabled,
-            now: now
-        )
-        let top = topUsage(points: points, now: now, calendar: calendar)
-
-        return DashboardOverviewProjection(
-            quotaPressure: pressure,
-            topUsage: top
         )
     }
 

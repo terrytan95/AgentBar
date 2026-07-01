@@ -46,6 +46,7 @@ final class UsageStore: ObservableObject {
     private var summaryCache: UsageSummary?
     private var periodChangeCache: UsagePeriodChange?
     private var selectedRangePointsCache: [UsagePoint]?
+    private var selectedRangeProjectionCache: UsageRangeProjection?
     private var yearActivityBarsCache: [DailyUsageBar]?
 
     init(
@@ -185,37 +186,39 @@ final class UsageStore: ObservableObject {
     }
 
     func usageDataDisplayPoints(_ points: [UsagePoint]) -> [UsagePoint] {
-        guard !settings.showAggregatedAccountData,
-              let service = activeAccount?.service
-        else {
-            return points
-        }
-        return points.filter { $0.service == service }
+        UsageRangeProjection.displayPoints(
+            points,
+            showAggregatedAccountData: settings.showAggregatedAccountData,
+            activeService: activeAccount?.service
+        )
     }
 
     var summary: UsageSummary {
         if let summaryCache { return summaryCache }
-        let summary = UsageStatistics.summarize(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
+        let summary = selectedRangeProjection.summary
         summaryCache = summary
         return summary
     }
 
     var periodChange: UsagePeriodChange {
         if let periodChangeCache { return periodChangeCache }
-        let change = UsageStatistics.periodChange(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
+        let change = selectedRangeProjection.periodChange
         periodChangeCache = change
         return change
     }
 
     var selectedRangePoints: [UsagePoint] {
         if let selectedRangePointsCache { return selectedRangePointsCache }
-        guard let interval = selectedRange.dateInterval(now: Date(), calendar: .current, customStart: customStart, customEnd: customEnd) else {
-            selectedRangePointsCache = points
-            return points
-        }
-        let rangePoints = points.filter { interval.contains($0.date) }
+        let rangePoints = selectedRangeProjection.rangePoints
         selectedRangePointsCache = rangePoints
         return rangePoints
+    }
+
+    private var selectedRangeProjection: UsageRangeProjection {
+        if let selectedRangeProjectionCache { return selectedRangeProjectionCache }
+        let projection = UsageRangeProjection(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
+        selectedRangeProjectionCache = projection
+        return projection
     }
 
     var yearActivityBars: [DailyUsageBar] {
@@ -408,6 +411,7 @@ final class UsageStore: ObservableObject {
         summaryCache = nil
         periodChangeCache = nil
         selectedRangePointsCache = nil
+        selectedRangeProjectionCache = nil
         yearActivityBarsCache = nil
     }
 

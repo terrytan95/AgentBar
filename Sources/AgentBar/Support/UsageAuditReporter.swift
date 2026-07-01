@@ -81,10 +81,14 @@ enum UsageAuditReporter {
         customStart: Date? = nil,
         customEnd: Date? = nil
     ) -> [UsagePoint] {
-        guard let interval = range.dateInterval(now: now, calendar: calendar, customStart: customStart, customEnd: customEnd) else {
-            return points
-        }
-        return points.filter { interval.contains($0.date) }
+        UsageRangeProjection.filteredPoints(
+            points: points,
+            range: range,
+            now: now,
+            calendar: calendar,
+            customStart: customStart,
+            customEnd: customEnd
+        )
     }
 
     private static func serializeCSV(rows: [UsageRecordExportRow]) -> String {

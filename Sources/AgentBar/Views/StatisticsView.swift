@@ -833,11 +833,11 @@ struct StatisticsView: View {
     }
 
     private var summary: UsageSummary {
-        UsageStatistics.summarize(points: usageDataDisplayPoints, range: store.selectedRange, customStart: store.customStart, customEnd: store.customEnd)
+        usageRangeProjection.summary
     }
 
     private var periodChange: UsagePeriodChange {
-        UsageStatistics.periodChange(points: usageDataDisplayPoints, range: store.selectedRange, customStart: store.customStart, customEnd: store.customEnd)
+        usageRangeProjection.periodChange
     }
 
     private var filteredPoints: [UsagePoint] {
@@ -845,14 +845,20 @@ struct StatisticsView: View {
     }
 
     private var selectedRangePoints: [UsagePoint] {
-        guard let interval = store.selectedRange.dateInterval(now: Date(), calendar: .current, customStart: store.customStart, customEnd: store.customEnd) else {
-            return usageDataDisplayPoints
-        }
-        return usageDataDisplayPoints.filter { interval.contains($0.date) }
+        usageRangeProjection.rangePoints
     }
 
     private var usageDataDisplayPoints: [UsagePoint] {
         store.usageDataDisplayPoints
+    }
+
+    private var usageRangeProjection: UsageRangeProjection {
+        UsageRangeProjection(
+            points: usageDataDisplayPoints,
+            range: store.selectedRange,
+            customStart: store.customStart,
+            customEnd: store.customEnd
+        )
     }
 
     private var codexAccounts: [UsageAccount] {

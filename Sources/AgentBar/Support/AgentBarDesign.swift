@@ -3,15 +3,37 @@ import SwiftUI
 enum AgentBarDesign {
     static let radiusMedium: CGFloat = 12
     static let radiusLarge: CGFloat = 18
-    static let appBackground = Color(nsColor: .windowBackgroundColor)
-    static let cardBackground = Color(nsColor: .controlBackgroundColor).opacity(0.78)
-    static let hairline = Color(nsColor: .separatorColor).opacity(0.72)
-    static let panelHighlight = Color(nsColor: .controlBackgroundColor).opacity(0.72)
+    static let appBackground = adaptiveColor(
+        light: NSColor.windowBackgroundColor,
+        dark: NSColor(calibratedRed: 0.060, green: 0.064, blue: 0.058, alpha: 1)
+    )
+    static let cardBackground = adaptiveColor(
+        light: NSColor.controlBackgroundColor.withAlphaComponent(0.78),
+        dark: NSColor(calibratedRed: 0.165, green: 0.170, blue: 0.155, alpha: 0.78)
+    )
+    static let hairline = adaptiveColor(
+        light: NSColor.separatorColor.withAlphaComponent(0.72),
+        dark: NSColor(calibratedWhite: 1, alpha: 0.13)
+    )
+    static let panelHighlight = adaptiveColor(
+        light: NSColor.controlBackgroundColor.withAlphaComponent(0.72),
+        dark: NSColor(calibratedWhite: 1, alpha: 0.075)
+    )
+    static let panelGlow = adaptiveColor(
+        light: NSColor.white.withAlphaComponent(0.28),
+        dark: NSColor.white.withAlphaComponent(0.10)
+    )
     static let durationFast = 0.15
     static let durationNormal = 0.20
 
     static func smoothAnimation(reduceMotion: Bool, duration: Double = durationNormal) -> Animation? {
         reduceMotion ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: duration)
+    }
+
+    private static func adaptiveColor(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        })
     }
 }
 
@@ -23,21 +45,25 @@ private struct AgentBarPanelModifier: ViewModifier {
         let shadowOpacity: Double = cornerRadius == 0 ? 0 : 1
 
         content
-            .background(
+            .background {
                 shape
-                    .fill(cornerRadius == 0 ? AgentBarDesign.appBackground.opacity(0.72) : AgentBarDesign.cardBackground)
+                    .fill(.regularMaterial)
+                    .opacity(cornerRadius == 0 ? 0 : 1)
+                    .overlay {
+                        shape.fill(cornerRadius == 0 ? AgentBarDesign.appBackground.opacity(0.72) : AgentBarDesign.cardBackground)
+                    }
                     .overlay(alignment: .top) {
                         shape
-                            .stroke(AgentBarDesign.panelHighlight.opacity(cornerRadius == 0 ? 0 : 0.72), lineWidth: 1)
+                            .stroke(AgentBarDesign.panelGlow.opacity(cornerRadius == 0 ? 0 : 0.95), lineWidth: 1)
                             .blur(radius: 0.4)
                     }
-            )
+            }
             .overlay {
                 shape.strokeBorder(AgentBarDesign.hairline, lineWidth: 0.8)
             }
             .clipShape(shape)
-            .shadow(color: .black.opacity(0.07 * shadowOpacity), radius: 16, y: 8)
-            .shadow(color: .black.opacity(0.035 * shadowOpacity), radius: 3, y: 1)
+            .shadow(color: .black.opacity(0.14 * shadowOpacity), radius: 24, y: 12)
+            .shadow(color: .black.opacity(0.05 * shadowOpacity), radius: 4, y: 1)
     }
 }
 

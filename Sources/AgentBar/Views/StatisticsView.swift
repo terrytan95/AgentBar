@@ -1829,7 +1829,7 @@ private struct YearActivityPanel: View {
     var language: AppLanguage
     var theme: AppThemeColor
     @State private var hoveredBarID: Date?
-    @State private var hoveredCellCenter: CGPoint?
+    @State private var hoverLocation: CGPoint?
     @Environment(\.colorScheme) private var colorScheme
 
     private let spacing: CGFloat = 4
@@ -1924,38 +1924,37 @@ private struct YearActivityPanel: View {
     @ViewBuilder
     private func heatmapHoverLayer(cells: [YearActivityCell], cellSize: CGFloat, gridWidth: CGFloat, gridHeight: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
-            ForEach(cells) { cell in
-                if let bar = cell.bar {
-                    let column = cell.index / 7
-                    let row = cell.index % 7
-                    let origin = CGPoint(x: CGFloat(column) * (cellSize + spacing), y: CGFloat(row) * (cellSize + spacing))
-                    let center = CGPoint(x: origin.x + cellSize / 2, y: origin.y + cellSize / 2)
-
-                    Rectangle()
-                        .fill(Color.clear)
-                        .contentShape(Rectangle())
-                        .frame(width: cellSize, height: cellSize)
-                        .position(center)
-                        .help(bar.tooltipText(language: language))
-                        .onHover { hovering in
-                            if hovering {
-                                hoveredBarID = bar.id
-                                hoveredCellCenter = center
-                            } else if hoveredBarID == bar.id {
-                                hoveredBarID = nil
-                                hoveredCellCenter = nil
-                            }
-                        }
+            PlotHoverTrackingView { location, _ in
+                guard let location, let bar = bar(at: location, cells: cells, cellSize: cellSize) else {
+                    hoveredBarID = nil
+                    hoverLocation = nil
+                    return
                 }
+                hoveredBarID = bar.id
+                hoverLocation = location
             }
+            .frame(width: gridWidth, height: gridHeight)
 
-            if let hoveredBar, let hoveredCellCenter {
+            if let hoveredBar, let hoverLocation {
                 ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
                     .allowsHitTesting(false)
-                    .position(calloutPosition(for: hoveredCellCenter, gridWidth: gridWidth, gridHeight: gridHeight))
+                    .position(calloutPosition(for: hoverLocation, gridWidth: gridWidth, gridHeight: gridHeight))
             }
         }
         .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
+    }
+
+    private func bar(at location: CGPoint, cells: [YearActivityCell], cellSize: CGFloat) -> DailyUsageBar? {
+        let slot = cellSize + spacing
+        guard location.x >= 0, location.y >= 0 else { return nil }
+        let column = Int(location.x / slot)
+        let row = Int(location.y / slot)
+        guard location.x - CGFloat(column) * slot <= cellSize,
+              location.y - CGFloat(row) * slot <= cellSize
+        else { return nil }
+        let index = column * 7 + row
+        guard cells.indices.contains(index) else { return nil }
+        return cells[index].bar
     }
 
     private var hoveredBar: DailyUsageBar? {
@@ -1963,9 +1962,9 @@ private struct YearActivityPanel: View {
         return bars.first { $0.id == hoveredBarID }
     }
 
-    private func calloutPosition(for center: CGPoint, gridWidth: CGFloat, gridHeight: CGFloat) -> CGPoint {
-        let x = min(max(center.x, 119), max(119, gridWidth - 119))
-        let y = center.y < gridHeight / 2 ? center.y + 70 : center.y - 70
+    private func calloutPosition(for cursor: CGPoint, gridWidth: CGFloat, gridHeight: CGFloat) -> CGPoint {
+        let x = min(max(cursor.x + 130, 119), max(119, gridWidth - 119))
+        let y = cursor.y < gridHeight - 72 ? cursor.y + 58 : cursor.y - 58
         return CGPoint(x: x, y: y)
     }
 

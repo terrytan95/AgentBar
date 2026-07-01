@@ -1460,14 +1460,20 @@ final class UsageParsingTests: XCTestCase {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let day = calendar.date(from: DateComponents(year: 2026, month: 6, day: 13))!
-        let bar = DailyUsageBar(day: day, codexTokens: 1_500_000, claudeTokens: 2_000_000)
+        let bar = DailyUsageBar(
+            day: day,
+            codexTokens: 1_500_000,
+            claudeTokens: 2_000_000,
+            codexCostUSD: Decimal(string: "0.001")!,
+            claudeCostUSD: Decimal(string: "0.002")!
+        )
 
         let tooltip = bar.tooltipText(language: .english)
 
         XCTAssertTrue(tooltip.contains("Jun 13, 2026"))
-        XCTAssertTrue(tooltip.contains("Codex: 1.5000 mil Tokens"))
-        XCTAssertTrue(tooltip.contains("Claude: 2.0000 mil Tokens"))
-        XCTAssertTrue(tooltip.contains("Total: 3.5000 mil Tokens"))
+        XCTAssertTrue(tooltip.contains("Codex: 1.5000 mil Tokens · $0.001"))
+        XCTAssertTrue(tooltip.contains("Claude: 2.0000 mil Tokens · $0.002"))
+        XCTAssertTrue(tooltip.contains("Total: 3.5000 mil Tokens · $0.003"))
     }
 
     private func checkAccountMetadataShowsResetActivityAndAccountType() {

@@ -91,6 +91,7 @@ struct PopoverRootView: View {
     var onOpenSettings: (() -> Void)?
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -133,8 +134,12 @@ struct PopoverRootView: View {
 
     private var hairline: some View {
         Rectangle()
-            .fill(AgentBarDesign.hairline)
+            .fill(hairlineColor)
             .frame(height: 1)
+    }
+
+    private var hairlineColor: Color {
+        colorScheme == .dark ? AgentBarDesign.hairline : Color(nsColor: .separatorColor).opacity(0.72)
     }
 
     private var dataSourceHealth: DataSourceHealthSummary {

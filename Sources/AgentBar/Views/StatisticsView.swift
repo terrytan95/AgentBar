@@ -170,9 +170,13 @@ struct StatisticsView: View {
         .background(AgentBarDesign.cardBackground)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(AgentBarDesign.hairline)
+                .fill(topNavigationSeparatorColor)
                 .frame(height: 1)
         }
+    }
+
+    private var topNavigationSeparatorColor: Color {
+        colorScheme == .dark ? AgentBarDesign.hairline : Color(nsColor: .separatorColor).opacity(0.72)
     }
 
     private func navigationLayoutButton(systemImage: String, helpKey: String, action: @escaping () -> Void) -> some View {
@@ -497,7 +501,7 @@ struct StatisticsView: View {
             dailyUsagePanel
 
             Panel(title: yearActivityLocalized("year_activity")) {
-                YearActivityPanel(bars: yearActivityBars, language: store.language)
+                YearActivityPanel(bars: yearActivityBars, language: store.language, theme: settings.themeColor)
             }
 
             Panel(
@@ -1823,6 +1827,9 @@ private struct DashboardStackedBars: View {
 private struct YearActivityPanel: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
+    var theme: AppThemeColor
+    @State private var hoveredBarID: Date?
+    @State private var hoveredCellCenter: CGPoint?
     @Environment(\.colorScheme) private var colorScheme
 
     private let spacing: CGFloat = 4
@@ -1889,6 +1896,9 @@ private struct YearActivityPanel: View {
                         }
                         .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
                         .accessibilityLabel(Text("\(rangeText), \(activeDaysText)"))
+                        .overlay(alignment: .topLeading) {
+                            heatmapHoverLayer(cells: cells, cellSize: cellSize, gridWidth: gridWidth, gridHeight: gridHeight)
+                        }
                     }
 
                     HStack(spacing: 6) {
@@ -1909,6 +1919,54 @@ private struct YearActivityPanel: View {
             }
             .frame(height: 192)
         }
+    }
+
+    @ViewBuilder
+    private func heatmapHoverLayer(cells: [YearActivityCell], cellSize: CGFloat, gridWidth: CGFloat, gridHeight: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(cells) { cell in
+                if let bar = cell.bar {
+                    let column = cell.index / 7
+                    let row = cell.index % 7
+                    let origin = CGPoint(x: CGFloat(column) * (cellSize + spacing), y: CGFloat(row) * (cellSize + spacing))
+                    let center = CGPoint(x: origin.x + cellSize / 2, y: origin.y + cellSize / 2)
+
+                    Rectangle()
+                        .fill(Color.clear)
+                        .contentShape(Rectangle())
+                        .frame(width: cellSize, height: cellSize)
+                        .position(center)
+                        .help(bar.tooltipText(language: language))
+                        .onHover { hovering in
+                            if hovering {
+                                hoveredBarID = bar.id
+                                hoveredCellCenter = center
+                            } else if hoveredBarID == bar.id {
+                                hoveredBarID = nil
+                                hoveredCellCenter = nil
+                            }
+                        }
+                }
+            }
+
+            if let hoveredBar, let hoveredCellCenter {
+                ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
+                    .allowsHitTesting(false)
+                    .position(calloutPosition(for: hoveredCellCenter, gridWidth: gridWidth, gridHeight: gridHeight))
+            }
+        }
+        .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
+    }
+
+    private var hoveredBar: DailyUsageBar? {
+        guard let hoveredBarID else { return nil }
+        return bars.first { $0.id == hoveredBarID }
+    }
+
+    private func calloutPosition(for center: CGPoint, gridWidth: CGFloat, gridHeight: CGFloat) -> CGPoint {
+        let x = min(max(center.x, 119), max(119, gridWidth - 119))
+        let y = center.y < gridHeight / 2 ? center.y + 70 : center.y - 70
+        return CGPoint(x: x, y: y)
     }
 
     private var summaryHeader: some View {

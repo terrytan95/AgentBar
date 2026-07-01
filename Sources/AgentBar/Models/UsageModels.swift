@@ -482,11 +482,12 @@ struct DailyUsageBar: Equatable, Identifiable, Sendable {
     func tooltipText(language: AppLanguage) -> String {
         let tokensLabel = L.text("tokens", language)
         let total = codexTokens + claudeTokens
+        let totalCost = codexCostUSD + claudeCostUSD
         return [
             DisplayFormatters.localizedDateString(for: day, template: "yMMMd", language: language, timeZone: TimeZone(secondsFromGMT: 0)),
-            "Codex: \(DisplayFormatters.compactTokenString(codexTokens, language: language)) \(tokensLabel)",
-            "Claude: \(DisplayFormatters.compactTokenString(claudeTokens, language: language)) \(tokensLabel)",
-            "Total: \(DisplayFormatters.compactTokenString(total, language: language)) \(tokensLabel)"
+            "Codex: \(DisplayFormatters.compactTokenString(codexTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(codexCostUSD))",
+            "Claude: \(DisplayFormatters.compactTokenString(claudeTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(claudeCostUSD))",
+            "Total: \(DisplayFormatters.compactTokenString(total, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(totalCost))"
         ].joined(separator: "\n")
     }
 }

@@ -5,7 +5,6 @@ struct CodexUsageReader {
     var fileManager: FileManager = .default
     static let maximumSessionFileBytes = 10 * 1024 * 1024
     static let maximumSessionFiles = 1_000
-    private static let sessionMetricsCache = CodexSessionMetricsCache()
 
     init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.homeDirectory = homeDirectory
@@ -40,7 +39,11 @@ struct CodexUsageReader {
         }
 
         let sessionRoot = homeDirectory.appending(path: ".codex/sessions")
-        let metrics = readSessionMetrics(root: sessionRoot)
+        let metrics = CodexSessionMetricsReader(fileManager: fileManager).read(
+            root: sessionRoot,
+            maximumSessionFileBytes: Self.maximumSessionFileBytes,
+            maximumSessionFiles: Self.maximumSessionFiles
+        )
         points.append(contentsOf: metrics.points)
 
         if !accounts.isEmpty {
@@ -261,50 +264,8 @@ struct CodexUsageReader {
         )
     }
 
-    private func readSessionMetrics(root: URL) -> CodexSessionMetrics {
-        guard let enumerator = fileManager.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
-        }
-
-        var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
-        var livePaths = Set<String>()
-        var reviewedFileCount = 0
-
-        for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
-            guard let signature = CodexSessionFileSignature(fileURL: fileURL) else { continue }
-            guard signature.size <= Self.maximumSessionFileBytes else { continue }
-            guard reviewedFileCount < Self.maximumSessionFiles else { break }
-            reviewedFileCount += 1
-            let path = fileURL.path
-            livePaths.insert(path)
-            let metrics: CodexSessionMetrics
-            if let cachedMetrics = Self.sessionMetricsCache.metrics(for: path, signature: signature) {
-                metrics = cachedMetrics
-            } else {
-                guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
-                      let parsedMetrics = try? Self.parseSessionJsonl(
-                        data: data,
-                        sessionID: fileURL.deletingPathExtension().lastPathComponent,
-                        sourceFile: fileURL.path
-                      )
-                else { continue }
-                metrics = parsedMetrics
-                Self.sessionMetricsCache.store(metrics, for: path, signature: signature)
-            }
-
-            aggregate.merge(metrics)
-        }
-        Self.sessionMetricsCache.retain(paths: livePaths)
-
-        return aggregate
-    }
-
     static func resetSessionMetricsCacheForTesting() {
-        sessionMetricsCache.removeAll()
+        CodexSessionMetricsReader.resetCacheForTesting()
     }
 
     private static func canUseSessionRateLimits(
@@ -615,72 +576,6 @@ private struct CodexTimestampParser {
 
     func date(from timestamp: String) -> Date? {
         fractionalFormatter.date(from: timestamp) ?? wholeSecondFormatter.date(from: timestamp)
-    }
-}
-
-private struct CodexSessionFileSignature: Equatable {
-    var size: Int
-    var modifiedAt: Date?
-
-    init?(fileURL: URL) {
-        guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]),
-              values.isRegularFile == true,
-              let size = values.fileSize
-        else { return nil }
-        self.size = size
-        self.modifiedAt = values.contentModificationDate
-    }
-}
-
-private final class CodexSessionMetricsCache: @unchecked Sendable {
-    private struct Entry {
-        var signature: CodexSessionFileSignature
-        var metrics: CodexSessionMetrics
-    }
-
-    private let lock = NSLock()
-    private var entries: [String: Entry] = [:]
-
-    func metrics(for path: String, signature: CodexSessionFileSignature) -> CodexSessionMetrics? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let entry = entries[path], entry.signature == signature else { return nil }
-        return entry.metrics
-    }
-
-    func store(_ metrics: CodexSessionMetrics, for path: String, signature: CodexSessionFileSignature) {
-        lock.lock()
-        entries[path] = Entry(signature: signature, metrics: metrics)
-        lock.unlock()
-    }
-
-    func retain(paths: Set<String>) {
-        lock.lock()
-        entries = entries.filter { paths.contains($0.key) }
-        lock.unlock()
-    }
-
-    func removeAll() {
-        lock.lock()
-        entries.removeAll()
-        lock.unlock()
-    }
-}
-
-private extension CodexSessionMetrics {
-    mutating func merge(_ metrics: CodexSessionMetrics) {
-        eventCount += metrics.eventCount
-        if metrics.tokenTotals.total > 0 {
-            tokenTotals = tokenTotals + metrics.tokenTotals
-        }
-        points.append(contentsOf: metrics.points)
-        if let latestRateLimitAt = metrics.latestRateLimitAt,
-           self.latestRateLimitAt == nil || latestRateLimitAt >= (self.latestRateLimitAt ?? .distantPast) {
-            latestFiveHour = metrics.latestFiveHour
-            latestWeekly = metrics.latestWeekly
-            latestResetCredits = metrics.latestResetCredits
-            self.latestRateLimitAt = latestRateLimitAt
-        }
     }
 }
 

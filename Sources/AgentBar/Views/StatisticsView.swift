@@ -19,6 +19,7 @@ struct StatisticsView: View {
     @State private var showsServiceBreakdownPopover = false
     @State private var showsModelBreakdownPopover = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     private static let dashboardContentTopPadding: CGFloat = 12
     private static let dashboardContentBottomPadding: CGFloat = 26
@@ -115,9 +116,13 @@ struct StatisticsView: View {
         .background(AgentBarDesign.cardBackground)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(AgentBarDesign.hairline)
+                .fill(sidebarSeparatorColor)
                 .frame(width: 1)
         }
+    }
+
+    private var sidebarSeparatorColor: Color {
+        colorScheme == .dark ? AgentBarDesign.hairline : Color(nsColor: .separatorColor).opacity(0.18)
     }
 
     private var sidebarBrand: some View {

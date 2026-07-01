@@ -6,20 +6,15 @@ import SwiftUI
 final class StatusItemController: NSObject {
     static let shared = StatusItemController()
 
-    private let settings: SettingsStore
-    private let store: UsageStore
+    private var settings: SettingsStore?
+    private var store: UsageStore?
     private var item: NSStatusItem?
     private var popover: NSPopover?
     private var cancellables: Set<AnyCancellable> = []
 
-    override init() {
-        let settings = SettingsStore.shared
+    func show(settings: SettingsStore, store: UsageStore) {
         self.settings = settings
-        self.store = UsageStore(settings: settings)
-        super.init()
-    }
-
-    func show() {
+        self.store = store
         if item == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             item.button?.target = self
@@ -34,6 +29,7 @@ final class StatusItemController: NSObject {
 
     private func bindStore() {
         guard cancellables.isEmpty else { return }
+        guard let settings, let store else { return }
         store.objectWillChange
             .sink { [weak self] _ in
                 DispatchQueue.main.async { self?.updateButton() }
@@ -47,7 +43,7 @@ final class StatusItemController: NSObject {
     }
 
     private func updateButton() {
-        guard let button = item?.button else { return }
+        guard let button = item?.button, let store else { return }
         let image = AppLogo.menuBarImage().copy() as? NSImage ?? AppLogo.menuBarImage()
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = true
@@ -59,6 +55,7 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
+        guard let settings, let store else { return }
         if popover?.isShown == true {
             closePopover(sender)
             return
@@ -78,8 +75,6 @@ final class StatusItemController: NSObject {
         let content = ResizablePopoverRootView(
             store: store,
             maximumHeight: maximumHeight,
-            onOpenStatistics: nil,
-            onOpenSettings: nil,
             onQuit: { NSApplication.shared.terminate(nil) },
             onHeightChange: { [weak popover] height in
                 popover?.contentSize = NSSize(

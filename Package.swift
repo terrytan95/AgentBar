@@ -16,7 +16,8 @@ let package = Package(
             resources: [
                 .copy("Resources/AgentBarLogo.png"),
                 .copy("Resources/AgentBarMenuIcon.png"),
-                .copy("Resources/AgentBarIcon.icns")
+                .copy("Resources/AgentBarIcon.icns"),
+                .copy("Resources/Fonts")
             ]
         ),
         .testTarget(

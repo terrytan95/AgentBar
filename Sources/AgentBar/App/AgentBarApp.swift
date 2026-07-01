@@ -8,8 +8,10 @@ struct AgentBarApp: App {
 
     init() {
         let settings = SettingsStore.shared
+        let store = UsageStore(settings: settings)
         _settings = StateObject(wrappedValue: settings)
-        _store = StateObject(wrappedValue: UsageStore(settings: settings))
+        _store = StateObject(wrappedValue: store)
+        appDelegate.configure(settings: settings, store: store)
     }
 
     var body: some Scene {
@@ -26,6 +28,14 @@ struct AgentBarApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var settings = SettingsStore.shared
+    private var store: UsageStore?
+
+    func configure(settings: SettingsStore, store: UsageStore) {
+        self.settings = settings
+        self.store = store
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
 
@@ -37,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        StatusItemController.shared.show()
+        StatusItemController.shared.show(settings: settings, store: store ?? UsageStore(settings: settings))
         AppUpdateStore.shared.startAutomaticChecks()
 
         NSLog("AgentBar launched with menu bar status item")

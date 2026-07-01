@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreText
 
 enum AgentBarDesign {
     static let radiusMedium: CGFloat = 12
@@ -34,6 +35,53 @@ enum AgentBarDesign {
         Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
         })
+    }
+}
+
+enum AgentBarFonts {
+    static let ui = "IBM Plex Sans"
+    static let mono = "IBM Plex Mono"
+    static let display = "Space Grotesk"
+
+    static func registerIfNeeded() {
+        _ = registered
+    }
+
+    private static let registered: Void = {
+        [
+            "IBMPlexSans-Regular",
+            "IBMPlexSans-Medium",
+            "IBMPlexSans-SemiBold",
+            "IBMPlexSans-Bold",
+            "IBMPlexMono-Regular",
+            "IBMPlexMono-Medium",
+            "IBMPlexMono-SemiBold",
+            "IBMPlexMono-Bold",
+            "SpaceGrotesk[wght]"
+        ].forEach { name in
+            guard let url = Bundle.module.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts") else {
+                NSLog("AgentBar font missing: \(name)")
+                return
+            }
+            _ = CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+    }()
+}
+
+extension Font {
+    static func agentBar(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        AgentBarFonts.registerIfNeeded()
+        return .custom(AgentBarFonts.ui, size: size).weight(weight)
+    }
+
+    static func agentBarMono(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        AgentBarFonts.registerIfNeeded()
+        return .custom(AgentBarFonts.mono, size: size).weight(weight)
+    }
+
+    static func agentBarDisplay(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        AgentBarFonts.registerIfNeeded()
+        return .custom(AgentBarFonts.display, size: size).weight(weight)
     }
 }
 

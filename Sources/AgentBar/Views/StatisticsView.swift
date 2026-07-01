@@ -133,7 +133,7 @@ struct StatisticsView: View {
                 .frame(width: 32, height: 32)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             Text("AgentBar")
-                .font(.system(size: 20, weight: .bold))
+                .font(.agentBarDisplay(size: 20, weight: .bold))
             Spacer()
             navigationLayoutButton(systemImage: "menubar.rectangle", helpKey: "show_top_menu_bar") {
                 showsSidebarNavigation = false
@@ -182,7 +182,7 @@ struct StatisticsView: View {
     private func navigationLayoutButton(systemImage: String, helpKey: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.agentBar(size: 14, weight: .semibold))
                 .foregroundStyle(settings.themeColor.primary)
                 .frame(width: 30, height: 30)
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -197,9 +197,9 @@ struct StatisticsView: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                     .lineLimit(1)
             }
             .foregroundStyle(active ? settings.themeColor.primary : Color.primary.opacity(0.86))
@@ -220,16 +220,16 @@ struct StatisticsView: View {
                 AccountAvatar(text: account?.displayName ?? "A", color: settings.themeColor.primary, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account?.displayName ?? "--")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.agentBar(size: 12, weight: .bold))
                         .lineLimit(1)
                     Text(account?.workspaceLine(language: store.language) ?? L.text("current_account", store.language))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.agentBar(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer()
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.agentBar(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 10)
@@ -259,7 +259,7 @@ struct StatisticsView: View {
                 Image(systemName: "shield.checkered")
                 Text(L.text("secure_status", store.language))
             }
-            .font(.system(size: 11, weight: .semibold))
+            .font(.agentBar(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
         }
     }
@@ -267,9 +267,9 @@ struct StatisticsView: View {
     private var settingsHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(L.text("settings", store.language))
-                .font(.system(size: 24, weight: .bold))
+                .font(.agentBar(size: 24, weight: .bold))
             Text(L.text("general_settings_subtitle", store.language))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.agentBar(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -344,7 +344,7 @@ struct StatisticsView: View {
     private func sidebarGroup<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.agentBar(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)
             content()
@@ -364,7 +364,7 @@ struct StatisticsView: View {
             HStack(spacing: 10) {
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.agentBar(size: 13, weight: .semibold))
                         .frame(width: 14)
                 } else if service == .codex {
                     Image(nsImage: AppLogo.image())
@@ -378,7 +378,7 @@ struct StatisticsView: View {
                         .frame(width: 8, height: 8)
                 }
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.agentBar(size: 13, weight: .semibold))
                 Spacer()
             }
             .foregroundStyle(active ? settings.themeColor.primary : (enabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.72)))
@@ -426,9 +426,9 @@ struct StatisticsView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                 Text(L.text("refresh", store.language))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                 if store.isManualRefreshFeedbackVisible {
                     ProgressView()
                         .controlSize(.small)
@@ -450,7 +450,13 @@ struct StatisticsView: View {
 
     @ViewBuilder
     private var dashboardContent: some View {
-        let projection = dashboardOverviewProjection
+        let quotaPressure = UsageInsights.quotaPressure(
+            accounts: store.accounts,
+            points: filteredPoints,
+            rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
+            autoRotationEnabled: settings.autoCodexAccountRotationEnabled
+        )
+        let topUsage = UsageInsights.topUsage(points: filteredPoints)
 
         VStack(alignment: .leading, spacing: 16) {
             dashboardOverviewHeader
@@ -496,7 +502,7 @@ struct StatisticsView: View {
             }
             .frame(height: 116)
 
-            QuotaPressurePanel(pressure: projection.quotaPressure, language: store.language, theme: settings.themeColor)
+            QuotaPressurePanel(pressure: quotaPressure, language: store.language, theme: settings.themeColor)
 
             dailyUsagePanel
 
@@ -522,7 +528,7 @@ struct StatisticsView: View {
                 }
                 Panel(title: usageLocalized("top_usage")) {
                     TopUsagePanel(
-                        breakdown: projection.topUsage,
+                        breakdown: topUsage,
                         selectedSessionLabel: selectedSessionLabel,
                         language: store.language,
                         theme: settings.themeColor
@@ -543,9 +549,9 @@ struct StatisticsView: View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(L.text("overview", store.language))
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.agentBar(size: 20, weight: .bold))
                 Text("\(L.text("daily_usage_for", store.language)) · \(store.selectedRange.dashboardLabel(store.language))")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
 
@@ -560,7 +566,7 @@ struct StatisticsView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
                 Text(store.selectedRange.chartTitle(store.language))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.agentBar(size: 14, weight: .bold))
                 Spacer()
                 dashboardRangePicker
             }
@@ -582,7 +588,7 @@ struct StatisticsView: View {
     private var dashboardRangePicker: some View {
         HStack(spacing: 8) {
             Text(L.text("interval", store.language))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.agentBar(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
             Picker("", selection: $store.selectedRange) {
                 ForEach(UsageRange.allCases) { range in
@@ -602,9 +608,9 @@ struct StatisticsView: View {
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L.text("resets", store.language))
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.agentBar(size: 20, weight: .bold))
                     Text(L.text("reset_intro", store.language))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.agentBar(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -919,10 +925,10 @@ struct StatisticsView: View {
                 ProgressRing(value: rows.first?.share ?? 0, tint: rows.first?.color ?? settings.themeColor.primary, diameter: 118, stroke: 16) {
                     VStack(spacing: 2) {
                         Text(DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language))
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.agentBarMono(size: 18, weight: .bold))
                             .monospacedDigit()
                         Text(L.text("total_tokens", store.language))
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.agentBar(size: 10, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -933,9 +939,9 @@ struct StatisticsView: View {
                             Spacer()
                             VStack(alignment: .trailing, spacing: 1) {
                                 Text("\(Int((row.share * 100).rounded()))%")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.agentBar(size: 12, weight: .bold))
                                 Text(DisplayFormatters.compactTokenString(row.tokens, language: store.language))
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.agentBar(size: 10, weight: .semibold))
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -944,7 +950,7 @@ struct StatisticsView: View {
                         showsServiceBreakdownPopover.toggle()
                     } label: {
                         Label(L.text("view_all_services", store.language), systemImage: "chevron.right")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.agentBar(size: 11, weight: .bold))
                     }
                     .tactilePlainButton()
                     .foregroundStyle(settings.themeColor.primary)
@@ -1050,15 +1056,6 @@ struct StatisticsView: View {
         }
     }
 
-    private var dashboardOverviewProjection: DashboardOverviewProjection {
-        UsageInsights.dashboardOverviewProjection(
-            accounts: store.accounts,
-            points: filteredPoints,
-            rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
-            autoRotationEnabled: settings.autoCodexAccountRotationEnabled
-        )
-    }
-
     private var dataSourceHealth: DataSourceHealthSummary {
         UsageInsights.dataSourceHealth(snapshots: store.snapshots)
     }
@@ -1078,10 +1075,6 @@ struct StatisticsView: View {
     }
 
     private func budgetLocalized(_ key: String) -> String {
-        L.text(key, store.language)
-    }
-
-    private func dataSourceLocalized(_ key: String) -> String {
         L.text(key, store.language)
     }
 
@@ -1133,14 +1126,14 @@ struct StatisticsView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Text(row.name)
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.agentBar(size: 12, weight: .bold))
                                 .lineLimit(1)
                             Spacer()
                             Text(DisplayFormatters.compactTokenString(row.input + row.output, language: store.language))
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.agentBarMono(size: 11, weight: .bold))
                                 .monospacedDigit()
                             Text("\(Int((Double(row.input + row.output) / Double(maximum) * 100).rounded()))%")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.agentBar(size: 10, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 34, alignment: .trailing)
                         }
@@ -1152,7 +1145,7 @@ struct StatisticsView: View {
                     showsModelBreakdownPopover.toggle()
                 } label: {
                     Label(L.text("view_all_models", store.language), systemImage: "chevron.right")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.agentBar(size: 11, weight: .bold))
                 }
                 .tactilePlainButton()
                 .foregroundStyle(settings.themeColor.primary)
@@ -1198,24 +1191,8 @@ struct StatisticsView: View {
         service == .codex ? "Codex" : "Claude"
     }
 
-    private func serviceSubtitle(_ service: UsageService) -> String {
-        service == .codex ? "OpenAI" : "Anthropic"
-    }
-
     private func serviceColor(_ service: UsageService) -> Color {
         service == .codex ? settings.themeColor.tertiary : settings.themeColor.secondary
-    }
-
-    private func resetText(_ date: Date?) -> String {
-        guard let date else { return L.text("reset_time_unknown", store.language) }
-        return "\(DisplayFormatters.relativeString(for: date, language: store.language)) \(L.text("resets_after", store.language))"
-    }
-
-    private func statusColor(_ percent: Double?, fallback: Color) -> Color {
-        guard let percent else { return .secondary }
-        if percent < 15 { return .red }
-        if percent < 35 { return .orange }
-        return fallback
     }
 
     private func resetExpiryColor(_ date: Date?) -> Color {
@@ -1315,22 +1292,22 @@ private struct ResetAdvicePanel: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: advice.systemImage)
-                .font(.system(size: 18, weight: .bold))
+                .font(.agentBar(size: 18, weight: .bold))
                 .foregroundStyle(advice.color)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(advice.title)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.agentBar(size: 15, weight: .bold))
                     Text(advice.detail)
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.agentBar(size: 10, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 2)
                         .background(advice.color, in: Capsule())
                 }
                 Text(advice.message)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.agentBar(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1352,32 +1329,21 @@ private struct DashboardKPI: View {
     var delta: String
     var subtitle: String
     var systemImage: String
-    var marker: Color?
+    var marker: Color? = nil
     var accent: Color
     var theme: AppThemeColor
-
-    init(title: String, value: String, delta: String, subtitle: String, systemImage: String, marker: Color? = nil, accent: Color, theme: AppThemeColor) {
-        self.title = title
-        self.value = value
-        self.delta = delta
-        self.subtitle = subtitle
-        self.systemImage = systemImage
-        self.marker = marker
-        self.accent = accent
-        self.theme = theme
-    }
 
     var body: some View {
         ZStack(alignment: .trailing) {
             Image(systemName: systemImage)
-                .font(.system(size: 48, weight: .bold))
+                .font(.agentBar(size: 48, weight: .bold))
                 .foregroundStyle(accent.opacity(0.12))
                 .offset(x: 6, y: 14)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: systemImage)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.agentBar(size: 13, weight: .bold))
                         .foregroundStyle(accent)
                         .frame(width: 22, height: 22)
                         .background(accent.opacity(0.12), in: Circle())
@@ -1387,24 +1353,24 @@ private struct DashboardKPI: View {
                             .frame(width: 7, height: 7)
                     }
                     Text(title)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.agentBar(size: 13, weight: .bold))
                         .foregroundStyle(.primary)
                 }
                 Text(value)
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.agentBar(size: 28, weight: .bold))
                     .foregroundStyle(.primary)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
                 HStack(spacing: 8) {
                     Text(delta)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.agentBar(size: 11, weight: .bold))
                         .foregroundStyle(.green)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(.green.opacity(0.12), in: Capsule())
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.agentBar(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -1431,19 +1397,19 @@ private struct Panel<Content: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.agentBar(size: 14, weight: .bold))
                 if let helpText {
                     Button {
                         showsHelpPopover.toggle()
                     } label: {
                         Image(systemName: "info.circle")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.agentBar(size: 12, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                     .popover(isPresented: $showsHelpPopover, arrowEdge: .top) {
                         Text(helpText)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.agentBar(size: 12, weight: .semibold))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(12)
@@ -1467,7 +1433,7 @@ private struct ServiceBreakdownPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(language == .chinese ? "全部服务" : "All services")
-                .font(.system(size: 13, weight: .bold))
+                .font(.agentBar(size: 13, weight: .bold))
             ForEach(rows, id: \.service) { row in
                 HStack(spacing: 10) {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -1475,17 +1441,17 @@ private struct ServiceBreakdownPopover: View {
                         .frame(width: 8, height: 8)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.title)
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.agentBar(size: 12, weight: .bold))
                         Text(row.subtitle)
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.agentBar(size: 10, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.agentBar(size: 11, weight: .bold))
                         Text("\(Int((row.share * 100).rounded()))% · \(row.cost)")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.agentBar(size: 10, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1503,13 +1469,13 @@ private struct ModelBreakdownPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(language == .chinese ? "全部模型" : "All models")
-                .font(.system(size: 13, weight: .bold))
+                .font(.agentBar(size: 13, weight: .bold))
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 9) {
                     ForEach(rows) { row in
                         if row.isHeader {
                             Text(row.name)
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.agentBar(size: 10, weight: .bold))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
@@ -1532,103 +1498,17 @@ private struct ModelBreakdownPopoverRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(row.name)
-                .font(.system(size: 12, weight: .bold))
+                .font(.agentBar(size: 12, weight: .bold))
                 .lineLimit(1)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 Text(DisplayFormatters.compactTokenString(row.input + row.output, language: language))
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.agentBar(size: 11, weight: .bold))
                 Text(row.cost.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.agentBar(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
         }
-    }
-}
-
-private struct ResizablePanel<Content: View>: View {
-    var title: String
-    @Binding var height: CGFloat
-    var minHeight: CGFloat
-    var maxHeight: CGFloat
-    var theme: AppThemeColor
-    @ViewBuilder var content: () -> Content
-    @State private var dragStartHeight: CGFloat?
-    @State private var liveHeight: CGFloat?
-    @State private var isHoveringResizeHandle = false
-
-    private var effectiveHeight: CGFloat {
-        liveHeight ?? height
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold))
-            content()
-                .frame(height: effectiveHeight)
-                .clipped()
-            resizeHandle
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .agentBarPanel()
-        .transaction { transaction in
-            transaction.animation = nil
-        }
-    }
-
-    private var resizeHandle: some View {
-        HStack {
-            Spacer()
-            Capsule()
-                .fill(theme.primary.opacity(0.28))
-                .frame(width: 46, height: 5)
-                .overlay {
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                        .onChanged { value in
-                            let startHeight = dragStartHeight ?? height
-                            dragStartHeight = startHeight
-                            let nextHeight = clampedHeight(startHeight: startHeight, translation: value.location.y - value.startLocation.y)
-                            if abs((liveHeight ?? height) - nextHeight) >= 0.5 {
-                                liveHeight = nextHeight
-                            }
-                        }
-                        .onEnded { value in
-                            let startHeight = dragStartHeight ?? height
-                            let nextHeight = clampedHeight(startHeight: startHeight, translation: value.location.y - value.startLocation.y)
-                            liveHeight = nil
-                            dragStartHeight = nil
-                            height = nextHeight
-                        }
-                )
-                .onHover { hovering in
-                    guard hovering != isHoveringResizeHandle else { return }
-                    isHoveringResizeHandle = hovering
-                    if hovering {
-                        NSCursor.resizeUpDown.push()
-                    } else {
-                        NSCursor.pop()
-                    }
-                }
-                .onDisappear {
-                    guard isHoveringResizeHandle else { return }
-                    NSCursor.pop()
-                    isHoveringResizeHandle = false
-                }
-                .accessibilityLabel("Resize Current limits")
-            Spacer()
-        }
-        .padding(.top, 1)
-    }
-
-    private func clampedHeight(startHeight: CGFloat, translation: CGFloat) -> CGFloat {
-        min(max(startHeight + translation, minHeight), maxHeight)
     }
 }
 
@@ -1663,7 +1543,7 @@ private struct DashboardStackedBars: View {
                                 Spacer()
                                 Text("0")
                             }
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.agentBar(size: 9, weight: .medium))
                             .foregroundStyle(.secondary)
                             .frame(width: leftAxisWidth - 8, height: max(1, proxy.size.height - 24))
 
@@ -1716,7 +1596,7 @@ private struct DashboardStackedBars: View {
                                 Spacer()
                                 Text("$0")
                             }
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.agentBar(size: 9, weight: .medium))
                             .foregroundStyle(.secondary)
                             .frame(width: rightAxisWidth, height: max(1, proxy.size.height - 24))
                         }
@@ -1727,7 +1607,7 @@ private struct DashboardStackedBars: View {
                             Spacer()
                             Text(axisDate(bars.last?.day))
                         }
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.agentBar(size: 9, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.leading, leftAxisWidth)
                         .padding(.trailing, rightAxisWidth + 8)
@@ -1864,7 +1744,7 @@ private struct YearActivityPanel: View {
                     ZStack(alignment: .leading) {
                         ForEach(monthMarkers) { marker in
                             Text(marker.title)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.agentBar(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 36, alignment: .leading)
                                 .offset(x: CGFloat(marker.column) * (cellSize + spacing))
@@ -1915,7 +1795,7 @@ private struct YearActivityPanel: View {
                         }
                         Text(language == .chinese ? "多" : "More")
                     }
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.agentBar(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: dayLabelWidth + 10 + gridWidth, alignment: .trailing)
                     .zIndex(0)
@@ -1977,10 +1857,10 @@ private struct YearActivityPanel: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(language == .chinese ? "Tokens · 过去一年" : "Tokens · last year")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.agentBar(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Text(DisplayFormatters.compactTokenString(totalTokens, language: language))
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.agentBarMono(size: 34, weight: .bold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
@@ -1998,13 +1878,13 @@ private struct YearActivityPanel: View {
     private func statistic(value: String, title: String, color: Color = Color.primary) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(value)
-                .font(.system(size: 24, weight: .bold))
+                .font(.agentBar(size: 24, weight: .bold))
                 .foregroundStyle(color)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.agentBar(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -2015,7 +1895,7 @@ private struct YearActivityPanel: View {
         VStack(alignment: .leading, spacing: spacing) {
             ForEach(0..<7, id: \.self) { row in
                 Text(weekdayLabel(for: row))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.agentBar(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(height: cellSize, alignment: .center)
             }
@@ -2153,7 +2033,7 @@ private struct ChartHoverCallout: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dateText)
-                .font(.system(size: 11, weight: .bold))
+                .font(.agentBar(size: 11, weight: .bold))
             metricRow("Codex", tokens: bar.codexTokens, cost: bar.codexCostUSD, color: theme.tertiary)
             metricRow("Claude", tokens: bar.claudeTokens, cost: bar.claudeCostUSD, color: theme.secondary)
             Divider()
@@ -2166,10 +2046,10 @@ private struct ChartHoverCallout: View {
                         .foregroundStyle(.secondary)
                 }
                 .monospacedDigit()
-                .font(.system(size: 10, weight: .bold))
+                .font(.agentBar(size: 10, weight: .bold))
             }
         }
-        .font(.system(size: 10, weight: .medium))
+        .font(.agentBar(size: 10, weight: .medium))
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(width: 238)
@@ -2194,7 +2074,7 @@ private struct ChartHoverCallout: View {
                     .foregroundStyle(.secondary)
             }
             .monospacedDigit()
-            .font(.system(size: 10, weight: .semibold))
+            .font(.agentBar(size: 10, weight: .semibold))
         }
     }
 
@@ -2327,10 +2207,10 @@ private struct LegendItem: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
             Text(title)
-                .font(.system(size: 13, weight: .bold))
+                .font(.agentBar(size: 13, weight: .bold))
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(.agentBar(size: 12))
                     .foregroundStyle(.secondary)
             }
         }
@@ -2346,7 +2226,7 @@ private struct EmptyPanelMessage: View {
 
     var body: some View {
         Text(message)
-            .font(.system(size: 12, weight: .medium))
+            .font(.agentBar(size: 12, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, minHeight: 80)
     }
@@ -2362,9 +2242,9 @@ private struct LoadingAccountPanel: View {
                 .controlSize(.regular)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.agentBar(size: 13, weight: .bold))
                 Text(subtitle)
-                    .font(.system(size: 11))
+                    .font(.agentBar(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -2425,7 +2305,7 @@ private struct QuotaPressurePanel: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: iconName)
-                .font(.system(size: 24, weight: .bold))
+                .font(.agentBar(size: 24, weight: .bold))
                 .foregroundStyle(severityColor)
                 .frame(width: 48, height: 48)
                 .background(severityColor.opacity(0.10), in: Circle())
@@ -2433,17 +2313,17 @@ private struct QuotaPressurePanel: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(localized("quota_pressure"))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.agentBar(size: 16, weight: .bold))
                         .foregroundStyle(severityColor)
                     Text(severityTitle)
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.agentBar(size: 10, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 2)
                         .background(severityColor, in: Capsule())
                 }
                 Text(detailLine)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                     .foregroundStyle(Color.primary.opacity(0.76))
                     .lineLimit(1)
             }
@@ -2453,21 +2333,21 @@ private struct QuotaPressurePanel: View {
             if let recommendedAccount = pressure.recommendedAccount {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(localized("best_account"))
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.agentBar(size: 9, weight: .bold))
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
                     Text(recommendedAccount.displayName)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.agentBar(size: 12, weight: .bold))
                         .lineLimit(1)
                     ForEach(recommendedAccount.workspaceLines(language: language), id: \.self) { line in
                         Text(line)
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.agentBar(size: 9, weight: .semibold))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     if let resetCredits = recommendedAccount.resetCredits, resetCredits.hasAvailableCredits {
                         Text(resetCredits.summaryLine(language: language))
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.agentBar(size: 9, weight: .semibold))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -2481,7 +2361,7 @@ private struct QuotaPressurePanel: View {
                     Text(localized("view_details"))
                     Image(systemName: "chevron.right")
                 }
-                .font(.system(size: 12, weight: .bold))
+                .font(.agentBar(size: 12, weight: .bold))
                 .foregroundStyle(severityColor)
             }
             .tactilePlainButton()
@@ -2572,7 +2452,7 @@ private struct QuotaPressureDetailsPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(localized("quota_details"), systemImage: "gauge.with.dots.needle.67percent")
-                .font(.system(size: 13, weight: .bold))
+                .font(.agentBar(size: 13, weight: .bold))
                 .foregroundStyle(tint)
             detailRow(localized("active_account"), accountText(pressure.activeAccount))
             detailRow(localized("recommended_account"), accountText(pressure.recommendedAccount))
@@ -2581,7 +2461,7 @@ private struct QuotaPressureDetailsPopover: View {
             detailRow(localized("rotation"), pressure.shouldTriggerRotation ? localized("will_trigger") : localized("standby"))
             if let reason = pressure.recommendationReason, !reason.isEmpty {
                 Text(reason)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.agentBar(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
@@ -2594,11 +2474,11 @@ private struct QuotaPressureDetailsPopover: View {
     private func detailRow(_ title: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(title)
-                .font(.system(size: 10, weight: .bold))
+                .font(.agentBar(size: 10, weight: .bold))
                 .foregroundStyle(.secondary)
                 .frame(width: 88, alignment: .leading)
             Text(value)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.agentBar(size: 11, weight: .semibold))
                 .lineLimit(2)
             Spacer(minLength: 0)
         }
@@ -2703,7 +2583,7 @@ private struct QuotaCapacityLineChart: View {
                         Spacer()
                         Text("0")
                     }
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.agentBar(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: axisWidth - 8, height: plotSize.height)
 
@@ -2753,7 +2633,7 @@ private struct QuotaCapacityLineChart: View {
                     Spacer()
                     Text(dateText(samples.last?.capturedAt))
                 }
-                .font(.system(size: 9, weight: .medium))
+                .font(.agentBar(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.leading, axisWidth)
             }
@@ -2823,7 +2703,7 @@ private struct QuotaCapacityHoverCallout: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dateText(sample.capturedAt))
-                .font(.system(size: 11, weight: .bold))
+                .font(.agentBar(size: 11, weight: .bold))
             metricRow("5H", value: sample.estimatedFiveHourTotalTokens, color: theme.primary)
             metricRow(localized("weekly"), value: sample.estimatedWeeklyTotalTokens, color: theme.tertiary)
             Divider()
@@ -2831,11 +2711,11 @@ private struct QuotaCapacityHoverCallout: View {
                 Text(localized("sample_usage"))
                 Spacer()
                 Text(DisplayFormatters.compactTokenString(sample.tokensSincePreviousSample, language: language))
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.agentBarMono(size: 10, weight: .bold))
                     .monospacedDigit()
             }
         }
-        .font(.system(size: 10, weight: .medium))
+        .font(.agentBar(size: 10, weight: .medium))
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -2854,7 +2734,7 @@ private struct QuotaCapacityHoverCallout: View {
             Text(title)
             Spacer()
             Text(value.map { DisplayFormatters.compactTokenString($0, language: language) } ?? "--")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.agentBarMono(size: 10, weight: .semibold))
                 .monospacedDigit()
         }
     }
@@ -2895,7 +2775,7 @@ private struct TopUsagePanel: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.agentBar(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
                 ForEach(rows.prefix(3)) { row in
@@ -2921,11 +2801,11 @@ private struct TopUsagePanel: View {
                 .frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.label)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                     .lineLimit(1)
                 if showsLastUsedAt, let lastUsedAt = row.lastUsedAt {
                     Text("\(localized("latest")) \(DisplayFormatters.relativeString(for: lastUsedAt, language: language))")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.agentBar(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -2933,17 +2813,17 @@ private struct TopUsagePanel: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 1) {
                 Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.agentBarMono(size: 12, weight: .bold))
                     .monospacedDigit()
                 if let estimatedCostUSD = row.estimatedCostUSD {
                     Text(DisplayFormatters.costString(estimatedCostUSD))
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.agentBar(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
             }
             Text("\(Int((row.share * 100).rounded()))%")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.agentBar(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: 34, alignment: .trailing)
         }
@@ -2974,22 +2854,22 @@ private struct AccountHealthCenterPanel: View {
                 ForEach(health.rows) { row in
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: iconName(for: row))
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.agentBar(size: 12, weight: .bold))
                             .foregroundStyle(color(for: row))
                             .frame(width: 16)
                             .padding(.top, 3)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.title)
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.agentBar(size: 12, weight: .bold))
                                 .lineLimit(1)
                             Text(row.detail)
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.agentBar(size: 10, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                                 .fixedSize(horizontal: false, vertical: true)
                             ForEach(row.workspaceLines, id: \.self) { line in
                                 Text(line)
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(.agentBar(size: 10, weight: .medium))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -3073,21 +2953,21 @@ private struct ResetExpiryRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: iconName)
-                .font(.system(size: 12, weight: .bold))
+                .font(.agentBar(size: 12, weight: .bold))
                 .foregroundStyle(color)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(row.account) · \(L.text("reset", language)) \(row.index)")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.agentBar(size: 12, weight: .bold))
                     .lineLimit(1)
                 Text(detail)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.agentBar(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
             Text(badge)
-                .font(.system(size: 10, weight: .bold))
+                .font(.agentBar(size: 10, weight: .bold))
                 .foregroundStyle(color)
         }
         .padding(.horizontal, 10)
@@ -3150,10 +3030,10 @@ private struct ResetExpiryDisplayGroupView: View {
     private var displayGroupHeader: some View {
         HStack(spacing: 6) {
             Text(group.title)
-                .font(.system(size: 11, weight: .bold))
+                .font(.agentBar(size: 11, weight: .bold))
                 .lineLimit(1)
             Text("\(group.accounts.count) \(L.text("workspaces", language))")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.agentBar(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
         .padding(.leading, 2)
@@ -3173,7 +3053,7 @@ private struct AccountAvatar: View {
 
     var body: some View {
         Text(initial)
-            .font(.system(size: max(12, size * 0.42), weight: .bold))
+            .font(.agentBar(size: max(12, size * 0.42), weight: .bold))
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(
@@ -3200,10 +3080,10 @@ private struct SidebarAccountPopover: View {
                     AccountAvatar(text: account.displayName, color: theme.primary, size: 38)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(account.displayName)
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.agentBar(size: 14, weight: .bold))
                             .lineLimit(1)
                         Text(account.accountTypeLine(language: language))
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.agentBar(size: 11, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -3229,7 +3109,7 @@ private struct SidebarAccountPopover: View {
                 infoRow(language == .chinese ? "数据源" : "Source", account.sourceDescription)
             } else {
                 Text(L.text("current_account", language))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
         }
@@ -3240,11 +3120,11 @@ private struct SidebarAccountPopover: View {
     private func infoRow(_ title: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(title)
-                .font(.system(size: 10, weight: .bold))
+                .font(.agentBar(size: 10, weight: .bold))
                 .foregroundStyle(.secondary)
                 .frame(width: 76, alignment: .leading)
             Text(value)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.agentBar(size: 11, weight: .semibold))
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -3277,7 +3157,7 @@ private struct SummaryChip: View {
                 .overlay {
                     if let systemImage {
                         Image(systemName: systemImage)
-                            .font(.system(size: 17, weight: .bold))
+                            .font(.agentBar(size: 17, weight: .bold))
                             .foregroundStyle(color)
                     } else {
                         Circle()
@@ -3290,11 +3170,11 @@ private struct SummaryChip: View {
                 }
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.agentBar(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Text(value)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.agentBar(size: 18, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.64)
             }
@@ -3314,7 +3194,7 @@ private struct MiniSummaryChip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 9, weight: .bold))
+                .font(.agentBar(size: 9, weight: .bold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .lineLimit(1)
@@ -3323,7 +3203,7 @@ private struct MiniSummaryChip: View {
                     .fill(color)
                     .frame(width: 6, height: 6)
                 Text(value)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.agentBar(size: 11, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.74)
             }
@@ -3374,10 +3254,10 @@ private struct AccountLimitDisplayGroupView: View {
     private var displayGroupHeader: some View {
         HStack(spacing: 6) {
             Text(group.title)
-                .font(.system(size: 11, weight: .bold))
+                .font(.agentBar(size: 11, weight: .bold))
                 .lineLimit(1)
             Text("\(group.accounts.count) \(L.text("workspaces", language))")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.agentBar(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
         .padding(.leading, 2)
@@ -3399,11 +3279,11 @@ private struct AccountLimitGroupView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(account.displayName)
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.agentBar(size: 13, weight: .bold))
                             .lineLimit(1)
                         if account.isActive {
                             Text(L.text("current", language))
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.agentBar(size: 9, weight: .bold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -3411,12 +3291,12 @@ private struct AccountLimitGroupView: View {
                         }
                     }
                     Text(accountDetailLine)
-                        .font(.system(size: 10))
+                        .font(.agentBar(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     ForEach(account.workspaceLines(language: language), id: \.self) { line in
                         Text(line)
-                            .font(.system(size: 10))
+                            .font(.agentBar(size: 10))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -3453,9 +3333,9 @@ private struct AccountLimitGroupView: View {
                 } else {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(account.service.rawValue)
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.agentBar(size: 10, weight: .bold))
                         Text(account.accountTypeValue(language: language))
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.agentBar(size: 9, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -3463,7 +3343,7 @@ private struct AccountLimitGroupView: View {
 
             if let warning = account.loginWarningLine(language: language) {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.agentBar(size: 10, weight: .bold))
                     .foregroundStyle(.red)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3487,7 +3367,7 @@ private struct AccountLimitGroupView: View {
                             .padding(.leading, 17)
                     }
                 }
-                .font(.system(size: 10, weight: .semibold))
+                .font(.agentBar(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -3526,7 +3406,7 @@ private struct SettingsAccountDropdown: View {
                 HStack(spacing: 10) {
                     SettingsAccountSummary(account: currentAccount, language: language)
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.agentBar(size: 16, weight: .bold))
                         .foregroundStyle(.secondary)
                         .frame(width: 32, height: 32)
                 }
@@ -3560,14 +3440,14 @@ private struct SettingsAccountSummary: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(L.text("current_account", language))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.agentBar(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Text(account?.displayName ?? "--")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.agentBar(size: 13, weight: .semibold))
                     .lineLimit(1)
                 if let workspaceLine = account?.workspaceLine(language: language) {
                     Text(workspaceLine)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.agentBar(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -3589,21 +3469,21 @@ private struct SettingsAccountDeleteRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(account.displayName)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.agentBar(size: 12, weight: .semibold))
                         .lineLimit(1)
                     if account.isActive {
                         Text(L.text("current", language))
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.agentBar(size: 9, weight: .bold))
                             .foregroundStyle(.secondary)
                     }
                 }
                 Text(accountIdentityLine)
-                    .font(.system(size: 10))
+                    .font(.agentBar(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 ForEach(account.workspaceLines(language: language), id: \.self) { line in
                     Text(line)
-                        .font(.system(size: 10))
+                        .font(.agentBar(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -3646,9 +3526,9 @@ private struct SettingsGroup<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.agentBar(size: 15, weight: .bold))
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(.agentBar(size: 12))
                     .foregroundStyle(.secondary)
             }
             VStack(spacing: 0) {
@@ -3670,9 +3550,9 @@ private struct SettingsRow<Content: View>: View {
         HStack(spacing: 18) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.agentBar(size: 13, weight: .semibold))
                 Text(subtitle)
-                    .font(.system(size: 11))
+                    .font(.agentBar(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -3698,7 +3578,7 @@ private struct BudgetIntegerField: View {
                 .multilineTextAlignment(.trailing)
                 .frame(width: 90)
             Text(L.text("tokens", language))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.agentBar(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
     }
@@ -3739,7 +3619,7 @@ private struct BudgetCostField: View {
     var body: some View {
         HStack(spacing: 6) {
             Text("$")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.agentBar(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
             TextField("0", value: $value, format: .number.precision(.fractionLength(2)))
                 .textFieldStyle(.roundedBorder)

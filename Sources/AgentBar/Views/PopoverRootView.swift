@@ -4,8 +4,6 @@ import SwiftUI
 struct ResizablePopoverRootView: View {
     @ObservedObject var store: UsageStore
     var maximumHeight: CGFloat
-    var onOpenStatistics: (() -> Void)?
-    var onOpenSettings: (() -> Void)?
     var onQuit: () -> Void
     var onHeightChange: (CGFloat) -> Void
     @ObservedObject private var settings: SettingsStore
@@ -13,15 +11,11 @@ struct ResizablePopoverRootView: View {
     init(
         store: UsageStore,
         maximumHeight: CGFloat,
-        onOpenStatistics: (() -> Void)?,
-        onOpenSettings: (() -> Void)?,
         onQuit: @escaping () -> Void = { NSApplication.shared.terminate(nil) },
         onHeightChange: @escaping (CGFloat) -> Void
     ) {
         self.store = store
         self.maximumHeight = maximumHeight
-        self.onOpenStatistics = onOpenStatistics
-        self.onOpenSettings = onOpenSettings
         self.onQuit = onQuit
         self.onHeightChange = onHeightChange
         self.settings = store.settings
@@ -30,8 +24,6 @@ struct ResizablePopoverRootView: View {
     var body: some View {
         PopoverRootView(
             store: store,
-            onOpenStatistics: onOpenStatistics,
-            onOpenSettings: onOpenSettings,
             onQuit: onQuit
         )
         .frame(width: PopoverLayout.width)
@@ -87,8 +79,6 @@ struct ResizablePopoverRootView: View {
 
 struct PopoverRootView: View {
     @ObservedObject var store: UsageStore
-    var onOpenStatistics: (() -> Void)?
-    var onOpenSettings: (() -> Void)?
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @Environment(\.openWindow) private var openWindow
     @Environment(\.colorScheme) private var colorScheme
@@ -155,13 +145,13 @@ struct PopoverRootView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text("AgentBar")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.agentBarDisplay(size: 17, weight: .bold))
                 Text(store.popoverHeaderQuotaTitle)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.agentBar(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 if let activeAccount = store.activeAccount {
                     Text("\(L.text("current_account", store.language)): \(activeAccount.displayNameWithWorkspace(language: store.language))")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.agentBar(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -177,7 +167,7 @@ struct PopoverRootView: View {
                     Image(systemName: "arrow.clockwise")
                 }
             }
-            .font(.system(size: 12, weight: .bold))
+            .font(.agentBar(size: 12, weight: .bold))
             .foregroundStyle(store.settings.themeColor.primary)
             .frame(width: 32, height: 32)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -190,7 +180,7 @@ struct PopoverRootView: View {
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L.text("accounts", store.language))
-                .font(.system(size: 13, weight: .bold))
+                .font(.agentBar(size: 13, weight: .bold))
             if store.isLoadingAccountInformation && store.accounts.isEmpty {
                 PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
             } else {
@@ -213,7 +203,7 @@ struct PopoverRootView: View {
     private var quickSummarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L.text("overview", store.language))
-                .font(.system(size: 13, weight: .bold))
+                .font(.agentBar(size: 13, weight: .bold))
             HStack(spacing: 8) {
                 KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), systemImage: "cylinder.split.1x2.fill", tint: store.settings.themeColor.primary)
                 KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), systemImage: "dollarsign", tint: store.settings.themeColor.secondary)
@@ -247,23 +237,13 @@ struct PopoverRootView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             PopoverToolbarButton(title: L.text("statistics", store.language), systemImage: "chart.bar.xaxis") {
-                if let onOpenStatistics {
-                    onOpenStatistics()
-                } else {
-                    openWindow(id: "statistics")
-                }
+                openWindow(id: "statistics")
             }
 
-            if let onOpenSettings {
-                PopoverToolbarButton(title: L.text("settings", store.language), systemImage: "gearshape") {
-                    onOpenSettings()
-                }
-            } else {
-                PopoverToolbarButton(title: L.text("settings", store.language), systemImage: "gearshape") {
-                    openWindow(id: "statistics")
-                    DispatchQueue.main.async {
-                        DashboardNavigation.request(.settings)
-                    }
+            PopoverToolbarButton(title: L.text("settings", store.language), systemImage: "gearshape") {
+                openWindow(id: "statistics")
+                DispatchQueue.main.async {
+                    DashboardNavigation.request(.settings)
                 }
             }
 
@@ -513,7 +493,7 @@ struct UsageWindowGauge: View {
             ProgressView(value: (window?.remainingPercent ?? 0) / 100)
                 .tint(tint)
             Text(window?.resetLine(language: language) ?? L.text("reset_time_unknown", language))
-                .font(.system(size: 9, weight: .medium))
+                .font(.agentBar(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -537,17 +517,17 @@ struct KPIPill: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .bold))
+                .font(.agentBar(size: 12, weight: .bold))
                 .foregroundStyle(tint)
                 .frame(width: 22, height: 22)
                 .background(tint.opacity(0.12), in: Circle())
             Text(title)
-                .font(.system(size: 9, weight: .bold))
+                .font(.agentBar(size: 9, weight: .bold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .lineLimit(1)
             Text(value)
-                .font(.system(size: 13, weight: .bold))
+                .font(.agentBarMono(size: 13, weight: .bold))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.70)
@@ -566,7 +546,7 @@ struct PopoverToolbarButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.system(size: 12, weight: .bold))
+                .font(.agentBar(size: 12, weight: .bold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: 36)
         }

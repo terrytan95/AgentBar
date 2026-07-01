@@ -61,9 +61,9 @@ struct AuditView: View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(localized("title"))
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.agentBar(size: 20, weight: .bold))
                 Text(localized("subtitle"))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -80,7 +80,7 @@ struct AuditView: View {
 
     private func statusPill(_ snapshot: AuditUsageSnapshot) -> some View {
         Text("\(snapshot.rangePoints.count) \(localized("calls")) · JSONL")
-            .font(.system(size: 12, weight: .bold))
+            .font(.agentBar(size: 12, weight: .bold))
             .foregroundStyle(theme.primary)
             .padding(.horizontal, 10)
             .frame(height: 30)
@@ -125,10 +125,10 @@ struct AuditView: View {
     private func metricCard(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(title)
-                .font(.system(size: 11, weight: .bold))
+                .font(.agentBar(size: 11, weight: .bold))
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.system(size: 22, weight: .bold))
+                .font(.agentBarMono(size: 22, weight: .bold))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -143,7 +143,7 @@ struct AuditView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Text(selectedTab == .calls ? localized("model_calls") : localized("threads"))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.agentBar(size: 16, weight: .bold))
                 Picker("", selection: $selectedTab) {
                     ForEach(AuditUsageTab.allCases) { tab in
                         Text(tab.title(language: store.language)).tag(tab)
@@ -165,7 +165,7 @@ struct AuditView: View {
             Divider()
 
             Text(selectedTab == .calls ? localized("calls_caption") : localized("threads_caption"))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.agentBar(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -203,7 +203,7 @@ struct AuditView: View {
             sortHeader(.output, localized("output"), width: 58)
             sortHeader(.reasoning, localized("reasoning"), width: 58)
         }
-        .font(.system(size: 11, weight: .bold))
+        .font(.agentBar(size: 11, weight: .bold))
         .foregroundStyle(.secondary)
     }
 
@@ -276,10 +276,10 @@ struct AuditView: View {
                         .foregroundStyle(theme.primary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(thread.title)
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.agentBar(size: 12, weight: .bold))
                             .lineLimit(2)
                         Text(thread.subtitle)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.agentBar(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -305,7 +305,7 @@ struct AuditView: View {
 
     private func column(_ text: String, width: CGFloat? = nil, alignment: Alignment = .trailing, strong: Bool = false, pill: Bool = false) -> some View {
         Text(text)
-            .font(.system(size: 12, weight: strong ? .bold : .semibold))
+            .font(.agentBar(size: 12, weight: strong ? .bold : .semibold))
             .lineLimit(1)
             .minimumScaleFactor(0.62)
             .padding(.horizontal, pill ? 8 : 0)
@@ -316,7 +316,7 @@ struct AuditView: View {
 
     private func threadColumn(_ text: String, strong: Bool = false) -> some View {
         Text(text)
-            .font(.system(size: 12, weight: strong ? .bold : .semibold))
+            .font(.agentBar(size: 12, weight: strong ? .bold : .semibold))
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -333,7 +333,7 @@ struct AuditView: View {
                     .minimumScaleFactor(0.72)
                 if sortColumn == column {
                     Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.agentBar(size: 9, weight: .bold))
                 }
             }
             .frame(width: width, height: 18, alignment: alignment)
@@ -352,7 +352,7 @@ struct AuditView: View {
                     .lineLimit(1)
                 if sortColumn == .thread {
                     Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.agentBar(size: 9, weight: .bold))
                 }
                 Spacer(minLength: 0)
             }
@@ -368,12 +368,12 @@ struct AuditView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(localized("call_investigator"))
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.agentBar(size: 11, weight: .bold))
                         .foregroundStyle(.secondary)
                     Text(point.sessionTitle ?? point.sessionID ?? localized("unknown_thread"))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.agentBar(size: 16, weight: .bold))
                     Text("\(dateText(point.date)) · \(point.model) · \(point.reasoningEffort ?? "-")")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.agentBar(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -407,15 +407,15 @@ struct AuditView: View {
     private func detailCard(_ title: String, _ value: String, _ subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(.system(size: 11, weight: .bold))
+                .font(.agentBar(size: 11, weight: .bold))
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.system(size: 15, weight: .bold))
+                .font(.agentBar(size: 15, weight: .bold))
                 .lineLimit(2)
                 .minimumScaleFactor(0.68)
                 .textSelection(.enabled)
             Text(subtitle)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.agentBar(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -427,12 +427,12 @@ struct AuditView: View {
     private func exportPanel(_ snapshot: AuditUsageSnapshot) -> some View {
         HStack(spacing: 10) {
             Text(localized("privacy_note"))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.agentBar(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
             Spacer()
             if let exportStatus {
                 Text(exportStatus)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.agentBar(size: 11, weight: .bold))
                     .foregroundStyle(theme.primary)
             }
             Button {
@@ -449,7 +449,7 @@ struct AuditView: View {
 
     private func footer(text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .bold))
+            .font(.agentBar(size: 11, weight: .bold))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
@@ -472,7 +472,7 @@ struct AuditView: View {
             .pointingHandCursor()
 
             Text("\(start)-\(end) / \(total) \(itemName) · \(localized("page")) \(currentPage + 1)/\(pageCount)")
-                .font(.system(size: 11, weight: .bold))
+                .font(.agentBar(size: 11, weight: .bold))
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 190)
 
@@ -567,7 +567,7 @@ struct AuditUsageSnapshot {
         sortColumn: AuditSortColumn,
         sortAscending: Bool
     ) -> AuditUsageSnapshot {
-        let rangePoints = UsageAuditReporter.filteredPoints(
+        let rangePoints = UsageRangeProjection.filteredPoints(
             points: points,
             range: range,
             customStart: customStart,

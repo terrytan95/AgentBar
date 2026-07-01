@@ -1801,10 +1801,7 @@ private struct DashboardStackedBars: View {
 
     private func axisDate(_ date: Date?) -> String {
         guard let date else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
-        formatter.setLocalizedDateFormatFromTemplate("MMM d")
-        return formatter.string(from: date)
+        return DisplayFormatters.localizedDateString(for: date, template: "MMM d", language: language)
     }
 
     private func tokenValue(_ bar: DailyUsageBar) -> Double {
@@ -2200,10 +2197,7 @@ private struct ChartHoverCallout: View {
     }
 
     private var dateText: String {
-        let formatter = DateFormatter()
-        formatter.locale = language == .chinese ? Locale(identifier: "zh_Hans") : Locale(identifier: "en_US")
-        formatter.setLocalizedDateFormatFromTemplate("yMMMd")
-        return formatter.string(from: bar.day)
+        DisplayFormatters.localizedDateString(for: bar.day, template: "yMMMd", language: language)
     }
 }
 

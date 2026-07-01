@@ -492,7 +492,7 @@ struct StatisticsView: View {
             dailyUsagePanel
 
             Panel(title: yearActivityLocalized("year_activity")) {
-                YearActivityPanel(bars: yearActivityBars, language: store.language)
+                YearActivityPanel(bars: yearActivityBars, language: store.language, theme: settings.themeColor)
             }
 
             Panel(
@@ -1818,86 +1818,152 @@ private struct DashboardStackedBars: View {
 private struct YearActivityPanel: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
+    var theme: AppThemeColor
+    @Environment(\.colorScheme) private var colorScheme
 
     private let spacing: CGFloat = 4
     private let dayLabelWidth: CGFloat = 34
+    private let lightSpacing: CGFloat = 3
     private var calendar: Calendar { .current }
 
     var body: some View {
         if bars.isEmpty {
             EmptyPanelMessage(L.text("no_usage_events", language))
+        } else if colorScheme == .dark {
+            darkBody
         } else {
-            VStack(alignment: .leading, spacing: 16) {
-                summaryHeader
+            lightBody
+        }
+    }
 
-                GeometryReader { proxy in
-                    let cells = activityCells
-                    let maximumTokens = maxTokens
-                    let columns = max(1, Int(ceil(Double(cells.count) / 7.0)))
-                    let availableWidth = max(1, proxy.size.width - dayLabelWidth - 10)
-                    let cellSize = max(7, min(18, (availableWidth - CGFloat(max(0, columns - 1)) * spacing) / CGFloat(columns)))
-                    let gridWidth = CGFloat(columns) * cellSize + CGFloat(max(0, columns - 1)) * spacing
-                    let gridHeight = cellSize * 7 + spacing * 6
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        ZStack(alignment: .leading) {
-                            ForEach(monthMarkers) { marker in
-                                Text(marker.title)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 36, alignment: .leading)
-                                    .offset(x: CGFloat(marker.column) * (cellSize + spacing))
-                            }
-                        }
-                        .frame(width: gridWidth, height: 14, alignment: .leading)
-                        .padding(.leading, dayLabelWidth + 10)
-
-                        HStack(alignment: .top, spacing: 10) {
-                            weekdayLabels(cellSize: cellSize)
-                                .frame(width: dayLabelWidth, height: gridHeight, alignment: .leading)
-
-                            Canvas(rendersAsynchronously: true) { context, _ in
-                                for cell in cells {
-                                    let column = cell.index / 7
-                                    let row = cell.index % 7
-                                    let tokens = cell.bar.map(totalTokens(for:)) ?? 0
-                                    let rect = CGRect(
-                                        x: CGFloat(column) * (cellSize + spacing),
-                                        y: CGFloat(row) * (cellSize + spacing),
-                                        width: cellSize,
-                                        height: cellSize
-                                    )
-                                    let path = Path(roundedRect: rect, cornerRadius: min(4, cellSize * 0.28))
-                                    context.fill(path, with: .color(color(for: tokens, maximumTokens: maximumTokens)))
-                                    context.stroke(
-                                        path,
-                                        with: .color(Color.primary.opacity(tokens > 0 ? 0.11 : 0.055)),
-                                        lineWidth: 0.8
-                                    )
-                                }
-                            }
-                            .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
-                            .accessibilityLabel(Text("\(rangeText), \(activeDaysText)"))
-                        }
-
-                        HStack(spacing: 6) {
-                            Spacer()
-                            Text(language == .chinese ? "少" : "Less")
-                            ForEach(legendColors.indices, id: \.self) { index in
-                                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .fill(legendColors[index])
-                                    .frame(width: 14, height: 14)
-                            }
-                            Text(language == .chinese ? "多" : "More")
-                        }
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: dayLabelWidth + 10 + gridWidth, alignment: .trailing)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                }
-                .frame(height: 192)
+    private var lightBody: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(rangeText)
+                Spacer()
+                Text(activeDaysText)
             }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+
+            GeometryReader { proxy in
+                let cells = activityCells
+                let maximumTokens = maxTokens
+                let columns = max(1, Int(ceil(Double(cells.count) / 7.0)))
+                let cellSize = max(6, min(11, (proxy.size.width - CGFloat(max(0, columns - 1)) * lightSpacing) / CGFloat(columns)))
+                let gridHeight = cellSize * 7 + lightSpacing * 6
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ZStack(alignment: .leading) {
+                        ForEach(monthMarkers) { marker in
+                            Text(marker.title)
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 36, alignment: .leading)
+                                .offset(x: CGFloat(marker.column) * (cellSize + lightSpacing))
+                        }
+                    }
+                    .frame(height: 12)
+
+                    Canvas(rendersAsynchronously: true) { context, _ in
+                        for cell in cells {
+                            guard let bar = cell.bar else { continue }
+                            let column = cell.index / 7
+                            let row = cell.index % 7
+                            let rect = CGRect(
+                                x: CGFloat(column) * (cellSize + lightSpacing),
+                                y: CGFloat(row) * (cellSize + lightSpacing),
+                                width: cellSize,
+                                height: cellSize
+                            )
+                            let path = Path(roundedRect: rect, cornerRadius: 3)
+                            context.fill(path, with: .color(lightColor(for: bar, maximumTokens: maximumTokens)))
+                            context.stroke(
+                                path,
+                                with: .color(Color.primary.opacity(totalTokens(for: bar) > 0 ? 0.10 : 0.06)),
+                                lineWidth: 1
+                            )
+                        }
+                    }
+                    .frame(height: gridHeight, alignment: .topLeading)
+                    .accessibilityLabel(Text("\(rangeText), \(activeDaysText)"))
+                }
+            }
+            .frame(height: 116)
+        }
+    }
+
+    private var darkBody: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            summaryHeader
+
+            GeometryReader { proxy in
+                let cells = activityCells
+                let maximumTokens = maxTokens
+                let columns = max(1, Int(ceil(Double(cells.count) / 7.0)))
+                let availableWidth = max(1, proxy.size.width - dayLabelWidth - 10)
+                let cellSize = max(7, min(18, (availableWidth - CGFloat(max(0, columns - 1)) * spacing) / CGFloat(columns)))
+                let gridWidth = CGFloat(columns) * cellSize + CGFloat(max(0, columns - 1)) * spacing
+                let gridHeight = cellSize * 7 + spacing * 6
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ZStack(alignment: .leading) {
+                        ForEach(monthMarkers) { marker in
+                            Text(marker.title)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 36, alignment: .leading)
+                                .offset(x: CGFloat(marker.column) * (cellSize + spacing))
+                        }
+                    }
+                    .frame(width: gridWidth, height: 14, alignment: .leading)
+                    .padding(.leading, dayLabelWidth + 10)
+
+                    HStack(alignment: .top, spacing: 10) {
+                        weekdayLabels(cellSize: cellSize)
+                            .frame(width: dayLabelWidth, height: gridHeight, alignment: .leading)
+
+                        Canvas(rendersAsynchronously: true) { context, _ in
+                            for cell in cells {
+                                let column = cell.index / 7
+                                let row = cell.index % 7
+                                let tokens = cell.bar.map(totalTokens(for:)) ?? 0
+                                let rect = CGRect(
+                                    x: CGFloat(column) * (cellSize + spacing),
+                                    y: CGFloat(row) * (cellSize + spacing),
+                                    width: cellSize,
+                                    height: cellSize
+                                )
+                                let path = Path(roundedRect: rect, cornerRadius: min(4, cellSize * 0.28))
+                                context.fill(path, with: .color(color(for: tokens, maximumTokens: maximumTokens)))
+                                context.stroke(
+                                    path,
+                                    with: .color(Color.primary.opacity(tokens > 0 ? 0.11 : 0.055)),
+                                    lineWidth: 0.8
+                                )
+                            }
+                        }
+                        .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
+                        .accessibilityLabel(Text("\(rangeText), \(activeDaysText)"))
+                    }
+
+                    HStack(spacing: 6) {
+                        Spacer()
+                        Text(language == .chinese ? "少" : "Less")
+                        ForEach(legendColors.indices, id: \.self) { index in
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(legendColors[index])
+                                .frame(width: 14, height: 14)
+                        }
+                        Text(language == .chinese ? "多" : "More")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: dayLabelWidth + 10 + gridWidth, alignment: .trailing)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .frame(height: 192)
         }
     }
 
@@ -2035,6 +2101,16 @@ private struct YearActivityPanel: View {
 
     private var maxTokens: Int {
         max(1, bars.map { totalTokens(for: $0) }.max() ?? 1)
+    }
+
+    private func lightColor(for bar: DailyUsageBar, maximumTokens: Int) -> Color {
+        let tokens = totalTokens(for: bar)
+        guard tokens > 0 else { return Color.primary.opacity(0.07) }
+        let ratio = Double(tokens) / Double(maximumTokens)
+        if ratio >= 0.75 { return theme.tertiary }
+        if ratio >= 0.50 { return theme.primary }
+        if ratio >= 0.25 { return theme.primary.opacity(0.68) }
+        return theme.primary.opacity(0.34)
     }
 
     private func totalTokens(for bar: DailyUsageBar) -> Int {

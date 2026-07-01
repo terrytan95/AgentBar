@@ -1827,77 +1827,17 @@ private struct YearActivityPanel: View {
 
     private let spacing: CGFloat = 4
     private let dayLabelWidth: CGFloat = 34
-    private let lightSpacing: CGFloat = 3
     private var calendar: Calendar { .current }
 
     var body: some View {
         if bars.isEmpty {
             EmptyPanelMessage(L.text("no_usage_events", language))
-        } else if colorScheme == .dark {
-            darkBody
         } else {
-            lightBody
+            heatmapBody
         }
     }
 
-    private var lightBody: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(rangeText)
-                Spacer()
-                Text(activeDaysText)
-            }
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
-
-            GeometryReader { proxy in
-                let cells = activityCells
-                let maximumTokens = maxTokens
-                let columns = max(1, Int(ceil(Double(cells.count) / 7.0)))
-                let cellSize = max(6, min(11, (proxy.size.width - CGFloat(max(0, columns - 1)) * lightSpacing) / CGFloat(columns)))
-                let gridHeight = cellSize * 7 + lightSpacing * 6
-
-                VStack(alignment: .leading, spacing: 6) {
-                    ZStack(alignment: .leading) {
-                        ForEach(monthMarkers) { marker in
-                            Text(marker.title)
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 36, alignment: .leading)
-                                .offset(x: CGFloat(marker.column) * (cellSize + lightSpacing))
-                        }
-                    }
-                    .frame(height: 12)
-
-                    Canvas(rendersAsynchronously: true) { context, _ in
-                        for cell in cells {
-                            guard let bar = cell.bar else { continue }
-                            let column = cell.index / 7
-                            let row = cell.index % 7
-                            let rect = CGRect(
-                                x: CGFloat(column) * (cellSize + lightSpacing),
-                                y: CGFloat(row) * (cellSize + lightSpacing),
-                                width: cellSize,
-                                height: cellSize
-                            )
-                            let path = Path(roundedRect: rect, cornerRadius: 3)
-                            context.fill(path, with: .color(lightColor(for: bar, maximumTokens: maximumTokens)))
-                            context.stroke(
-                                path,
-                                with: .color(Color.primary.opacity(totalTokens(for: bar) > 0 ? 0.10 : 0.06)),
-                                lineWidth: 1
-                            )
-                        }
-                    }
-                    .frame(height: gridHeight, alignment: .topLeading)
-                    .accessibilityLabel(Text("\(rangeText), \(activeDaysText)"))
-                }
-            }
-            .frame(height: 116)
-        }
-    }
-
-    private var darkBody: some View {
+    private var heatmapBody: some View {
         VStack(alignment: .leading, spacing: 16) {
             summaryHeader
 
@@ -2062,10 +2002,24 @@ private struct YearActivityPanel: View {
     private func color(for tokens: Int, maximumTokens: Int) -> Color {
         guard tokens > 0 else { return emptyCellColor }
         let ratio = Double(tokens) / Double(max(maximumTokens, 1))
+        if colorScheme == .dark {
+            return darkContributionColor(for: ratio)
+        }
+        return lightContributionColor(for: ratio)
+    }
+
+    private func darkContributionColor(for ratio: Double) -> Color {
         if ratio >= 0.78 { return Color(red: 0.22, green: 0.83, blue: 0.33) }
         if ratio >= 0.56 { return Color(red: 0.15, green: 0.65, blue: 0.25) }
         if ratio >= 0.32 { return Color(red: 0.00, green: 0.43, blue: 0.20) }
         return Color(red: 0.05, green: 0.27, blue: 0.16)
+    }
+
+    private func lightContributionColor(for ratio: Double) -> Color {
+        if ratio >= 0.75 { return Color(red: 0.13, green: 0.43, blue: 0.22) }
+        if ratio >= 0.50 { return Color(red: 0.19, green: 0.63, blue: 0.31) }
+        if ratio >= 0.25 { return Color(red: 0.25, green: 0.77, blue: 0.39) }
+        return Color(red: 0.61, green: 0.91, blue: 0.66)
     }
 
     private var activityCells: [YearActivityCell] {
@@ -2105,16 +2059,6 @@ private struct YearActivityPanel: View {
 
     private var maxTokens: Int {
         max(1, bars.map { totalTokens(for: $0) }.max() ?? 1)
-    }
-
-    private func lightColor(for bar: DailyUsageBar, maximumTokens: Int) -> Color {
-        let tokens = totalTokens(for: bar)
-        guard tokens > 0 else { return emptyCellColor }
-        let ratio = Double(tokens) / Double(maximumTokens)
-        if ratio >= 0.75 { return Color(red: 0.13, green: 0.43, blue: 0.22) }
-        if ratio >= 0.50 { return Color(red: 0.19, green: 0.63, blue: 0.31) }
-        if ratio >= 0.25 { return Color(red: 0.25, green: 0.77, blue: 0.39) }
-        return Color(red: 0.61, green: 0.91, blue: 0.66)
     }
 
     private func totalTokens(for bar: DailyUsageBar) -> Int {

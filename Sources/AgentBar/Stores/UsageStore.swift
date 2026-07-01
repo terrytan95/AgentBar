@@ -28,6 +28,7 @@ final class UsageStore: ObservableObject {
     let settings: SettingsStore
     private let codexUsageSource: @Sendable (Bool) async -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
+    private let codexAccountLifecycle = CodexAccountLifecycle()
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
     private let codexAccountRemover: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
@@ -41,8 +42,6 @@ final class UsageStore: ObservableObject {
     private var refreshInFlight = false
     private var refreshQueued = false
     private var manualRefreshQueued = false
-    private var manualCodexRotationOverrideAccountID: String?
-    private var pendingCodexSwitchRecovery: PendingCodexSwitchRecovery?
     private var summaryCache: UsageSummary?
     private var periodChangeCache: UsagePeriodChange?
     private var selectedRangePointsCache: [UsagePoint]?
@@ -361,12 +360,7 @@ final class UsageStore: ObservableObject {
                     self.lastError = error.localizedDescription.redactedForCredentialWords
                     return
                 }
-                if self.manualCodexRotationOverrideAccountID == account.id {
-                    self.manualCodexRotationOverrideAccountID = nil
-                }
-                if self.pendingCodexSwitchRecovery?.accountID == account.id {
-                    self.pendingCodexSwitchRecovery = nil
-                }
+                self.codexAccountLifecycle.removeAccount(account.id)
                 self.accounts.removeAll { $0.service == .codex && $0.id == account.id }
                 NotificationCenter.default.post(name: Self.accountRemovalNotification, object: nil)
             }
@@ -374,33 +368,14 @@ final class UsageStore: ObservableObject {
     }
 
     func evaluateAutomaticCodexRotation(now: Date = Date()) {
-        guard settings.autoCodexAccountRotationEnabled, switchingAccountID == nil else { return }
-        if shouldHonorManualCodexSelection() {
-            return
-        }
-        let policy = CodexAccountRotationPolicy(
-            thresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent
-        )
-        guard let account = policy.selectedAccount(from: accounts, now: now) else { return }
+        guard let account = codexAccountLifecycle.automaticRotationAccount(
+            accounts: accounts,
+            autoRotationEnabled: settings.autoCodexAccountRotationEnabled,
+            thresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
+            switchingAccountID: switchingAccountID,
+            now: now
+        ) else { return }
         switchCodexAccount(account, restartMode: .safeForceCodexAppRestart)
-    }
-
-    private func shouldHonorManualCodexSelection() -> Bool {
-        guard let overrideAccountID = manualCodexRotationOverrideAccountID else { return false }
-        guard let activeCodexAccount = accounts.first(where: { $0.service == .codex && $0.isActive }) else {
-            manualCodexRotationOverrideAccountID = nil
-            return false
-        }
-        guard activeCodexAccount.id == overrideAccountID else {
-            manualCodexRotationOverrideAccountID = nil
-            return false
-        }
-        if let remaining = activeCodexAccount.fiveHourWindow?.remainingPercent,
-           remaining > settings.codexRotationThresholdRemainingPercent {
-            manualCodexRotationOverrideAccountID = nil
-            return false
-        }
-        return true
     }
 
     private var budgetWarningPrefix: String {
@@ -415,16 +390,18 @@ final class UsageStore: ObservableObject {
         yearActivityBarsCache = nil
     }
 
-    private func switchCodexAccount(_ account: UsageAccount, restartMode: CodexSwitchRestartMode) {
-        guard switchingAccountID == nil else { return }
-        guard account.service == .codex else {
-            lastError = AccountActionError.unsupportedService.localizedDescription
+    private func switchCodexAccount(_ account: UsageAccount, restartMode: CodexAccountLifecycle.RestartMode) {
+        do {
+            guard let switchingAccountID = try codexAccountLifecycle.beginSwitch(
+                account: account,
+                restartMode: restartMode,
+                switchingAccountID: switchingAccountID
+            ) else { return }
+            self.switchingAccountID = switchingAccountID
+        } catch {
+            lastError = error.localizedDescription
             return
         }
-        if restartMode == .manualForceCodexAppRestart {
-            manualCodexRotationOverrideAccountID = account.id
-        }
-        switchingAccountID = account.id
         lastError = nil
         let switcher = codexAccountSwitcher
         let restarter = automaticCodexRestarter
@@ -447,15 +424,17 @@ final class UsageStore: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.switchingAccountID = nil
-                if case let .failure(error) = result {
-                    if self.manualCodexRotationOverrideAccountID == account.id {
-                        self.manualCodexRotationOverrideAccountID = nil
-                    }
-                    let message = Self.codexSwitchFailureMessage(for: error)
+                switch self.codexAccountLifecycle.finishSwitch(
+                    account: account,
+                    restartMode: restartMode,
+                    result: result,
+                    loginLauncher: self.codexAccountRecoveryLoginLauncher
+                ) {
+                case .success:
+                    break
+                case .failure(let message, let recovery):
                     self.lastError = message.redactedForCredentialWords
-                    promptRelogin(self.codexSwitchRecovery(for: account, restartMode: restartMode, message: message))
-                } else if self.pendingCodexSwitchRecovery?.accountID == account.id {
-                    self.pendingCodexSwitchRecovery = nil
+                    promptRelogin(recovery)
                 }
                 self.refresh(force: true)
             }
@@ -463,39 +442,9 @@ final class UsageStore: ObservableObject {
     }
 
     private func retryPendingCodexSwitchRecovery() -> Bool {
-        guard let pending = pendingCodexSwitchRecovery,
-              let account = accounts.first(where: { $0.id == pending.accountID && $0.service == .codex })
-        else {
-            return false
-        }
-        pendingCodexSwitchRecovery = nil
-        switchCodexAccount(account, restartMode: pending.restartMode)
+        guard let pending = codexAccountLifecycle.pendingRecoverySwitch(accounts: accounts) else { return false }
+        switchCodexAccount(pending.account, restartMode: pending.restartMode)
         return true
-    }
-
-    private func codexSwitchRecovery(
-        for account: UsageAccount,
-        restartMode: CodexSwitchRestartMode,
-        message: String
-    ) -> CodexAccountSwitchRecovery {
-        let loginLauncher = codexAccountRecoveryLoginLauncher
-        return CodexAccountSwitchRecovery(
-            accountID: account.id,
-            accountLabel: account.displayName,
-            message: message,
-            startLogin: { [weak self] in
-                self?.pendingCodexSwitchRecovery = PendingCodexSwitchRecovery(
-                    accountID: account.id,
-                    restartMode: restartMode
-                )
-                loginLauncher(account.id, account.displayName)
-            }
-        )
-    }
-
-    private static func codexSwitchFailureMessage(for error: Error) -> String {
-        let reason = error.localizedDescription.redactedForCredentialWords
-        return "The Codex account switch failed. Please login to this Codex account again. Additional phone number authentication might be needed. \(reason)"
     }
 
     func openLogin(for service: UsageService) {
@@ -550,13 +499,4 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    private struct PendingCodexSwitchRecovery {
-        var accountID: String
-        var restartMode: CodexSwitchRestartMode
-    }
-
-    private enum CodexSwitchRestartMode: Sendable {
-        case manualForceCodexAppRestart
-        case safeForceCodexAppRestart
-    }
 }

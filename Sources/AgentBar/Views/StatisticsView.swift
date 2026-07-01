@@ -497,7 +497,7 @@ struct StatisticsView: View {
             dailyUsagePanel
 
             Panel(title: yearActivityLocalized("year_activity")) {
-                YearActivityPanel(bars: yearActivityBars, language: store.language, theme: settings.themeColor)
+                YearActivityPanel(bars: yearActivityBars, language: store.language)
             }
 
             Panel(
@@ -1823,7 +1823,6 @@ private struct DashboardStackedBars: View {
 private struct YearActivityPanel: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
-    var theme: AppThemeColor
     @Environment(\.colorScheme) private var colorScheme
 
     private let spacing: CGFloat = 4
@@ -1988,7 +1987,7 @@ private struct YearActivityPanel: View {
             Spacer()
 
             HStack(spacing: 28) {
-                statistic(value: "\(activeDaysCount)", title: language == .chinese ? "活跃天数" : "active days", color: warmAccent)
+                statistic(value: "\(activeDaysCount)", title: language == .chinese ? "活跃天数" : "active days", color: githubAccent)
                 statistic(value: DisplayFormatters.compactTokenString(peakDayTokens, language: language), title: language == .chinese ? "峰值日" : "peak day")
             }
         }
@@ -2052,21 +2051,21 @@ private struct YearActivityPanel: View {
         bars.map { totalTokens(for: $0) }.max() ?? 0
     }
 
-    private var warmAccent: Color {
-        Color(red: 0.94, green: 0.55, blue: 0.16)
+    private var githubAccent: Color {
+        Color(red: 0.25, green: 0.77, blue: 0.39)
     }
 
     private var emptyCellColor: Color {
-        Color.primary.opacity(0.075)
+        colorScheme == .dark ? Color(red: 0.09, green: 0.11, blue: 0.14) : Color(red: 0.92, green: 0.93, blue: 0.94)
     }
 
     private func color(for tokens: Int, maximumTokens: Int) -> Color {
         guard tokens > 0 else { return emptyCellColor }
         let ratio = Double(tokens) / Double(max(maximumTokens, 1))
-        if ratio >= 0.78 { return Color(red: 1.00, green: 0.82, blue: 0.32) }
-        if ratio >= 0.56 { return Color(red: 0.96, green: 0.60, blue: 0.18) }
-        if ratio >= 0.32 { return Color(red: 0.64, green: 0.36, blue: 0.13) }
-        return Color(red: 0.38, green: 0.24, blue: 0.11)
+        if ratio >= 0.78 { return Color(red: 0.22, green: 0.83, blue: 0.33) }
+        if ratio >= 0.56 { return Color(red: 0.15, green: 0.65, blue: 0.25) }
+        if ratio >= 0.32 { return Color(red: 0.00, green: 0.43, blue: 0.20) }
+        return Color(red: 0.05, green: 0.27, blue: 0.16)
     }
 
     private var activityCells: [YearActivityCell] {
@@ -2110,12 +2109,12 @@ private struct YearActivityPanel: View {
 
     private func lightColor(for bar: DailyUsageBar, maximumTokens: Int) -> Color {
         let tokens = totalTokens(for: bar)
-        guard tokens > 0 else { return Color.primary.opacity(0.07) }
+        guard tokens > 0 else { return emptyCellColor }
         let ratio = Double(tokens) / Double(maximumTokens)
-        if ratio >= 0.75 { return theme.tertiary }
-        if ratio >= 0.50 { return theme.primary }
-        if ratio >= 0.25 { return theme.primary.opacity(0.68) }
-        return theme.primary.opacity(0.34)
+        if ratio >= 0.75 { return Color(red: 0.13, green: 0.43, blue: 0.22) }
+        if ratio >= 0.50 { return Color(red: 0.19, green: 0.63, blue: 0.31) }
+        if ratio >= 0.25 { return Color(red: 0.25, green: 0.77, blue: 0.39) }
+        return Color(red: 0.61, green: 0.91, blue: 0.66)
     }
 
     private func totalTokens(for bar: DailyUsageBar) -> Int {

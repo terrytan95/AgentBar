@@ -83,6 +83,7 @@ struct AuditView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            auditRangePicker
             Button {
                 store.refresh(force: true, showManualFeedback: true)
             } label: {
@@ -92,6 +93,24 @@ struct AuditView: View {
             .pointingHandCursor()
             statusPill(snapshot)
         }
+    }
+
+    private var auditRangePicker: some View {
+        HStack(spacing: 8) {
+            Text(L.text("interval", store.language))
+                .font(.agentBar(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Picker("", selection: $store.selectedRange) {
+                ForEach(UsageRange.allCases) { range in
+                    Text(range.dashboardLabel(store.language)).tag(range)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .agentBarPanel(cornerRadius: 12)
     }
 
     private func statusPill(_ snapshot: AuditUsageSnapshot) -> some View {

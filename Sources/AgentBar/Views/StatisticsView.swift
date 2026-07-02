@@ -1714,6 +1714,7 @@ private struct YearActivityPanel: View {
 
     private let spacing: CGFloat = 4
     private let dayLabelWidth: CGFloat = 34
+    private let calloutSize = CGSize(width: 238, height: 126)
     private var calendar: Calendar { .current }
 
     var body: some View {
@@ -1818,9 +1819,15 @@ private struct YearActivityPanel: View {
             .frame(width: gridWidth, height: gridHeight)
 
             if let hoveredBar, let hoverLocation {
+                let tooltipPosition = chartTooltipPosition(
+                    cursor: hoverLocation,
+                    calloutSize: calloutSize,
+                    plotSize: CGSize(width: gridWidth, height: gridHeight)
+                )
                 ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
+                    .frame(width: calloutSize.width, height: calloutSize.height)
                     .allowsHitTesting(false)
-                    .position(calloutPosition(for: hoverLocation, gridWidth: gridWidth, gridHeight: gridHeight))
+                    .position(tooltipPosition)
             }
         }
         .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
@@ -1842,12 +1849,6 @@ private struct YearActivityPanel: View {
     private var hoveredBar: DailyUsageBar? {
         guard let hoveredBarID else { return nil }
         return bars.first { $0.id == hoveredBarID }
-    }
-
-    private func calloutPosition(for cursor: CGPoint, gridWidth: CGFloat, gridHeight: CGFloat) -> CGPoint {
-        let x = min(max(cursor.x + 130, 119), max(119, gridWidth - 119))
-        let y = cursor.y < gridHeight - 72 ? cursor.y + 58 : cursor.y - 58
-        return CGPoint(x: x, y: y)
     }
 
     private var summaryHeader: some View {

@@ -44,6 +44,9 @@ struct CodexUsageReader {
             maximumSessionFileBytes: Self.maximumSessionFileBytes,
             maximumSessionFiles: Self.maximumSessionFiles
         )
+        if let sessionScanNote = Self.sessionScanNote(metrics) {
+            notes.insert(sessionScanNote, at: 0)
+        }
         points.append(contentsOf: metrics.points)
 
         if !accounts.isEmpty {
@@ -266,6 +269,20 @@ struct CodexUsageReader {
 
     static func resetSessionMetricsCacheForTesting() {
         CodexSessionMetricsReader.resetCacheForTesting()
+    }
+
+    private static func sessionScanNote(_ metrics: CodexSessionMetrics) -> String? {
+        let skipped = metrics.skippedOversizedSessionFileCount + metrics.skippedSessionFileCapCount
+        guard skipped > 0 else { return nil }
+
+        var reasons: [String] = []
+        if metrics.skippedOversizedSessionFileCount > 0 {
+            reasons.append("\(metrics.skippedOversizedSessionFileCount) over the \(maximumSessionFileBytes / 1024 / 1024) MB file limit")
+        }
+        if metrics.skippedSessionFileCapCount > 0 {
+            reasons.append("\(metrics.skippedSessionFileCapCount) beyond the \(maximumSessionFiles) file scan cap")
+        }
+        return "Codex session scan skipped \(skipped) JSONL file\(skipped == 1 ? "" : "s"): \(reasons.joined(separator: ", ")). Usage may be undercounted."
     }
 
     private static func canUseSessionRateLimits(

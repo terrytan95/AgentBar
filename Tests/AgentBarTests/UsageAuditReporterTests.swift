@@ -13,7 +13,7 @@ final class UsageAuditReporterTests: XCTestCase {
     private func checkExportRowsFilterRangeAndSerializeCSVWithEscaping() throws {
         let rows = UsageAuditReporter.exportRows(
             points: [
-                point(model: "gpt,5", daysAgo: 0, input: 1, cached: 2, output: 3, reasoning: 4, cost: "0.10"),
+                point(model: "gpt,5", daysAgo: 0, input: 1, cached: 2, output: 3, reasoning: 4, cost: "0.109"),
                 point(model: "old", daysAgo: 3, input: 10, cached: 0, output: 0, reasoning: 0, cost: nil)
             ],
             range: .today,
@@ -25,7 +25,7 @@ final class UsageAuditReporterTests: XCTestCase {
         let csv = UsageAuditReporter.serialize(rows: rows, format: .csv)
         XCTAssertTrue(csv.contains("date,service,model,input_tokens,cached_input_tokens,output_tokens,reasoning_output_tokens,total_tokens,estimated_cost_usd"))
         XCTAssertTrue(csv.contains(#""gpt,5""#))
-        XCTAssertTrue(csv.contains(",1,2,3,4,10,0.1"))
+        XCTAssertTrue(csv.contains(",1,2,3,4,10,0.11"))
     }
 
     private func checkJSONSerializationUsesNullForMissingCost() throws {

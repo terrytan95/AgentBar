@@ -10,8 +10,10 @@ enum DisplayFormatters {
     static let currency: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_US")
         formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 4
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
         return formatter
     }()
     private static let dateFormatterCache = DateFormatterCache()

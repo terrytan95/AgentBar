@@ -568,7 +568,7 @@ struct AuditView: View {
 
     private func costText(_ value: Decimal?) -> String {
         guard let value else { return "-" }
-        return "$\(NSDecimalNumber(decimal: value).stringValue)"
+        return DisplayFormatters.costString(value)
     }
 
     private func localized(_ key: String) -> String {

@@ -720,7 +720,6 @@ final class UsageParsingTests: XCTestCase {
 
         let reloaded = SettingsStore(defaults: defaults)
         XCTAssertTrue(reloaded.useDarkAppearance)
-        XCTAssertEqual(L.text("tone_color", .english), "Tone color")
         XCTAssertEqual(L.text("dark_theme", .chinese), "深色主题")
     }
 

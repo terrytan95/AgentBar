@@ -799,15 +799,6 @@ struct StatisticsView: View {
                     Toggle("", isOn: $settings.useDarkAppearance)
                         .labelsHidden()
                 }
-                SettingsRow(title: L.text("tone_color", store.language), subtitle: L.text("tone_color_subtitle", store.language)) {
-                    Picker("", selection: $settings.themeColor) {
-                        ForEach(AppThemeColor.allCases) { theme in
-                            Text(theme.title(language: store.language)).tag(theme)
-                        }
-                    }
-                    .labelsHidden()
-                    .settingsControl(width: settingsControlMediumPickerWidth)
-                }
             }
 
             SettingsGroup(title: L.text("software_update", store.language), subtitle: L.text("updates_daily_check", store.language)) {

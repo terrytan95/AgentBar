@@ -1,48 +1,16 @@
 import SwiftUI
 
 extension AppThemeColor {
-    var title: String {
-        title(language: .english)
-    }
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .blue: language == .chinese ? "蓝色" : "Blue"
-        case .green: language == .chinese ? "绿色" : "Green"
-        case .purple: language == .chinese ? "紫色" : "Purple"
-        case .orange: language == .chinese ? "橙色" : "Orange"
-        case .graphite: language == .chinese ? "石墨色" : "Graphite"
-        }
-    }
-
     var primary: Color {
-        switch self {
-        case .blue: Color(red: 0.05, green: 0.42, blue: 0.95)
-        case .green: Color(red: 0.10, green: 0.63, blue: 0.25)
-        case .purple: Color(red: 0.47, green: 0.30, blue: 0.92)
-        case .orange: Color(red: 0.88, green: 0.38, blue: 0.12)
-        case .graphite: Color(red: 0.36, green: 0.37, blue: 0.40)
-        }
+        Color(red: 0.05, green: 0.42, blue: 0.95)
     }
 
     var secondary: Color {
-        switch self {
-        case .blue: Color(red: 0.22, green: 0.66, blue: 0.92)
-        case .green: Color(red: 0.39, green: 0.73, blue: 0.36)
-        case .purple: Color(red: 0.67, green: 0.46, blue: 0.88)
-        case .orange: Color(red: 0.93, green: 0.58, blue: 0.22)
-        case .graphite: Color(red: 0.56, green: 0.57, blue: 0.61)
-        }
+        Color(red: 0.22, green: 0.66, blue: 0.92)
     }
 
     var tertiary: Color {
-        switch self {
-        case .blue: Color(red: 0.45, green: 0.53, blue: 0.64)
-        case .green: Color(red: 0.45, green: 0.56, blue: 0.47)
-        case .purple: Color(red: 0.52, green: 0.48, blue: 0.62)
-        case .orange: Color(red: 0.62, green: 0.50, blue: 0.42)
-        case .graphite: Color(red: 0.42, green: 0.43, blue: 0.46)
-        }
+        Color(red: 0.45, green: 0.53, blue: 0.64)
     }
 
     func quotaColor(remaining: Double?) -> Color {

@@ -10,14 +10,8 @@ enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-enum AppThemeColor: String, CaseIterable, Identifiable {
+enum AppThemeColor {
     case blue
-    case green
-    case purple
-    case orange
-    case graphite
-
-    var id: String { rawValue }
 }
 
 enum AccountSortMode: String, CaseIterable, Identifiable {
@@ -70,9 +64,7 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
     }
 
-    @Published var themeColor: AppThemeColor {
-        didSet { defaults.set(themeColor.rawValue, forKey: Keys.themeColor) }
-    }
+    let themeColor: AppThemeColor = .blue
 
     @Published var useDarkAppearance: Bool {
         didSet { defaults.set(useDarkAppearance, forKey: Keys.useDarkAppearance) }
@@ -188,7 +180,6 @@ final class SettingsStore: ObservableObject {
         menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .activeAccountWindows
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
-        themeColor = AppThemeColor(rawValue: defaults.string(forKey: Keys.themeColor) ?? "") ?? .blue
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
@@ -261,7 +252,6 @@ final class SettingsStore: ObservableObject {
         static let showCodexInMenuBar = "showCodexInMenuBar"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
-        static let themeColor = "themeColor"
         static let useDarkAppearance = "useDarkAppearance"
         static let accountSortMode = "accountSortMode"
         static let showAggregatedAccountData = "showAggregatedAccountData"

@@ -62,6 +62,16 @@ final class UsageAuditReporterTests: XCTestCase {
             sessionTitle: "Resize Audit",
             projectName: "AgentBar"
         )
+        let other = UsagePoint(
+            service: .codex,
+            model: "gpt-5-mini",
+            date: now.addingTimeInterval(-30),
+            tokens: TokenTotals(input: 50, cachedInput: 0, output: 20, reasoningOutput: 0, total: 70),
+            estimatedCostUSD: nil,
+            sessionID: "thread-b",
+            sessionTitle: "Other Thread",
+            projectName: "AgentBar"
+        )
 
         let snapshot = AuditUsageSnapshot.make(
             points: [older, newer],
@@ -83,6 +93,19 @@ final class UsageAuditReporterTests: XCTestCase {
         XCTAssertEqual(thread.calls.map(\.callID), [newer.callID, older.callID])
         XCTAssertEqual(thread.tokens.total, 470)
         XCTAssertEqual(thread.duration, "1m 0s")
+
+        let drilldown = AuditUsageSnapshot.make(
+            points: [older, newer, other],
+            range: .all,
+            customStart: nil,
+            customEnd: nil,
+            selectedSessionLabel: "Resize Audit",
+            sortColumn: .time,
+            sortAscending: false
+        )
+
+        XCTAssertEqual(drilldown.rangePoints.map(\.sessionTitle), ["Resize Audit", "Resize Audit"])
+        XCTAssertEqual(drilldown.threadRows.map(\.id), ["Resize Audit"])
     }
 
     private var calendar: Calendar {

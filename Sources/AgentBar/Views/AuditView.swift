@@ -5,8 +5,10 @@ import UniformTypeIdentifiers
 struct AuditView: View {
     @ObservedObject var store: UsageStore
     var points: [UsagePoint]
+    var selectedSessionLabel: String?
     var dataSourceHealth: DataSourceHealthSummary
     var theme: AppThemeColor
+    var onClearSessionSelection: () -> Void = {}
 
     @State private var selectedTab: AuditUsageTab = .threads
     @State private var selectedCallID: String?
@@ -29,6 +31,7 @@ struct AuditView: View {
             range: store.selectedRange,
             customStart: store.customStart,
             customEnd: store.customEnd,
+            selectedSessionLabel: selectedSessionLabel,
             sortColumn: sortColumn,
             sortAscending: sortAscending
         )
@@ -48,8 +51,9 @@ struct AuditView: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .onAppear {
-            selectedCallID = selectedCallID ?? preparedSnapshot.callIDs.first
+            applySessionSelection(to: preparedSnapshot)
         }
+        .onChange(of: selectedSessionLabel) { _, _ in applySessionSelection(to: preparedSnapshot) }
         .onChange(of: preparedSnapshot.callIDs) { _, ids in
             callsPage = clampedPage(callsPage, total: ids.count)
             threadsPage = clampedPage(threadsPage, total: preparedSnapshot.threadRows.count)
@@ -176,6 +180,17 @@ struct AuditView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 220)
+                if let selectedSessionLabel {
+                    Button {
+                        onClearSessionSelection()
+                    } label: {
+                        Label("\(localized("session_drilldown")): \(selectedSessionLabel)", systemImage: "xmark.circle.fill")
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
+                    .help(localized("clear_drilldown"))
+                    .pointingHandCursor()
+                }
                 Spacer()
                 Button {
                     export(format: .csv, snapshot: snapshot)
@@ -535,6 +550,16 @@ struct AuditView: View {
         threadsPage = 0
     }
 
+    private func applySessionSelection(to snapshot: AuditUsageSnapshot) {
+        selectedCallID = selectedCallID ?? snapshot.callIDs.first
+        guard selectedSessionLabel != nil else { return }
+        selectedTab = .threads
+        callsPage = 0
+        threadsPage = 0
+        expandedThreadID = snapshot.threadRows.first?.id
+        selectedCallID = snapshot.threadRows.first?.calls.first?.callID ?? snapshot.callIDs.first
+    }
+
     private func export(format: UsageExportFormat, snapshot: AuditUsageSnapshot) {
         let rows = UsageAuditReporter.exportRows(
             points: snapshot.rangePoints,
@@ -589,6 +614,7 @@ struct AuditUsageSnapshot {
         range: UsageRange,
         customStart: Date?,
         customEnd: Date?,
+        selectedSessionLabel: String? = nil,
         sortColumn: AuditSortColumn,
         sortAscending: Bool
     ) -> AuditUsageSnapshot {
@@ -598,6 +624,10 @@ struct AuditUsageSnapshot {
             customStart: customStart,
             customEnd: customEnd
         )
+        .filter { point in
+            guard let selectedSessionLabel else { return true }
+            return sessionLabel(for: point) == selectedSessionLabel
+        }
         .sorted { $0.date > $1.date }
         let threadRows = sortedThreads(
             makeThreadRows(rangePoints),
@@ -615,9 +645,13 @@ struct AuditUsageSnapshot {
         )
     }
 
+    private static func sessionLabel(for point: UsagePoint) -> String {
+        point.sessionTitle ?? point.sessionID ?? "Unknown session"
+    }
+
     private static func makeThreadRows(_ points: [UsagePoint]) -> [AuditThreadRow] {
         Dictionary(grouping: points) { point in
-            point.sessionTitle ?? point.sessionID ?? "Unknown thread"
+            sessionLabel(for: point)
         }
         .map { title, calls in
             let sorted = calls.sorted { $0.date > $1.date }
@@ -657,7 +691,7 @@ struct AuditUsageSnapshot {
         case .time:
             ordered(lhs.date, rhs.date, sortAscending: sortAscending)
         case .thread:
-            ordered(lhs.sessionTitle ?? lhs.sessionID ?? "", rhs.sessionTitle ?? rhs.sessionID ?? "", sortAscending: sortAscending)
+            ordered(sessionLabel(for: lhs), sessionLabel(for: rhs), sortAscending: sortAscending)
         case .duration:
             nil
         case .initiated:

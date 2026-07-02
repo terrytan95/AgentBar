@@ -516,7 +516,7 @@ struct AuditView: View {
             range: .all
         )
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "AgentBar-usage.\(format.fileExtension)"
+        panel.nameFieldStringValue = "AgentBar-usage.\(format.rawValue)"
         panel.allowedContentTypes = format == .csv ? [.commaSeparatedText] : [.json]
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -555,7 +555,7 @@ struct AuditUsageSnapshot {
     var rangePoints: [UsagePoint]
     var sortedCalls: [UsagePoint]
     var threadRows: [AuditThreadRow]
-    var composition: TokenComposition
+    var composition: TokenTotals
     var totalCost: Decimal?
     var callIDs: [String]
 

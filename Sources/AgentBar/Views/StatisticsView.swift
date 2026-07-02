@@ -3689,7 +3689,7 @@ private struct ModelBreakdownRow: Identifiable {
     var dividerAfter: Bool
 }
 
-private extension UsageRange {
+extension UsageRange {
     func dashboardLabel(_ language: AppLanguage) -> String {
         guard language == .chinese else {
             switch self {

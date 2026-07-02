@@ -70,6 +70,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>AgentBar needs Desktop folder access to write exports and reports you create there.</string>
 </dict>
 </plist>
 PLIST

@@ -42,6 +42,7 @@ enum AgentBarFonts {
     static let ui = "IBM Plex Sans"
     static let mono = "IBM Plex Mono"
     static let display = "Space Grotesk"
+    static let chineseFallback = "Source Han Sans SC"
 
     static func registerIfNeeded() {
         _ = registered
@@ -49,39 +50,52 @@ enum AgentBarFonts {
 
     private static let registered: Void = {
         [
-            "IBMPlexSans-Regular",
-            "IBMPlexSans-Medium",
-            "IBMPlexSans-SemiBold",
-            "IBMPlexSans-Bold",
-            "IBMPlexMono-Regular",
-            "IBMPlexMono-Medium",
-            "IBMPlexMono-SemiBold",
-            "IBMPlexMono-Bold",
-            "SpaceGrotesk[wght]"
-        ].forEach { name in
-            guard let url = Bundle.module.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts") else {
+            ("IBMPlexSans-Regular", "ttf"),
+            ("IBMPlexSans-Medium", "ttf"),
+            ("IBMPlexSans-SemiBold", "ttf"),
+            ("IBMPlexSans-Bold", "ttf"),
+            ("IBMPlexMono-Regular", "ttf"),
+            ("IBMPlexMono-Medium", "ttf"),
+            ("IBMPlexMono-SemiBold", "ttf"),
+            ("IBMPlexMono-Bold", "ttf"),
+            ("SpaceGrotesk[wght]", "ttf"),
+            ("SourceHanSansSC-Regular", "otf"),
+            ("SourceHanSansSC-Medium", "otf"),
+            ("SourceHanSansSC-Bold", "otf")
+        ].forEach { name, fileExtension in
+            guard let url = Bundle.module.url(forResource: name, withExtension: fileExtension, subdirectory: "Fonts") else {
                 NSLog("AgentBar font missing: \(name)")
                 return
             }
             _ = CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
     }()
+
+    static func cascadedFont(family: String, size: CGFloat) -> CTFont {
+        registerIfNeeded()
+
+        let fallback = CTFontDescriptorCreateWithNameAndSize(chineseFallback as CFString, size)
+        let attributes: [CFString: Any] = [
+            kCTFontFamilyNameAttribute: family,
+            kCTFontSizeAttribute: size,
+            kCTFontCascadeListAttribute: [fallback]
+        ]
+        let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
+        return CTFontCreateWithFontDescriptor(descriptor, size, nil)
+    }
 }
 
 extension Font {
     static func agentBar(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        AgentBarFonts.registerIfNeeded()
-        return .custom(AgentBarFonts.ui, size: size).weight(weight)
+        Font(AgentBarFonts.cascadedFont(family: AgentBarFonts.ui, size: size)).weight(weight)
     }
 
     static func agentBarMono(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        AgentBarFonts.registerIfNeeded()
-        return .custom(AgentBarFonts.mono, size: size).weight(weight)
+        Font(AgentBarFonts.cascadedFont(family: AgentBarFonts.mono, size: size)).weight(weight)
     }
 
     static func agentBarDisplay(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        AgentBarFonts.registerIfNeeded()
-        return .custom(AgentBarFonts.display, size: size).weight(weight)
+        Font(AgentBarFonts.cascadedFont(family: AgentBarFonts.display, size: size)).weight(weight)
     }
 }
 

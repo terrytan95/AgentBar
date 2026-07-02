@@ -159,19 +159,21 @@ struct PopoverRootView: View {
             Button {
                 store.refresh(force: true)
             } label: {
-                if store.isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Image(systemName: "arrow.clockwise")
+                Group {
+                    if store.isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
+                .frame(width: 40, height: 40)
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            .font(.agentBar(size: 12, weight: .bold))
+            .font(.agentBar(size: 14, weight: .bold))
             .foregroundStyle(store.settings.themeColor.primary)
-            .frame(width: 32, height: 32)
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .tactilePlainButton()
-            .agentBarPanel(cornerRadius: 10)
+            .agentBarPanel(cornerRadius: 12)
             .help(L.text("refresh", store.language))
         }
     }

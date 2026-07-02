@@ -66,6 +66,15 @@ struct AuditView: View {
 
     private func header(_ snapshot: AuditUsageSnapshot) -> some View {
         HStack(alignment: .center, spacing: 16) {
+            if selectedSessionLabel != nil {
+                Button {
+                    clearSessionSelection()
+                } label: {
+                    Label(localized("back_to_audit"), systemImage: "chevron.left")
+                }
+                .buttonStyle(.bordered)
+                .pointingHandCursor()
+            }
             VStack(alignment: .leading, spacing: 3) {
                 Text(localized("title"))
                     .font(.agentBar(size: 20, weight: .bold))
@@ -180,17 +189,6 @@ struct AuditView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 220)
-                if let selectedSessionLabel {
-                    Button {
-                        onClearSessionSelection()
-                    } label: {
-                        Label("\(localized("session_drilldown")): \(selectedSessionLabel)", systemImage: "xmark.circle.fill")
-                            .lineLimit(1)
-                    }
-                    .buttonStyle(.bordered)
-                    .help(localized("clear_drilldown"))
-                    .pointingHandCursor()
-                }
                 Spacer()
                 Button {
                     export(format: .csv, snapshot: snapshot)
@@ -558,6 +556,15 @@ struct AuditView: View {
         threadsPage = 0
         expandedThreadID = snapshot.threadRows.first?.id
         selectedCallID = snapshot.threadRows.first?.calls.first?.callID ?? snapshot.callIDs.first
+    }
+
+    private func clearSessionSelection() {
+        selectedTab = .threads
+        selectedCallID = nil
+        expandedThreadID = nil
+        callsPage = 0
+        threadsPage = 0
+        onClearSessionSelection()
     }
 
     private func export(format: UsageExportFormat, snapshot: AuditUsageSnapshot) {

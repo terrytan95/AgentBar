@@ -237,14 +237,11 @@ struct PopoverRootView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             PopoverToolbarButton(title: L.text("statistics", store.language), systemImage: "chart.bar.xaxis") {
-                openWindow(id: "statistics")
+                showStatisticsWindow()
             }
 
             PopoverToolbarButton(title: L.text("settings", store.language), systemImage: "gearshape") {
-                openWindow(id: "statistics")
-                DispatchQueue.main.async {
-                    DashboardNavigation.request(.settings)
-                }
+                showStatisticsWindow(tab: .settings)
             }
 
             PopoverToolbarButton(title: L.text("quit_app", store.language), systemImage: "power") {
@@ -252,6 +249,44 @@ struct PopoverRootView: View {
             }
         }
         .padding(.vertical, 8)
+    }
+
+    private func showStatisticsWindow(tab: DashboardTopTab? = nil) {
+        if !AgentBarWindowPresenter.presentExistingStatisticsWindow() {
+            openWindow(id: "statistics")
+        }
+
+        if let tab {
+            DispatchQueue.main.async {
+                DashboardNavigation.request(tab)
+            }
+        }
+    }
+}
+
+private enum AgentBarWindowPresenter {
+    @MainActor
+    static func presentExistingStatisticsWindow() -> Bool {
+        guard let window = existingStatisticsWindow else { return false }
+
+        NSApp.unhide(nil)
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
+
+    @MainActor
+    private static var existingStatisticsWindow: NSWindow? {
+        NSApp.orderedWindows.first(where: isStatisticsWindow)
+            ?? NSApp.windows.first(where: isStatisticsWindow)
+    }
+
+    @MainActor
+    private static func isStatisticsWindow(_ window: NSWindow) -> Bool {
+        window.title == "AgentBar" && !(window is NSPanel)
     }
 }
 

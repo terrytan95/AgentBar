@@ -20,8 +20,14 @@ struct CodexSessionMetricsReader {
 
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
             guard let signature = CodexSessionFileSignature(fileURL: fileURL) else { continue }
-            guard signature.size <= maximumSessionFileBytes else { continue }
-            guard reviewedFileCount < maximumSessionFiles else { break }
+            guard signature.size <= maximumSessionFileBytes else {
+                aggregate.skippedOversizedSessionFileCount += 1
+                continue
+            }
+            guard reviewedFileCount < maximumSessionFiles else {
+                aggregate.skippedSessionFileCapCount += 1
+                continue
+            }
             reviewedFileCount += 1
             let path = fileURL.path
             livePaths.insert(path)

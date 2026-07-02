@@ -500,4 +500,6 @@ struct CodexSessionMetrics: Equatable, Sendable {
     var latestWeekly: UsageWindow?
     var latestResetCredits: UsageResetCredits? = nil
     var latestRateLimitAt: Date?
+    var skippedOversizedSessionFileCount = 0
+    var skippedSessionFileCapCount = 0
 }

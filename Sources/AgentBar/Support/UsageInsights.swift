@@ -200,7 +200,7 @@ enum UsageInsights {
             DataSourceHealthSummary.Row(
                 service: snapshot.service,
                 status: snapshot.status,
-                note: snapshot.securityNotes.first,
+                note: snapshot.securityNotes.first(where: { !$0.hasPrefix("AgentBar reads ") }) ?? snapshot.securityNotes.first,
                 refreshedAt: snapshot.refreshedAt
             )
         }

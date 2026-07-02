@@ -35,6 +35,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation()
         try checkSessionRateLimitsWithoutParsableTimestampDoNotOverrideActiveAccountWindows()
         try checkOversizedSessionFilesAreSkipped()
+        try checkSessionFileCapSkipsAreReported()
         try checkOpenAIModelPricingCalculatesPointCost()
         checkPricingNormalizesProviderAndDateSuffixes()
         checkPricingUsesDecimalAndUnknownModelsCostZeroButKeepTokens()
@@ -1008,6 +1009,23 @@ final class UsageParsingTests: XCTestCase {
 
         XCTAssertEqual(snapshot.points.count, 0)
         XCTAssertEqual(snapshot.accounts.first?.tokens.total, 0)
+        XCTAssertTrue(snapshot.securityNotes.first?.contains("1 over the 10 MB file limit") == true)
+        XCTAssertEqual(UsageInsights.dataSourceHealth(snapshots: [.codex: snapshot]).rows.first?.note, snapshot.securityNotes.first)
+    }
+
+    private func checkSessionFileCapSkipsAreReported() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/06")
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        for index in 0...CodexUsageReader.maximumSessionFiles {
+            try "{}".data(using: .utf8)!.write(to: sessionDir.appending(path: "\(index).jsonl"))
+        }
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+
+        XCTAssertTrue(snapshot.securityNotes.first?.contains("1 beyond the 1000 file scan cap") == true)
+        XCTAssertEqual(UsageInsights.dataSourceHealth(snapshots: [.codex: snapshot]).rows.first?.note, snapshot.securityNotes.first)
     }
 
     private func checkOpenAIModelPricingCalculatesPointCost() throws {

@@ -39,6 +39,9 @@ struct AuditView: View {
 
         VStack(alignment: .leading, spacing: 14) {
             header(preparedSnapshot)
+            if let codexSessionScanNote {
+                scanWarning(codexSessionScanNote)
+            }
             kpiGrid(preparedSnapshot)
             tablePanel(preparedSnapshot)
             exportPanel(preparedSnapshot)
@@ -85,6 +88,28 @@ struct AuditView: View {
             .padding(.horizontal, 10)
             .frame(height: 30)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var codexSessionScanNote: String? {
+        guard let note = dataSourceHealth.rows.first(where: { $0.service == .codex })?.note,
+              note.hasPrefix("Codex session scan skipped")
+        else { return nil }
+        return note
+    }
+
+    private func scanWarning(_ note: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(note)
+                .font(.agentBar(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 34)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func kpiGrid(_ snapshot: AuditUsageSnapshot) -> some View {

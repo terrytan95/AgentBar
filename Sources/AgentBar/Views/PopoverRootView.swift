@@ -80,7 +80,6 @@ struct ResizablePopoverRootView: View {
 struct PopoverRootView: View {
     @ObservedObject var store: UsageStore
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -252,9 +251,7 @@ struct PopoverRootView: View {
     }
 
     private func showStatisticsWindow(tab: DashboardTopTab? = nil) {
-        if !AgentBarWindowPresenter.presentExistingStatisticsWindow() {
-            openWindow(id: "statistics")
-        }
+        AgentBarWindowPresenter.presentStatisticsWindow(store: store, initialTab: tab ?? .usage)
 
         if let tab {
             DispatchQueue.main.async {
@@ -266,6 +263,39 @@ struct PopoverRootView: View {
 
 private enum AgentBarWindowPresenter {
     @MainActor
+    private static var statisticsWindow: NSWindow?
+
+    @MainActor
+    static func presentStatisticsWindow(store: UsageStore, initialTab: DashboardTopTab) {
+        if presentExistingStatisticsWindow() {
+            return
+        }
+
+        let settings = store.settings
+        let controller = NSHostingController(
+            rootView: StatisticsView(store: store, initialTab: initialTab)
+                .frame(minWidth: 1180, minHeight: 760)
+                .preferredColorScheme(settings.useDarkAppearance ? .dark : .light)
+                .animation(nil, value: settings.useDarkAppearance)
+        )
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1480, height: 940),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "AgentBar"
+        window.contentViewController = controller
+        window.minSize = NSSize(width: 1180, height: 760)
+        window.isReleasedWhenClosed = false
+        window.center()
+        statisticsWindow = window
+
+        presentExistingStatisticsWindow()
+    }
+
+    @MainActor
+    @discardableResult
     static func presentExistingStatisticsWindow() -> Bool {
         guard let window = existingStatisticsWindow else { return false }
 
@@ -280,7 +310,8 @@ private enum AgentBarWindowPresenter {
 
     @MainActor
     private static var existingStatisticsWindow: NSWindow? {
-        NSApp.orderedWindows.first(where: isStatisticsWindow)
+        statisticsWindow
+            ?? NSApp.orderedWindows.first(where: isStatisticsWindow)
             ?? NSApp.windows.first(where: isStatisticsWindow)
     }
 

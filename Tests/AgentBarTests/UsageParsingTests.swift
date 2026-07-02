@@ -55,6 +55,7 @@ final class UsageParsingTests: XCTestCase {
         try checkUsageRangeIntervalsDriveStatisticsAndAuditFiltering()
         checkUsageRangeChartTitlesMatchSelectedInterval()
         checkChangePercentFormattingShowsDirectionAndMissingBaseline()
+        checkCostFormattingUsesTwoDecimals()
         checkAccountSortingUsesFiveHourThenWeeklyPressure()
         checkAccountSortingPrioritizesResetCreditsAfterActiveAccount()
         checkAccountSortingAlwaysKeepsActiveAccountOnTop()
@@ -1411,6 +1412,11 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(DisplayFormatters.changePercentString(nil), "--")
     }
 
+    private func checkCostFormattingUsesTwoDecimals() {
+        XCTAssertEqual(DisplayFormatters.costString(Decimal(string: "467.35428875")!), "$467.35")
+        XCTAssertEqual(DisplayFormatters.costString(Decimal(string: "0.1")!), "$0.10")
+    }
+
     private func checkAccountSortingUsesFiveHourThenWeeklyPressure() {
         let now = Date()
         let accounts = [
@@ -1481,16 +1487,16 @@ final class UsageParsingTests: XCTestCase {
             day: day,
             codexTokens: 1_500_000,
             claudeTokens: 2_000_000,
-            codexCostUSD: Decimal(string: "0.001")!,
-            claudeCostUSD: Decimal(string: "0.002")!
+            codexCostUSD: Decimal(string: "0.011")!,
+            claudeCostUSD: Decimal(string: "0.022")!
         )
 
         let tooltip = bar.tooltipText(language: .english)
 
         XCTAssertTrue(tooltip.contains("Jun 13, 2026"))
-        XCTAssertTrue(tooltip.contains("Codex: 1.5000 mil Tokens · $0.001"))
-        XCTAssertTrue(tooltip.contains("Claude: 2.0000 mil Tokens · $0.002"))
-        XCTAssertTrue(tooltip.contains("Total: 3.5000 mil Tokens · $0.003"))
+        XCTAssertTrue(tooltip.contains("Codex: 1.5000 mil Tokens · $0.01"))
+        XCTAssertTrue(tooltip.contains("Claude: 2.0000 mil Tokens · $0.02"))
+        XCTAssertTrue(tooltip.contains("Total: 3.5000 mil Tokens · $0.03"))
     }
 
     private func checkAccountMetadataShowsResetActivityAndAccountType() {

@@ -81,7 +81,7 @@ enum UsageAuditReporter {
 
     private static func decimalString(_ value: Decimal?) -> String {
         guard let value else { return "" }
-        return NSDecimalNumber(decimal: value).stringValue
+        return String(format: "%.2f", NSDecimalNumber(decimal: value).doubleValue)
     }
 
     private static func iso8601String(from date: Date) -> String {

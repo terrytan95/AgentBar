@@ -52,11 +52,17 @@ struct StatisticsView: View {
         }
         .tint(settings.themeColor.primary)
         .background(AgentBarDesign.appBackground)
+        .onAppear {
+            if let tab = DashboardNavigation.consumePendingTab() {
+                setTopTab(tab)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: DashboardNavigation.tabRequestNotification)) { notification in
             guard let rawValue = notification.userInfo?["tab"] as? String,
                   let tab = DashboardTopTab(rawValue: rawValue)
             else { return }
             setTopTab(tab)
+            _ = DashboardNavigation.consumePendingTab()
         }
     }
 

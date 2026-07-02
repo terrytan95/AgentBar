@@ -415,8 +415,10 @@ struct StatisticsView: View {
                     AuditView(
                         store: store,
                         points: filteredPoints,
+                        selectedSessionLabel: selectedSessionLabel,
                         dataSourceHealth: dataSourceHealth,
-                        theme: settings.themeColor
+                        theme: settings.themeColor,
+                        onClearSessionSelection: { selectedSessionLabel = nil }
                     )
                 }
             }
@@ -540,6 +542,7 @@ struct StatisticsView: View {
                         theme: settings.themeColor
                     ) { label in
                         selectedSessionLabel = label
+                        setPage(tab: .usage, viewMode: .audit)
                     }
                 }
             }

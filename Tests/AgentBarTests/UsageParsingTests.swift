@@ -52,6 +52,7 @@ final class UsageParsingTests: XCTestCase {
         checkRapidUsageAlertWarnsInMenuBarTitle()
         checkQuotaResetNotificationsDetectWindowRefreshes()
         checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta()
+        checkQuotaCapacityHistoryDoesNotEstimateAcrossAccountSwitches()
         checkStatisticsBucketsAggregateExpectedRanges()
         checkYearActivityBarsFillLast365Days()
         checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod()
@@ -1424,6 +1425,83 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(second.samples[1].tokensSincePreviousSample, 1_000)
         XCTAssertEqual(second.samples[1].estimatedFiveHourTotalTokens, 20_000)
         XCTAssertEqual(second.samples[1].estimatedWeeklyTotalTokens, 50_000)
+    }
+
+    private func checkQuotaCapacityHistoryDoesNotEstimateAcrossAccountSwitches() {
+        let firstDate = Date(timeIntervalSince1970: 1_781_388_300)
+        let secondDate = firstDate.addingTimeInterval(3_600)
+        let thirdDate = secondDate.addingTimeInterval(3_600)
+        var firstAccount = testAccount(id: "first", name: "first@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: firstDate)
+        firstAccount.isActive = true
+        var secondAccount = testAccount(id: "second", name: "second@example.com", fiveHourUsed: 10, weeklyUsed: 30, now: secondDate)
+        secondAccount.isActive = true
+        var laterSecondAccount = testAccount(id: "second", name: "second@example.com", fiveHourUsed: 15, weeklyUsed: 35, now: thirdDate)
+        laterSecondAccount.isActive = true
+        laterSecondAccount.fiveHourWindow?.resetsAt = secondAccount.fiveHourWindow?.resetsAt
+        laterSecondAccount.weeklyWindow?.resetsAt = secondAccount.weeklyWindow?.resetsAt
+        let points = [
+            UsagePoint(
+                service: .codex,
+                model: "codex-local",
+                date: secondDate.addingTimeInterval(600),
+                tokens: TokenTotals(input: 600, cachedInput: 0, output: 400, reasoningOutput: 0, total: 1_000),
+                estimatedCostUSD: nil
+            )
+        ]
+
+        let first = QuotaCapacityHistory(samples: []).appendingSample(
+            account: firstAccount,
+            points: [],
+            now: firstDate,
+            minimumInterval: 3_600
+        )
+        let switched = first.appendingSample(
+            account: secondAccount,
+            points: points,
+            now: secondDate,
+            minimumInterval: 3_600
+        )
+        let estimated = switched.appendingSample(
+            account: laterSecondAccount,
+            points: points,
+            now: thirdDate,
+            minimumInterval: 3_600
+        )
+
+        XCTAssertEqual(switched.samples[1].tokensSincePreviousSample, 0)
+        XCTAssertNil(switched.samples[1].estimatedFiveHourTotalTokens)
+        XCTAssertNil(switched.samples[1].estimatedWeeklyTotalTokens)
+        XCTAssertEqual(estimated.samples[2].tokensSincePreviousSample, 1_000)
+        XCTAssertEqual(estimated.samples[2].estimatedFiveHourTotalTokens, 20_000)
+        XCTAssertEqual(estimated.samples[2].estimatedWeeklyTotalTokens, 20_000)
+
+        let restored = QuotaCapacityHistory(samples: [
+            QuotaCapacitySample(
+                capturedAt: firstDate,
+                accountID: "first",
+                fiveHourUsedPercent: 10,
+                weeklyUsedPercent: 20,
+                fiveHourResetAt: firstAccount.fiveHourWindow?.resetsAt,
+                weeklyResetAt: firstAccount.weeklyWindow?.resetsAt,
+                tokensSincePreviousSample: 0,
+                estimatedFiveHourTotalTokens: nil,
+                estimatedWeeklyTotalTokens: nil
+            ),
+            QuotaCapacitySample(
+                capturedAt: secondDate,
+                accountID: "second",
+                fiveHourUsedPercent: 11,
+                weeklyUsedPercent: 31,
+                fiveHourResetAt: secondAccount.fiveHourWindow?.resetsAt,
+                weeklyResetAt: secondAccount.weeklyWindow?.resetsAt,
+                tokensSincePreviousSample: 1_000_000,
+                estimatedFiveHourTotalTokens: 100_000_000,
+                estimatedWeeklyTotalTokens: 100_000_000
+            )
+        ])
+        XCTAssertEqual(restored.samples[1].tokensSincePreviousSample, 0)
+        XCTAssertNil(restored.samples[1].estimatedFiveHourTotalTokens)
+        XCTAssertNil(restored.samples[1].estimatedWeeklyTotalTokens)
     }
 
     private func checkQuotaResetNotificationsDetectWindowRefreshes() {

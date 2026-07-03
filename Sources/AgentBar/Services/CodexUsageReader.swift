@@ -17,6 +17,7 @@ struct CodexUsageReader {
         var accounts: [UsageAccount] = []
         var points: [UsagePoint] = []
         var activeAccountActivatedAt: Date?
+        var accessIssueNote: String?
         var notes = [
             "AgentBar reads the local Codex registry and usage JSONL; auth snapshots are read only for usage API refresh."
         ]
@@ -26,26 +27,34 @@ struct CodexUsageReader {
             identity: activeAuthData.flatMap(CodexAccountStorage.chatGPTAuthIdentity)
         )
 
-        if let data = try? Data(contentsOf: registryURL),
-           let registryDetails = try? Self.parseRegistryDetails(
-            data: data,
-            now: now,
-            activeAuthInfo: activeAuthInfo,
-            authSnapshotInfo: { accountKey in
-                let authURL = storage.accountAuthURL(for: accountKey)
-                guard let attributes = try? fileManager.attributesOfItem(atPath: authURL.path) else { return nil }
-                let identity = (try? Data(contentsOf: authURL)).flatMap(CodexAccountStorage.chatGPTAuthIdentity)
-                return CodexAuthSnapshotInfo(
-                    modifiedAt: attributes[.modificationDate] as? Date,
-                    identity: identity
-                )
+        do {
+            let data = try Data(contentsOf: registryURL)
+            if let registryDetails = try? Self.parseRegistryDetails(
+                data: data,
+                now: now,
+                activeAuthInfo: activeAuthInfo,
+                authSnapshotInfo: { accountKey in
+                    let authURL = storage.accountAuthURL(for: accountKey)
+                    guard let attributes = try? fileManager.attributesOfItem(atPath: authURL.path) else { return nil }
+                    let identity = (try? Data(contentsOf: authURL)).flatMap(CodexAccountStorage.chatGPTAuthIdentity)
+                    return CodexAuthSnapshotInfo(
+                        modifiedAt: attributes[.modificationDate] as? Date,
+                        identity: identity
+                    )
+                }
+            ) {
+                accounts = registryDetails.snapshot.accounts
+                activeAccountActivatedAt = registryDetails.activeAccountActivatedAt
+                notes.append(contentsOf: registryDetails.snapshot.securityNotes)
+            } else {
+                notes.append("Codex registry not found at ~/.codex/accounts/registry.json.")
             }
-           ) {
-            accounts = registryDetails.snapshot.accounts
-            activeAccountActivatedAt = registryDetails.activeAccountActivatedAt
-            notes.append(contentsOf: registryDetails.snapshot.securityNotes)
-        } else {
-            notes.append("Codex registry not found at ~/.codex/accounts/registry.json.")
+        } catch {
+            if let note = LocalFileAccessWarning.codexNote(for: error, path: registryURL.path) {
+                accessIssueNote = note
+            } else {
+                notes.append("Codex registry not found at ~/.codex/accounts/registry.json.")
+            }
         }
 
         let sessionRoot = homeDirectory.appending(path: ".codex/sessions")
@@ -56,6 +65,10 @@ struct CodexUsageReader {
         )
         if let sessionScanNote = Self.sessionScanNote(metrics) {
             notes.insert(sessionScanNote, at: 0)
+        }
+        if let note = metrics.accessIssueNote ?? accessIssueNote {
+            notes.insert(note, at: 0)
+            accessIssueNote = note
         }
         points.append(contentsOf: metrics.points)
 
@@ -89,7 +102,9 @@ struct CodexUsageReader {
             }
         }
 
-        let status: DataSourceStatus = accounts.isEmpty && metrics.eventCount == 0 ? .unavailable : .live
+        let status: DataSourceStatus = accessIssueNote == nil
+            ? (accounts.isEmpty && metrics.eventCount == 0 ? .unavailable : .live)
+            : .needsAuthorization
         return UsageSnapshot(
             service: .codex,
             status: status,
@@ -770,4 +785,30 @@ private func epochDate(_ value: Double?) -> Date? {
 private func epochMillisecondsDate(_ value: Double?) -> Date? {
     guard let value else { return nil }
     return Date(timeIntervalSince1970: value / 1000)
+}
+
+enum LocalFileAccessWarning {
+    static func codexNote(for error: Error, path: String) -> String? {
+        guard isAccessDenied(error as NSError) else { return nil }
+        return "AgentBar cannot read local Codex data at \(displayPath(path)). Grant AgentBar Desktop/Documents/Downloads or Full Disk Access in System Settings, then refresh."
+    }
+
+    private static func isAccessDenied(_ error: NSError) -> Bool {
+        if error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoPermissionError {
+            return true
+        }
+        if error.domain == NSPOSIXErrorDomain && (error.code == Int(EACCES) || error.code == Int(EPERM)) {
+            return true
+        }
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isAccessDenied(underlying)
+        }
+        return false
+    }
+
+    private static func displayPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        guard path.hasPrefix(home) else { return path }
+        return "~" + path.dropFirst(home.count)
+    }
 }

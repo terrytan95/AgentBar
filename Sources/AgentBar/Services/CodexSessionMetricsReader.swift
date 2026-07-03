@@ -6,12 +6,31 @@ struct CodexSessionMetricsReader {
     private static let sessionMetricsCache = CodexSessionMetricsCache()
 
     func read(root: URL, maximumSessionFileBytes: Int, maximumSessionFiles: Int) -> CodexSessionMetrics {
+        var accessIssueNote: String?
+        do {
+            let values = try root.resourceValues(forKeys: [.isDirectoryKey])
+            guard values.isDirectory == true else {
+                return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
+            }
+        } catch {
+            if let note = LocalFileAccessWarning.codexNote(for: error, path: root.path) {
+                var empty = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
+                empty.accessIssueNote = note
+                return empty
+            }
+        }
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
+            options: [.skipsHiddenFiles],
+            errorHandler: { url, error in
+                accessIssueNote = accessIssueNote ?? LocalFileAccessWarning.codexNote(for: error, path: url.path)
+                return true
+            }
         ) else {
-            return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
+            var empty = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
+            empty.accessIssueNote = accessIssueNote
+            return empty
         }
 
         var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
@@ -19,7 +38,14 @@ struct CodexSessionMetricsReader {
         var reviewedFileCount = 0
 
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
-            guard let signature = CodexSessionFileSignature(fileURL: fileURL) else { continue }
+            let signature: CodexSessionFileSignature
+            do {
+                guard let fileSignature = try CodexSessionFileSignature(fileURL: fileURL) else { continue }
+                signature = fileSignature
+            } catch {
+                accessIssueNote = accessIssueNote ?? LocalFileAccessWarning.codexNote(for: error, path: fileURL.path)
+                continue
+            }
             guard signature.size <= maximumSessionFileBytes else {
                 aggregate.skippedOversizedSessionFileCount += 1
                 continue
@@ -35,8 +61,14 @@ struct CodexSessionMetricsReader {
             if let cachedMetrics = Self.sessionMetricsCache.metrics(for: path, signature: signature) {
                 metrics = cachedMetrics
             } else {
-                guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
-                      let parsedMetrics = try? CodexUsageReader.parseSessionJsonl(
+                let data: Data
+                do {
+                    data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
+                } catch {
+                    accessIssueNote = accessIssueNote ?? LocalFileAccessWarning.codexNote(for: error, path: fileURL.path)
+                    continue
+                }
+                guard let parsedMetrics = try? CodexUsageReader.parseSessionJsonl(
                         data: data,
                         sessionID: fileURL.deletingPathExtension().lastPathComponent,
                         projectName: nil,
@@ -51,6 +83,7 @@ struct CodexSessionMetricsReader {
         }
         Self.sessionMetricsCache.retain(paths: livePaths)
 
+        aggregate.accessIssueNote = accessIssueNote
         return aggregate
     }
 
@@ -63,9 +96,9 @@ private struct CodexSessionFileSignature: Equatable {
     var size: Int
     var modifiedAt: Date?
 
-    init?(fileURL: URL) {
-        guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]),
-              values.isRegularFile == true,
+    init?(fileURL: URL) throws {
+        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey])
+        guard values.isRegularFile == true,
               let size = values.fileSize
         else { return nil }
         self.size = size

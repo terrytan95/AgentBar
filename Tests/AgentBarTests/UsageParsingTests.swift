@@ -40,6 +40,7 @@ final class UsageParsingTests: XCTestCase {
         try checkSessionRateLimitsWithoutParsableTimestampDoNotOverrideActiveAccountWindows()
         try checkOversizedSessionFilesAreSkipped()
         try checkSessionFileCapSkipsAreReported()
+        try checkCodexReadWarnsWhenSessionAccessIsDenied()
         try checkOpenAIModelPricingCalculatesPointCost()
         checkPricingNormalizesProviderAndDateSuffixes()
         checkPricingUsesDecimalAndUnknownModelsCostZeroButKeepTokens()
@@ -71,6 +72,11 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexAccountSwitcherRejectsMismatchedSnapshot()
         try checkCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails()
     }
+
+    func testCodexDataSourceWarnsWhenAccessIsDenied() throws {
+        try checkCodexReadWarnsWhenSessionAccessIsDenied()
+    }
+
     private func checkCodexRegistryParsesMultipleAccountsWithoutSecrets() throws {
         let registry = """
         {
@@ -1177,6 +1183,33 @@ final class UsageParsingTests: XCTestCase {
 
         XCTAssertTrue(snapshot.securityNotes.first?.contains("1 beyond the 1000 file scan cap") == true)
         XCTAssertEqual(UsageInsights.dataSourceHealth(snapshots: [.codex: snapshot]).rows.first?.note, snapshot.securityNotes.first)
+    }
+
+    private func checkCodexReadWarnsWhenSessionAccessIsDenied() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let sessionFile = temp.appending(path: ".codex/sessions/2026/06/blocked.jsonl")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: sessionFile.path)
+            try? FileManager.default.removeItem(at: temp)
+        }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = sessionFile.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {"schema_version":3,"active_account_key":"active","accounts":[{"account_key":"active","email":"active@example.com"}]}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try "{}".data(using: .utf8)!.write(to: sessionFile)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: sessionFile.path)
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let health = UsageInsights.dataSourceHealth(snapshots: [.codex: snapshot])
+
+        XCTAssertEqual(snapshot.status, .needsAuthorization)
+        XCTAssertTrue(snapshot.securityNotes.first?.contains("AgentBar cannot read local Codex data") == true)
+        XCTAssertTrue(snapshot.securityNotes.first?.contains("Full Disk Access") == true)
+        XCTAssertEqual(health.issueCount, 1)
+        XCTAssertEqual(health.rows.first?.note, snapshot.securityNotes.first)
     }
 
     private func checkOpenAIModelPricingCalculatesPointCost() throws {

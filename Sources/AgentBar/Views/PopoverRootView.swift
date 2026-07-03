@@ -67,7 +67,7 @@ struct ResizablePopoverRootView: View {
             .accessibilityLabel(L.text("resize_popover", store.language))
 
             Capsule()
-                .fill(settings.themeColor.primary.opacity(0.30))
+                .fill(AgentBarPalette.primary.opacity(0.30))
                 .frame(width: 48, height: 4)
                 .padding(.bottom, 3)
                 .allowsHitTesting(false)
@@ -114,7 +114,7 @@ struct PopoverRootView: View {
             colors: [
                 AgentBarDesign.panelHighlight,
                 AgentBarDesign.appBackground,
-                store.settings.themeColor.primary.opacity(0.08)
+                AgentBarPalette.primary.opacity(0.08)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -171,7 +171,7 @@ struct PopoverRootView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .font(.agentBar(size: 14, weight: .bold))
-            .foregroundStyle(store.settings.themeColor.primary)
+            .foregroundStyle(AgentBarPalette.primary)
             .tactilePlainButton()
             .agentBarPanel(cornerRadius: 12)
             .help(L.text("refresh", store.language))
@@ -189,7 +189,6 @@ struct PopoverRootView: View {
                     PopoverAccountDisplayGroupView(
                         group: group,
                         language: store.language,
-                        theme: store.settings.themeColor,
                         switchingAccountID: store.switchingAccountID,
                         onSwitch: store.switchActiveAccount,
                         onLogin: { account in store.openLogin(for: account) },
@@ -206,8 +205,8 @@ struct PopoverRootView: View {
             Text(L.text("overview", store.language))
                 .font(.agentBar(size: 13, weight: .bold))
             HStack(spacing: 8) {
-                KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), systemImage: "cylinder.split.1x2.fill", tint: store.settings.themeColor.primary)
-                KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), systemImage: "dollarsign", tint: store.settings.themeColor.secondary)
+                KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), systemImage: "cylinder.split.1x2.fill", tint: AgentBarPalette.primary)
+                KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), systemImage: "dollarsign", tint: AgentBarPalette.secondary)
                 KPIPill(title: L.text("data_sources", store.language), value: dataSourceSummaryText, systemImage: dataSourceHealth.issueCount == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill", tint: dataSourceHealth.issueCount == 0 ? .green : .orange)
             }
 
@@ -326,7 +325,6 @@ private enum AgentBarWindowPresenter {
 struct PopoverAccountDisplayGroupView: View {
     var group: UsageAccountDisplayGroup
     var language: AppLanguage
-    var theme: AppThemeColor
     var switchingAccountID: String?
     var onSwitch: (UsageAccount) -> Void
     var onLogin: (UsageAccount) -> Void
@@ -349,7 +347,6 @@ struct PopoverAccountDisplayGroupView: View {
                     AccountRowView(
                         account: account,
                         language: language,
-                        theme: theme,
                         isSwitching: switchingAccountID == account.id,
                         onSwitch: { onSwitch(account) },
                         onLogin: { onLogin(account) },
@@ -362,7 +359,6 @@ struct PopoverAccountDisplayGroupView: View {
             AccountRowView(
                 account: account,
                 language: language,
-                theme: theme,
                 isSwitching: switchingAccountID == account.id,
                 onSwitch: { onSwitch(account) },
                 onLogin: { onLogin(account) },
@@ -398,7 +394,6 @@ struct PopoverLoadingRow: View {
 struct AccountRowView: View {
     var account: UsageAccount
     var language: AppLanguage
-    var theme: AppThemeColor
     var isSwitching: Bool
     var onSwitch: () -> Void
     var onLogin: () -> Void
@@ -442,7 +437,7 @@ struct AccountRowView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(theme.primary, in: Capsule())
+                            .background(AgentBarPalette.primary, in: Capsule())
                     } else {
                         Button {
                             onSwitch()
@@ -457,7 +452,7 @@ struct AccountRowView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .tint(theme.primary)
+                        .tint(AgentBarPalette.primary)
                         .disabled(isSwitching)
                         .pointingHandCursor(enabled: !isSwitching)
                     }
@@ -488,8 +483,8 @@ struct AccountRowView: View {
             }
 
             HStack(spacing: 10) {
-                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language, theme: theme)
-                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
+                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
+                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
             }
 
             if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
@@ -547,7 +542,6 @@ struct UsageWindowGauge: View {
     var title: String
     var window: UsageWindow?
     var language: AppLanguage
-    var theme: AppThemeColor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -572,7 +566,7 @@ struct UsageWindowGauge: View {
         guard let remaining = window?.remainingPercent else { return .gray }
         if remaining < 15 { return .red }
         if remaining < 35 { return .orange }
-        return theme.primary
+        return AgentBarPalette.primary
     }
 }
 

@@ -50,7 +50,7 @@ struct StatisticsView: View {
                 }
             }
         }
-        .tint(settings.themeColor.primary)
+        .tint(AgentBarPalette.primary)
         .background(AgentBarDesign.appBackground)
         .onAppear {
             if let tab = DashboardNavigation.consumePendingTab() {
@@ -83,7 +83,7 @@ struct StatisticsView: View {
                 colors: [
                     AgentBarDesign.panelHighlight,
                     AgentBarDesign.appBackground,
-                    settings.themeColor.primary.opacity(0.08)
+                    AgentBarPalette.primary.opacity(0.08)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -189,13 +189,13 @@ struct StatisticsView: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.agentBar(size: 14, weight: .semibold))
-                .foregroundStyle(settings.themeColor.primary)
+                .foregroundStyle(AgentBarPalette.primary)
                 .frame(width: 30, height: 30)
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
-        .background(settings.themeColor.primary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(AgentBarPalette.primary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .help(L.text(helpKey, store.language))
     }
 
@@ -208,11 +208,11 @@ struct StatisticsView: View {
                     .font(.agentBar(size: 12, weight: .semibold))
                     .lineLimit(1)
             }
-            .foregroundStyle(active ? settings.themeColor.primary : Color.primary.opacity(0.86))
+            .foregroundStyle(active ? AgentBarPalette.primary : Color.primary.opacity(0.86))
             .padding(.horizontal, 10)
             .frame(height: 32)
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .background(active ? settings.themeColor.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(active ? AgentBarPalette.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .tactilePlainButton()
     }
@@ -223,7 +223,7 @@ struct StatisticsView: View {
             showsAccountPopover.toggle()
         } label: {
             HStack(spacing: 10) {
-                AccountAvatar(text: account?.displayName ?? "A", color: settings.themeColor.primary, size: 34)
+                AccountAvatar(text: account?.displayName ?? "A", color: AgentBarPalette.primary, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account?.displayName ?? "--")
                         .font(.agentBar(size: 12, weight: .bold))
@@ -246,7 +246,7 @@ struct StatisticsView: View {
         .pointingHandCursor()
         .agentBarPanel(cornerRadius: 10)
         .popover(isPresented: $showsAccountPopover, arrowEdge: .bottom) {
-            SidebarAccountPopover(account: account, language: store.language, theme: settings.themeColor)
+            SidebarAccountPopover(account: account, language: store.language)
         }
     }
 
@@ -387,16 +387,16 @@ struct StatisticsView: View {
                     .font(.agentBar(size: 13, weight: .semibold))
                 Spacer()
             }
-            .foregroundStyle(active ? settings.themeColor.primary : (enabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.72)))
+            .foregroundStyle(active ? AgentBarPalette.primary : (enabled ? Color.primary.opacity(0.86) : Color.secondary.opacity(0.72)))
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .background(active ? settings.themeColor.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(active ? AgentBarPalette.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(active ? settings.themeColor.primary.opacity(0.24) : Color.clear, lineWidth: 1)
+                    .stroke(active ? AgentBarPalette.primary.opacity(0.24) : Color.clear, lineWidth: 1)
             }
-            .shadow(color: active ? settings.themeColor.primary.opacity(0.18) : .clear, radius: 10, y: 4)
+            .shadow(color: active ? AgentBarPalette.primary.opacity(0.18) : .clear, radius: 10, y: 4)
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.86)
@@ -417,7 +417,6 @@ struct StatisticsView: View {
                         points: filteredPoints,
                         selectedSessionLabel: selectedSessionLabel,
                         dataSourceHealth: dataSourceHealth,
-                        theme: settings.themeColor,
                         onClearSessionSelection: { selectedSessionLabel = nil }
                     )
                 }
@@ -444,7 +443,7 @@ struct StatisticsView: View {
                         .accessibilityHidden(true)
                 }
             }
-            .foregroundStyle(settings.themeColor.primary)
+            .foregroundStyle(AgentBarPalette.primary)
             .padding(.horizontal, 10)
             .frame(height: 30)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -484,8 +483,7 @@ struct StatisticsView: View {
                         delta: DisplayFormatters.changePercentString(periodChange.tokenPercent),
                         subtitle: L.text("compared_to_yesterday", store.language),
                         systemImage: "cylinder.split.1x2.fill",
-                        accent: settings.themeColor.primary,
-                        theme: settings.themeColor
+                        accent: AgentBarPalette.primary,
                     )
                     DashboardKPI(
                         title: L.text("total_cost", store.language),
@@ -494,7 +492,6 @@ struct StatisticsView: View {
                         subtitle: L.text("compared_to_yesterday", store.language),
                         systemImage: "dollarsign",
                         accent: .green,
-                        theme: settings.themeColor
                     )
                     DashboardKPI(
                         title: L.text("openai_overview", store.language),
@@ -502,27 +499,26 @@ struct StatisticsView: View {
                         delta: serviceShareText(.codex),
                         subtitle: L.text("share_of_total_cost", store.language),
                         systemImage: "sparkles",
-                        marker: settings.themeColor.tertiary,
-                        accent: settings.themeColor.tertiary,
-                        theme: settings.themeColor
+                        marker: AgentBarPalette.tertiary,
+                        accent: AgentBarPalette.tertiary,
                     )
                 }
             }
             .frame(height: 116)
 
-            QuotaPressurePanel(pressure: quotaPressure, language: store.language, theme: settings.themeColor)
+            QuotaPressurePanel(pressure: quotaPressure, language: store.language)
 
             dailyUsagePanel
 
             Panel(title: yearActivityLocalized("year_activity")) {
-                YearActivityPanel(bars: yearActivityBars, language: store.language, theme: settings.themeColor)
+                YearActivityPanel(bars: yearActivityBars, language: store.language)
             }
 
             Panel(
                 title: quotaCapacityLocalized("quota_capacity_history"),
                 helpText: quotaCapacityLocalized("quota_capacity_history_tooltip")
             ) {
-                QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language, theme: settings.themeColor)
+                QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language)
             }
 
             HStack(alignment: .top, spacing: 14) {
@@ -539,7 +535,6 @@ struct StatisticsView: View {
                         breakdown: topUsage,
                         selectedSessionLabel: selectedSessionLabel,
                         language: store.language,
-                        theme: settings.themeColor
                     ) { label in
                         selectedSessionLabel = label
                         setPage(tab: .usage, viewMode: .audit)
@@ -581,12 +576,12 @@ struct StatisticsView: View {
             }
 
             HStack(spacing: 14) {
-                LegendItem(title: L.text("tokens_ten_thousands", store.language), color: settings.themeColor.primary)
+                LegendItem(title: L.text("tokens_ten_thousands", store.language), color: AgentBarPalette.primary)
                 LegendItem(title: L.text("cost_usd", store.language), color: .orange)
                 Spacer()
             }
 
-            DashboardStackedBars(bars: displayBars, language: store.language, theme: settings.themeColor)
+            DashboardStackedBars(bars: displayBars, language: store.language)
                 .frame(height: 230)
         }
         .padding(16)
@@ -646,7 +641,7 @@ struct StatisticsView: View {
             }
             .frame(height: 90)
 
-            ResetAdvicePanel(advice: resetSpendAdvice, theme: settings.themeColor)
+            ResetAdvicePanel(advice: resetSpendAdvice)
 
             HStack(alignment: .top, spacing: 14) {
                 Panel(title: L.text("expiry_watch", store.language)) {
@@ -718,7 +713,6 @@ struct StatisticsView: View {
                 AccountHealthCenterPanel(
                     health: accountHealthCenter,
                     language: store.language,
-                    theme: settings.themeColor,
                     onLogin: openHealthLogin,
                     onRemove: removeHealthAccount,
                     onRefresh: { store.refresh(force: true, showManualFeedback: true) }
@@ -922,7 +916,7 @@ struct StatisticsView: View {
             EmptyPanelMessage(L.text("no_usage_data", store.language))
         } else {
             HStack(spacing: 18) {
-                ProgressRing(value: rows.first?.share ?? 0, tint: rows.first?.color ?? settings.themeColor.primary, diameter: 118, stroke: 16) {
+                ProgressRing(value: rows.first?.share ?? 0, tint: rows.first?.color ?? AgentBarPalette.primary, diameter: 118, stroke: 16) {
                     VStack(spacing: 2) {
                         Text(DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language))
                             .font(.agentBarMono(size: 18, weight: .bold))
@@ -953,7 +947,7 @@ struct StatisticsView: View {
                             .font(.agentBar(size: 11, weight: .bold))
                     }
                     .tactilePlainButton()
-                    .foregroundStyle(settings.themeColor.primary)
+                    .foregroundStyle(AgentBarPalette.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .popover(isPresented: $showsServiceBreakdownPopover, arrowEdge: .trailing) {
                         ServiceBreakdownPopover(rows: rows, language: store.language)
@@ -968,7 +962,7 @@ struct StatisticsView: View {
         return UsageService.allCases.compactMap { service in
             let tokens = summary.serviceBreakdown[service, default: 0]
             guard tokens > 0 || (service == .codex && !codexAccounts.isEmpty) || (service == .claudeCode && hasClaudeData) else { return nil }
-            let color = service == .codex ? settings.themeColor.tertiary : settings.themeColor.secondary
+            let color = service == .codex ? AgentBarPalette.tertiary : AgentBarPalette.secondary
             return ServiceMixRow(
                 service: service,
                 title: service == .codex ? "Codex" : "Claude Code",
@@ -992,7 +986,6 @@ struct StatisticsView: View {
                     summary: currentLimitSummary,
                     resetCreditsCount: totalResetCreditsCount,
                     language: store.language,
-                    theme: settings.themeColor
                 )
 
                 LazyVStack(alignment: .leading, spacing: 8) {
@@ -1000,7 +993,6 @@ struct StatisticsView: View {
                         AccountLimitDisplayGroupView(
                             group: group,
                             language: store.language,
-                            theme: settings.themeColor,
                             switchingAccountID: store.switchingAccountID,
                             onSwitch: store.switchActiveAccount,
                             onLogin: { account in store.openLogin(for: account) }
@@ -1049,7 +1041,7 @@ struct StatisticsView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(groups) { group in
-                        ResetExpiryDisplayGroupView(group: group, language: store.language, theme: settings.themeColor)
+                        ResetExpiryDisplayGroupView(group: group, language: store.language)
                     }
                 }
             }
@@ -1148,7 +1140,7 @@ struct StatisticsView: View {
                         .font(.agentBar(size: 11, weight: .bold))
                 }
                 .tactilePlainButton()
-                .foregroundStyle(settings.themeColor.primary)
+                .foregroundStyle(AgentBarPalette.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .popover(isPresented: $showsModelBreakdownPopover, arrowEdge: .trailing) {
                     ModelBreakdownPopover(rows: rows, language: store.language)
@@ -1192,7 +1184,7 @@ struct StatisticsView: View {
     }
 
     private func serviceColor(_ service: UsageService) -> Color {
-        service == .codex ? settings.themeColor.tertiary : settings.themeColor.secondary
+        service == .codex ? AgentBarPalette.tertiary : AgentBarPalette.secondary
     }
 
     private func resetExpiryColor(_ date: Date?) -> Color {
@@ -1200,11 +1192,11 @@ struct StatisticsView: View {
         let seconds = date.timeIntervalSinceNow
         if seconds <= 86_400 { return .red }
         if seconds <= 3 * 86_400 { return .orange }
-        return settings.themeColor.primary
+        return AgentBarPalette.primary
     }
 
     private func quotaMeterColor(_ remaining: Double?) -> Color {
-        guard let remaining else { return settings.themeColor.tertiary }
+        guard let remaining else { return AgentBarPalette.tertiary }
         if remaining < 15 { return .red }
         if remaining < 35 { return .yellow }
         return .blue
@@ -1287,7 +1279,6 @@ private struct ResetSpendAdvice {
 
 private struct ResetAdvicePanel: View {
     var advice: ResetSpendAdvice
-    var theme: AppThemeColor
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -1331,7 +1322,6 @@ private struct DashboardKPI: View {
     var systemImage: String
     var marker: Color? = nil
     var accent: Color
-    var theme: AppThemeColor
 
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -1515,7 +1505,6 @@ private struct ModelBreakdownPopoverRow: View {
 private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
-    var theme: AppThemeColor
     @State private var hoveredBarID: Date?
     @State private var hoverLocation: CGPoint?
     @State private var hoverPlotSize: CGSize = .zero
@@ -1562,7 +1551,7 @@ private struct DashboardStackedBars: View {
                                         size: CGSize(width: plotProxy.size.width, height: plotHeight),
                                         values: bars.map(tokenValue),
                                         maximum: tokenMax,
-                                        color: theme.primary,
+                                        color: AgentBarPalette.primary,
                                         showsFill: true
                                     )
                                     chartArea(
@@ -1615,7 +1604,7 @@ private struct DashboardStackedBars: View {
 
                     if let hoveredBar, let hoverLocation {
                         let tooltipPosition = chartTooltipPosition(cursor: hoverLocation, calloutSize: calloutSize, plotSize: hoverPlotSize)
-                        ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
+                        ChartHoverCallout(bar: hoveredBar, language: language)
                             .frame(width: calloutSize.width, height: calloutSize.height)
                             .position(x: tooltipPosition.x + leftAxisWidth, y: tooltipPosition.y + 4)
                             .padding(.top, 4)
@@ -1710,7 +1699,6 @@ private struct DashboardStackedBars: View {
 private struct YearActivityPanel: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
-    var theme: AppThemeColor
     @State private var hoveredBarID: Date?
     @State private var hoverLocation: CGPoint?
     @Environment(\.colorScheme) private var colorScheme
@@ -1827,7 +1815,7 @@ private struct YearActivityPanel: View {
                     calloutSize: calloutSize,
                     plotSize: CGSize(width: gridWidth, height: gridHeight)
                 )
-                ChartHoverCallout(bar: hoveredBar, language: language, theme: theme)
+                ChartHoverCallout(bar: hoveredBar, language: language)
                     .frame(width: calloutSize.width, height: calloutSize.height)
                     .allowsHitTesting(false)
                     .position(tooltipPosition)
@@ -2029,14 +2017,13 @@ private struct YearActivityMonthMarker: Identifiable {
 private struct ChartHoverCallout: View {
     var bar: DailyUsageBar
     var language: AppLanguage
-    var theme: AppThemeColor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dateText)
                 .font(.agentBar(size: 11, weight: .bold))
-            metricRow("Codex", tokens: bar.codexTokens, cost: bar.codexCostUSD, color: theme.tertiary)
-            metricRow("Claude", tokens: bar.claudeTokens, cost: bar.claudeCostUSD, color: theme.secondary)
+            metricRow("Codex", tokens: bar.codexTokens, cost: bar.codexCostUSD, color: AgentBarPalette.tertiary)
+            metricRow("Claude", tokens: bar.claudeTokens, cost: bar.claudeCostUSD, color: AgentBarPalette.secondary)
             Divider()
             HStack {
                 Text(L.text("total", language))
@@ -2260,34 +2247,33 @@ private struct CurrentLimitSummaryStrip: View {
     var summary: CurrentLimitSummary
     var resetCreditsCount: Int
     var language: AppLanguage
-    var theme: AppThemeColor
 
     var body: some View {
         HStack(spacing: 8) {
             MiniSummaryChip(
                 title: localized("most_constrained"),
                 value: summary.mostConstrainedAccount?.displayNameWithWorkspace(language: language) ?? "--",
-                color: theme.quotaColor(remaining: summary.mostConstrainedAccount?.mostConstrainedRemainingPercent)
+                color: AgentBarPalette.quotaColor(remaining: summary.mostConstrainedAccount?.mostConstrainedRemainingPercent)
             )
             MiniSummaryChip(
                 title: localized("lowest_5h"),
                 value: DisplayFormatters.percentString(summary.lowestFiveHourRemaining),
-                color: theme.quotaColor(remaining: summary.lowestFiveHourRemaining)
+                color: AgentBarPalette.quotaColor(remaining: summary.lowestFiveHourRemaining)
             )
             MiniSummaryChip(
                 title: localized("lowest_weekly"),
                 value: DisplayFormatters.percentString(summary.lowestWeeklyRemaining),
-                color: theme.quotaColor(remaining: summary.lowestWeeklyRemaining)
+                color: AgentBarPalette.quotaColor(remaining: summary.lowestWeeklyRemaining)
             )
             MiniSummaryChip(
                 title: localized("resets"),
                 value: "\(resetCreditsCount)",
-                color: theme.primary
+                color: AgentBarPalette.primary
             )
             MiniSummaryChip(
                 title: localized("accounts"),
                 value: "\(summary.accountCount)",
-                color: theme.tertiary
+                color: AgentBarPalette.tertiary
             )
         }
     }
@@ -2300,7 +2286,6 @@ private struct CurrentLimitSummaryStrip: View {
 private struct QuotaPressurePanel: View {
     var pressure: QuotaPressureInsight
     var language: AppLanguage
-    var theme: AppThemeColor
     @State private var showsDetails = false
 
     var body: some View {
@@ -2396,7 +2381,7 @@ private struct QuotaPressurePanel: View {
         switch pressure.severity {
         case .critical: .red
         case .warning: .orange
-        case .ok: theme.primary
+        case .ok: AgentBarPalette.primary
         }
     }
 
@@ -2504,7 +2489,6 @@ private struct QuotaPressureDetailsPopover: View {
 private struct QuotaCapacityHistoryPanel: View {
     var history: QuotaCapacityHistory
     var language: AppLanguage
-    var theme: AppThemeColor
 
     private var chartSamples: [QuotaCapacitySample] {
         Array(history.samples.suffix(48))
@@ -2517,27 +2501,27 @@ private struct QuotaCapacityHistoryPanel: View {
                     SummaryChip(
                         title: "5H",
                         value: tokenText(history.latestEstimate?.estimatedFiveHourTotalTokens),
-                        color: theme.primary
+                        color: AgentBarPalette.primary
                     )
                     SummaryChip(
                         title: localized("weekly"),
                         value: tokenText(history.latestEstimate?.estimatedWeeklyTotalTokens),
-                        color: theme.tertiary
+                        color: AgentBarPalette.tertiary
                     )
                     SummaryChip(
                         title: localized("samples"),
                         value: "\(history.samples.count)",
-                        color: theme.secondary
+                        color: AgentBarPalette.secondary
                     )
                 }
 
-                QuotaCapacityLineChart(samples: chartSamples, language: language, theme: theme)
+                QuotaCapacityLineChart(samples: chartSamples, language: language)
                     .frame(height: 188)
 
                 HStack(spacing: 14) {
                     Spacer()
-                    LegendItem(title: "5H", color: theme.primary)
-                    LegendItem(title: localized("weekly"), color: theme.tertiary)
+                    LegendItem(title: "5H", color: AgentBarPalette.primary)
+                    LegendItem(title: localized("weekly"), color: AgentBarPalette.tertiary)
                 }
             }
         } else {
@@ -2557,7 +2541,6 @@ private struct QuotaCapacityHistoryPanel: View {
 private struct QuotaCapacityLineChart: View {
     var samples: [QuotaCapacitySample]
     var language: AppLanguage
-    var theme: AppThemeColor
     @State private var hoveredSampleID: Date?
     @State private var hoverLocation: CGPoint?
     @State private var hoverPlotSize: CGSize = .zero
@@ -2598,8 +2581,8 @@ private struct QuotaCapacityLineChart: View {
                         }
                         .opacity(0.45)
 
-                        line(for: \.estimatedFiveHourTotalTokens, maximumValue: maximumValue, color: theme.primary, in: plotSize)
-                        line(for: \.estimatedWeeklyTotalTokens, maximumValue: maximumValue, color: theme.tertiary, in: plotSize)
+                        line(for: \.estimatedFiveHourTotalTokens, maximumValue: maximumValue, color: AgentBarPalette.primary, in: plotSize)
+                        line(for: \.estimatedWeeklyTotalTokens, maximumValue: maximumValue, color: AgentBarPalette.tertiary, in: plotSize)
                     }
                     .frame(width: plotSize.width, height: plotSize.height)
                     .overlay {
@@ -2621,7 +2604,7 @@ private struct QuotaCapacityLineChart: View {
                                 calloutSize: calloutSize,
                                 plotSize: hoverPlotSize
                             )
-                            QuotaCapacityHoverCallout(sample: hoveredSample, language: language, theme: theme)
+                            QuotaCapacityHoverCallout(sample: hoveredSample, language: language)
                                 .frame(width: calloutSize.width, height: calloutSize.height)
                                 .position(tooltipPosition)
                                 .allowsHitTesting(false)
@@ -2699,14 +2682,13 @@ private struct QuotaCapacityLineChart: View {
 private struct QuotaCapacityHoverCallout: View {
     var sample: QuotaCapacitySample
     var language: AppLanguage
-    var theme: AppThemeColor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dateText(sample.capturedAt))
                 .font(.agentBar(size: 11, weight: .bold))
-            metricRow("5H", value: sample.estimatedFiveHourTotalTokens, color: theme.primary)
-            metricRow(localized("weekly"), value: sample.estimatedWeeklyTotalTokens, color: theme.tertiary)
+            metricRow("5H", value: sample.estimatedFiveHourTotalTokens, color: AgentBarPalette.primary)
+            metricRow(localized("weekly"), value: sample.estimatedWeeklyTotalTokens, color: AgentBarPalette.tertiary)
             Divider()
             HStack {
                 Text(localized("sample_usage"))
@@ -2753,7 +2735,6 @@ private struct TopUsagePanel: View {
     var breakdown: TopUsageBreakdown
     var selectedSessionLabel: String?
     var language: AppLanguage
-    var theme: AppThemeColor
     var onSelectSession: (String) -> Void
 
     var body: some View {
@@ -2761,10 +2742,10 @@ private struct TopUsagePanel: View {
             EmptyPanelMessage(L.text("no_usage_data", language))
         } else {
             VStack(spacing: 12) {
-                topSection(title: localized("sessions"), rows: breakdown.sessions, color: theme.primary, showsLastUsedAt: true, isSelectable: true)
-                topSection(title: localized("projects"), rows: breakdown.projects, color: theme.tertiary)
-                topSection(title: localized("days"), rows: breakdown.days, color: theme.secondary)
-                topSection(title: localized("models"), rows: breakdown.models, color: theme.primary)
+                topSection(title: localized("sessions"), rows: breakdown.sessions, color: AgentBarPalette.primary, showsLastUsedAt: true, isSelectable: true)
+                topSection(title: localized("projects"), rows: breakdown.projects, color: AgentBarPalette.tertiary)
+                topSection(title: localized("days"), rows: breakdown.days, color: AgentBarPalette.secondary)
+                topSection(title: localized("models"), rows: breakdown.models, color: AgentBarPalette.primary)
             }
         }
     }
@@ -2842,7 +2823,6 @@ private struct TopUsagePanel: View {
 private struct AccountHealthCenterPanel: View {
     var health: AccountHealthCenter
     var language: AppLanguage
-    var theme: AppThemeColor
     var onLogin: (String) -> Void
     var onRemove: (String) -> Void
     var onRefresh: () -> Void
@@ -2929,7 +2909,7 @@ private struct AccountHealthCenterPanel: View {
         switch row.severity {
         case .critical: .red
         case .warning: .orange
-        case .ok: theme.primary
+        case .ok: AgentBarPalette.primary
         }
     }
 
@@ -2949,7 +2929,6 @@ private struct ResetExpiryRowData: Identifiable {
 private struct ResetExpiryRow: View {
     var row: ResetExpiryRowData
     var language: AppLanguage
-    var theme: AppThemeColor
 
     var body: some View {
         HStack(spacing: 10) {
@@ -3001,14 +2980,13 @@ private struct ResetExpiryRow: View {
         let seconds = expiresAt.timeIntervalSinceNow
         if seconds <= 86_400 { return .red }
         if seconds <= 3 * 86_400 { return .orange }
-        return theme.primary
+        return AgentBarPalette.primary
     }
 }
 
 private struct ResetExpiryDisplayGroupView: View {
     var group: UsageAccountDisplayGroup
     var language: AppLanguage
-    var theme: AppThemeColor
 
     var body: some View {
         if group.isGrouped {
@@ -3016,14 +2994,14 @@ private struct ResetExpiryDisplayGroupView: View {
                 displayGroupHeader
                 ForEach(group.accounts) { account in
                     ForEach(rows(for: account)) { row in
-                        ResetExpiryRow(row: row, language: language, theme: theme)
+                        ResetExpiryRow(row: row, language: language)
                             .padding(.leading, 12)
                     }
                 }
             }
         } else if let account = group.accounts.first {
             ForEach(rows(for: account)) { row in
-                ResetExpiryRow(row: row, language: language, theme: theme)
+                ResetExpiryRow(row: row, language: language)
             }
         }
     }
@@ -3072,13 +3050,12 @@ private struct AccountAvatar: View {
 private struct SidebarAccountPopover: View {
     var account: UsageAccount?
     var language: AppLanguage
-    var theme: AppThemeColor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let account {
                 HStack(spacing: 10) {
-                    AccountAvatar(text: account.displayName, color: theme.primary, size: 38)
+                    AccountAvatar(text: account.displayName, color: AgentBarPalette.primary, size: 38)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(account.displayName)
                             .font(.agentBar(size: 14, weight: .bold))
@@ -3219,7 +3196,6 @@ private struct MiniSummaryChip: View {
 private struct AccountLimitDisplayGroupView: View {
     var group: UsageAccountDisplayGroup
     var language: AppLanguage
-    var theme: AppThemeColor
     var switchingAccountID: String?
     var onSwitch: (UsageAccount) -> Void
     var onLogin: (UsageAccount) -> Void
@@ -3232,7 +3208,6 @@ private struct AccountLimitDisplayGroupView: View {
                     AccountLimitGroupView(
                         account: account,
                         language: language,
-                        theme: theme,
                         isSwitching: switchingAccountID == account.id,
                         onSwitch: { onSwitch(account) },
                         onLogin: { onLogin(account) }
@@ -3244,7 +3219,6 @@ private struct AccountLimitDisplayGroupView: View {
             AccountLimitGroupView(
                 account: account,
                 language: language,
-                theme: theme,
                 isSwitching: switchingAccountID == account.id,
                 onSwitch: { onSwitch(account) },
                 onLogin: { onLogin(account) }
@@ -3268,7 +3242,6 @@ private struct AccountLimitDisplayGroupView: View {
 private struct AccountLimitGroupView: View {
     var account: UsageAccount
     var language: AppLanguage
-    var theme: AppThemeColor
     var isSwitching: Bool
     var onSwitch: () -> Void
     var onLogin: () -> Void
@@ -3276,7 +3249,7 @@ private struct AccountLimitGroupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                AccountAvatar(text: account.displayName, color: account.isActive ? theme.primary : theme.secondary, size: 34)
+                AccountAvatar(text: account.displayName, color: account.isActive ? AgentBarPalette.primary : AgentBarPalette.secondary, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(account.displayName)
@@ -3288,7 +3261,7 @@ private struct AccountLimitGroupView: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(theme.primary, in: Capsule())
+                                .background(AgentBarPalette.primary, in: Capsule())
                         }
                     }
                     Text(accountDetailLine)
@@ -3328,7 +3301,7 @@ private struct AccountLimitGroupView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .tint(theme.primary)
+                    .tint(AgentBarPalette.primary)
                     .disabled(isSwitching)
                     .pointingHandCursor(enabled: !isSwitching)
                 } else {
@@ -3355,8 +3328,8 @@ private struct AccountLimitGroupView: View {
             }
 
             HStack(spacing: 12) {
-                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language, theme: theme)
-                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language, theme: theme)
+                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
+                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
             }
 
             if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
@@ -3379,7 +3352,7 @@ private struct AccountLimitGroupView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(account.needsLogin ? Color.red.opacity(0.70) : (account.isActive ? theme.primary.opacity(0.25) : Color.primary.opacity(0.06)), lineWidth: account.needsLogin ? 1.5 : 1)
+                .stroke(account.needsLogin ? Color.red.opacity(0.70) : (account.isActive ? AgentBarPalette.primary.opacity(0.25) : Color.primary.opacity(0.06)), lineWidth: account.needsLogin ? 1.5 : 1)
         }
     }
 

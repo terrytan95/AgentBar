@@ -11,7 +11,7 @@ final class PopoverLayoutTests: XCTestCase {
         checkPopoverHeightGrowsWithAccountCount()
         checkPopoverHeightIsCappedForLargeAccountCounts()
         checkPopoverUsesCompactMenuBarSizing()
-        checkPopoverHeightDoesNotUseUserPreferenceOverride()
+        checkPopoverHeightCanUseScreenMaximum()
         checkPopoverHeightCanUsePreferredHeightWithinBounds()
         checkAuditKpiGridHeightMatchesColumnCount()
     }
@@ -36,7 +36,7 @@ final class PopoverLayoutTests: XCTestCase {
     private func checkPopoverHeightIsCappedForLargeAccountCounts() {
         let manyAccounts = PopoverLayout.height(accountCount: 32, sourceCount: 2)
 
-        XCTAssertEqual(manyAccounts, PopoverLayout.defaultHeight)
+        XCTAssertEqual(manyAccounts, PopoverLayout.maximumHeight)
     }
 
     private func checkPopoverUsesCompactMenuBarSizing() {
@@ -44,10 +44,10 @@ final class PopoverLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(PopoverLayout.defaultHeight, 740)
     }
 
-    private func checkPopoverHeightDoesNotUseUserPreferenceOverride() {
+    private func checkPopoverHeightCanUseScreenMaximum() {
         XCTAssertEqual(
-            PopoverLayout.height(accountCount: 32, sourceCount: 2),
-            PopoverLayout.defaultHeight
+            PopoverLayout.height(accountCount: 32, sourceCount: 2, maximumHeight: 1_392),
+            1_392
         )
     }
 

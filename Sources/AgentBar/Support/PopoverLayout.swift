@@ -29,6 +29,6 @@ enum PopoverLayout {
         let contentHeight = baseHeight
             + CGFloat(max(0, accountCount)) * accountRowHeight
             + CGFloat(max(0, sourceCount)) * sourceRowHeight
-        return min(defaultHeight, max(minimumHeight, contentHeight))
+        return min(maximumHeight, max(minimumHeight, contentHeight))
     }
 }

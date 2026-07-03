@@ -114,12 +114,12 @@ enum UsageInsights {
             .filter { $0.service == .codex && $0.id != active?.id }
             .filter { !$0.needsLogin }
             .max { lhs, rhs in
-                let lhsResetCredits = lhs.resetCredits?.visibleCount ?? 0
-                let rhsResetCredits = rhs.resetCredits?.visibleCount ?? 0
-                if lhsResetCredits != rhsResetCredits {
-                    return lhsResetCredits < rhsResetCredits
+                let lhsFiveHour = lhs.fiveHourWindow?.remainingPercent ?? -1
+                let rhsFiveHour = rhs.fiveHourWindow?.remainingPercent ?? -1
+                if lhsFiveHour != rhsFiveHour {
+                    return lhsFiveHour < rhsFiveHour
                 }
-                return (lhs.mostConstrainedRemainingPercent ?? -1) < (rhs.mostConstrainedRemainingPercent ?? -1)
+                return (lhs.weeklyWindow?.remainingPercent ?? -1) < (rhs.weeklyWindow?.remainingPercent ?? -1)
             }
 
         let fiveHourRemaining = active?.fiveHourWindow?.remainingPercent

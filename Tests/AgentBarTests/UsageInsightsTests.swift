@@ -45,6 +45,24 @@ final class UsageInsightsTests: XCTestCase {
         XCTAssertEqual(topUsage.sessions.first?.tokens, 6_000)
     }
 
+    func testQuotaPressureRecommendationPrioritizesFiveHourThenWeeklyRemaining() {
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let active = account(id: "active", name: "active@example.com", fiveHourUsed: 98, weeklyUsed: 20, now: now, active: true)
+        let moreWeekly = account(id: "more-weekly", name: "weekly@example.com", fiveHourUsed: 35, weeklyUsed: 5, now: now, active: false)
+        let sameFiveHourLessWeekly = account(id: "less-weekly", name: "less-weekly@example.com", fiveHourUsed: 20, weeklyUsed: 70, now: now, active: false)
+        let moreFiveHour = account(id: "more-five-hour", name: "five@example.com", fiveHourUsed: 20, weeklyUsed: 40, now: now, active: false)
+
+        let pressure = UsageInsights.quotaPressure(
+            accounts: [active, moreWeekly, sameFiveHourLessWeekly, moreFiveHour],
+            points: [],
+            rotationThresholdRemainingPercent: 10,
+            autoRotationEnabled: true,
+            now: now
+        )
+
+        XCTAssertEqual(pressure.recommendedAccount?.id, "more-five-hour")
+    }
+
     private func account(
         id: String,
         name: String,

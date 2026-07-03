@@ -502,4 +502,5 @@ struct CodexSessionMetrics: Equatable, Sendable {
     var latestRateLimitAt: Date?
     var skippedOversizedSessionFileCount = 0
     var skippedSessionFileCapCount = 0
+    var accessIssueNote: String? = nil
 }

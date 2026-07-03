@@ -507,6 +507,7 @@ struct StatisticsView: View {
             .frame(height: 116)
 
             QuotaPressurePanel(pressure: quotaPressure, language: store.language)
+                .padding(.top, 8)
 
             dailyUsagePanel
 

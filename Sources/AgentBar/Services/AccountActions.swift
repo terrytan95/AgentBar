@@ -147,7 +147,7 @@ enum AccountLoginLauncher {
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "Codex account switch failed"
-            alert.informativeText = "\(recovery.message)\n\nAccount: \(recovery.accountLabel)\n\nAfter login, AgentBar will retry this account on the next refresh."
+            alert.informativeText = "\(recovery.message)\n\nAccount: \(recovery.accountLabel)\n\nAfter login, AgentBar will refresh and retry this account automatically."
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Login & Retry")
             alert.addButton(withTitle: "Cancel")
@@ -170,9 +170,9 @@ enum AccountLoginLauncher {
             alert.informativeText = """
             Account: \(accountLabel)
 
-            Finish the Codex login. AgentBar will use the account you logged into on the next refresh.
+            Finish the Codex login. AgentBar will refresh this account automatically.
 
-            Terminal will run: codex login
+            Terminal will run: codex login and update AgentBar's account snapshot.
 
             If your browser does not open, use the authentication URL printed in Terminal.
             On a remote or headless machine, run codex login --device-auth instead.

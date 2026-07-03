@@ -1,5 +1,38 @@
 import Foundation
 
+private final class DarwinNotificationObserver {
+    private let name: CFString
+    private let handler: () -> Void
+
+    init(name: String, handler: @escaping () -> Void) {
+        self.name = name as CFString
+        self.handler = handler
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            Unmanaged.passUnretained(self).toOpaque(),
+            { _, observer, _, _, _ in
+                guard let observer else { return }
+                Unmanaged<DarwinNotificationObserver>
+                    .fromOpaque(observer)
+                    .takeUnretainedValue()
+                    .handler()
+            },
+            self.name,
+            nil,
+            .deliverImmediately
+        )
+    }
+
+    deinit {
+        CFNotificationCenterRemoveObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            Unmanaged.passUnretained(self).toOpaque(),
+            CFNotificationName(name),
+            nil
+        )
+    }
+}
+
 @MainActor
 final class UsageStore: ObservableObject {
     static let accountRemovalNotification = Notification.Name("AgentBarUsageStoreAccountRemoval")
@@ -39,6 +72,7 @@ final class UsageStore: ObservableObject {
     private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
     private var accountRemovalObserver: NSObjectProtocol?
+    private var codexRecoveryLoginObserver: DarwinNotificationObserver?
     private var refreshInFlight = false
     private var refreshQueued = false
     private var manualRefreshQueued = false
@@ -110,6 +144,11 @@ final class UsageStore: ObservableObject {
             object: nil,
             queue: nil
         ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refresh(force: true)
+            }
+        }
+        codexRecoveryLoginObserver = DarwinNotificationObserver(name: CodexAccountStorage.recoveryLoginFinishedNotificationName) { [weak self] in
             Task { @MainActor [weak self] in
                 self?.refresh(force: true)
             }

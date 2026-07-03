@@ -27,6 +27,7 @@ final class AccountRotationTests: XCTestCase {
         try checkFailedManualSwitchPromptsCodexReloginWithPhoneAuthHintAndRetriesAfterRecovery()
         try checkCodexAccountRemoverDeletesActiveAccountFilesAndRegistryEntry()
         checkUsageStoreRefreshesAfterAccountRemovalNotification()
+        checkUsageStoreRefreshesAfterCodexRecoveryLoginFinishes()
     }
 
     private func checkSelectorReturnsNilWhenActiveAccountIsNotNearFiveHourLimit() {
@@ -530,6 +531,48 @@ final class AccountRotationTests: XCTestCase {
         ])
 
         NotificationCenter.default.post(name: UsageStore.accountRemovalNotification, object: nil)
+
+        wait(for: [refreshExpectation], timeout: 0.4)
+    }
+
+    @MainActor
+    private func checkUsageStoreRefreshesAfterCodexRecoveryLoginFinishes() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let refreshExpectation = expectation(description: "store refreshed after Codex recovery login")
+        refreshExpectation.assertForOverFulfill = false
+        let now = now
+        let store = UsageStore(
+            settings: SettingsStore(defaults: defaults),
+            codexUsageSynchronizer: { .success },
+            codexUsageReader: {
+                refreshExpectation.fulfill()
+                return UsageSnapshot(
+                    service: .codex,
+                    status: .live,
+                    accounts: [],
+                    points: [],
+                    securityNotes: [],
+                    refreshedAt: now,
+                    pricingFingerprint: Pricing.fingerprint
+                )
+            },
+            claudeUsageReader: {
+                UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [], securityNotes: ["test"], refreshedAt: Date(), pricingFingerprint: Pricing.fingerprint)
+            }
+        )
+        store.applyTestData(accounts: [
+            account(id: "recovered", used: 10, resetsAt: now, lastUpdated: now, isActive: true)
+        ])
+
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(CodexAccountStorage.recoveryLoginFinishedNotificationName as CFString),
+            nil,
+            nil,
+            true
+        )
 
         wait(for: [refreshExpectation], timeout: 0.4)
     }

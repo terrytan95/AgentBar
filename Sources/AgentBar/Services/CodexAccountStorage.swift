@@ -25,6 +25,24 @@ struct CodexAccountStorage {
         return #"codex login && mkdir -p "$HOME/.codex/accounts" && cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/\#(fileKey).auth.json""#
     }
 
+    static func chatGPTAccountID(from authData: Data) -> String? {
+        guard let root = try? JSONSerialization.jsonObject(with: authData) as? [String: Any] else {
+            return nil
+        }
+        if firstNonEmptyString([root["OPENAI_API_KEY"]]) != nil {
+            return nil
+        }
+        if let authMode = firstNonEmptyString([root["auth_mode"]]),
+           authMode.localizedCaseInsensitiveCompare("apikey") == .orderedSame {
+            return nil
+        }
+        let tokens = root["tokens"] as? [String: Any]
+        return firstNonEmptyString([
+            tokens?["account_id"],
+            root["account_id"]
+        ])
+    }
+
     func writeRegistry(_ registry: [String: Any]) throws {
         let permissions = try? fileManager.attributesOfItem(atPath: registryURL.path)[.posixPermissions]
         let output = try JSONSerialization.data(withJSONObject: registry, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
@@ -51,5 +69,13 @@ struct CodexAccountStorage {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+
+    private static func firstNonEmptyString(_ values: [Any?]) -> String? {
+        values.compactMap { value -> String? in
+            guard let string = value as? String else { return nil }
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }.first
     }
 }

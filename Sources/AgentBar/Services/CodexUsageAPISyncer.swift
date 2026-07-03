@@ -64,7 +64,10 @@ struct CodexUsageAPISyncer {
             return .unavailable("Codex account registry was not found or could not be parsed.")
         }
 
-        let activeAccountKey = registry["active_account_key"] as? String
+        let activeAuthAccountID = (try? Data(contentsOf: storage.activeAuthURL))
+            .flatMap(CodexAccountStorage.chatGPTAccountID)
+        let activeAccountKey = Self.activeAccountKey(in: accounts, matchingAuthAccountID: activeAuthAccountID)
+            ?? registry["active_account_key"] as? String
         guard let activeAccountIndex = accounts.firstIndex(where: { account in
             (account["account_key"] as? String) == activeAccountKey
         }) else {
@@ -86,7 +89,13 @@ struct CodexUsageAPISyncer {
                 continue
             }
             let accountSnapshotURL = storage.accountAuthURL(for: accountKey)
-            let authURL = preferredAuthURL(for: accountKey, activeAccountKey: activeAccountKey, accountSnapshotURL: accountSnapshotURL, storage: storage)
+            let authURL = preferredAuthURL(
+                for: accountKey,
+                activeAccountKey: activeAccountKey,
+                accountSnapshotURL: accountSnapshotURL,
+                storage: storage,
+                activeAuthMatchesAccount: Self.account(accounts[index], matchesAuthAccountID: activeAuthAccountID)
+            )
             guard let authData = try? Data(contentsOf: authURL),
                   let authInfo = Self.parseAuthInfo(data: authData)
             else {
@@ -168,9 +177,16 @@ struct CodexUsageAPISyncer {
         return lastFailure ?? .success
     }
 
-    private func preferredAuthURL(for accountKey: String, activeAccountKey: String?, accountSnapshotURL: URL, storage: CodexAccountStorage) -> URL {
-        guard accountKey == activeAccountKey else { return accountSnapshotURL }
+    private func preferredAuthURL(
+        for accountKey: String,
+        activeAccountKey: String?,
+        accountSnapshotURL: URL,
+        storage: CodexAccountStorage,
+        activeAuthMatchesAccount: Bool
+    ) -> URL {
         let activeAuthURL = storage.activeAuthURL
+        if activeAuthMatchesAccount { return activeAuthURL }
+        guard accountKey == activeAccountKey else { return accountSnapshotURL }
         guard let activeModifiedAt = modificationDate(activeAuthURL) else { return accountSnapshotURL }
         let snapshotModifiedAt = modificationDate(accountSnapshotURL) ?? .distantPast
         return activeModifiedAt > snapshotModifiedAt ? activeAuthURL : accountSnapshotURL
@@ -372,6 +388,33 @@ struct CodexUsageAPISyncer {
             let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         }.first
+    }
+
+    private static func activeAccountKey(in accounts: [[String: Any]], matchingAuthAccountID accountID: String?) -> String? {
+        accounts.first { account($0, matchesAuthAccountID: accountID) }
+            .flatMap { firstNonEmptyString([$0["account_key"]]) }
+    }
+
+    private static func account(_ account: [String: Any], matchesAuthAccountID accountID: String?) -> Bool {
+        guard let accountID = accountID?.trimmingCharacters(in: .whitespacesAndNewlines), !accountID.isEmpty else {
+            return false
+        }
+        let accountKey = firstNonEmptyString([account["account_key"]])
+        return [
+            accountKey,
+            firstNonEmptyString([account["chatgpt_account_id"]]),
+            firstNonEmptyString([account["workspace_id"]]),
+            firstNonEmptyString([account["account_id"]]),
+            accountKey.flatMap(codexWorkspaceID)
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .contains(accountID)
+    }
+
+    private static func codexWorkspaceID(from accountKey: String) -> String? {
+        guard let delimiter = accountKey.range(of: "::") else { return nil }
+        let value = accountKey[delimiter.upperBound...]
+        return value.isEmpty ? nil : String(value)
     }
 
     private static func firstNumber(_ values: [Any?]) -> NSNumber? {

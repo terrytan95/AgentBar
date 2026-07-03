@@ -20,15 +20,22 @@ struct CodexUsageReader {
         var notes = [
             "AgentBar reads the local Codex registry and usage JSONL; auth snapshots are read only for usage API refresh."
         ]
+        let activeAuthAccountID = (try? Data(contentsOf: storage.activeAuthURL))
+            .flatMap(CodexAccountStorage.chatGPTAccountID)
 
         if let data = try? Data(contentsOf: registryURL),
            let registryDetails = try? Self.parseRegistryDetails(
             data: data,
             now: now,
-            authSnapshotModifiedAt: { accountKey in
+            activeAuthAccountID: activeAuthAccountID,
+            authSnapshotInfo: { accountKey in
                 let authURL = storage.accountAuthURL(for: accountKey)
                 guard let attributes = try? fileManager.attributesOfItem(atPath: authURL.path) else { return nil }
-                return attributes[.modificationDate] as? Date
+                let accountID = (try? Data(contentsOf: authURL)).flatMap(CodexAccountStorage.chatGPTAccountID)
+                return CodexAuthSnapshotInfo(
+                    modifiedAt: attributes[.modificationDate] as? Date,
+                    accountID: accountID
+                )
             }
            ) {
             accounts = registryDetails.snapshot.accounts
@@ -98,9 +105,11 @@ struct CodexUsageReader {
     private static func parseRegistryDetails(
         data: Data,
         now: Date,
-        authSnapshotModifiedAt: ((String) -> Date?)? = nil
+        activeAuthAccountID: String? = nil,
+        authSnapshotInfo: ((String) -> CodexAuthSnapshotInfo?)? = nil
     ) throws -> (snapshot: UsageSnapshot, activeAccountActivatedAt: Date?) {
         let registry = try JSONDecoder().decode(CodexRegistry.self, from: data)
+        let activeAccountKey = registry.accounts.accountKey(matchingAuthAccountID: activeAuthAccountID) ?? registry.activeAccountKey
         let accounts = registry.accounts.map { raw in
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
             let displayName = username ?? "Codex Account"
@@ -115,7 +124,7 @@ struct CodexUsageReader {
             }
             let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
             let loginWarning: UsageAccountLoginWarning? =
-                raw.hasForcedLogoutWarning(authModifiedAt: authSnapshotModifiedAt?(raw.accountKey)) ? .forcedLogout :
+                raw.hasForcedLogoutWarning(authSnapshotInfo: authSnapshotInfo?(raw.accountKey)) ? .forcedLogout :
                 raw.lastUsage?.hasUnreadableResetWarning == true ? .unreadableReset :
                 nil
 
@@ -134,7 +143,7 @@ struct CodexUsageReader {
                 tokens: .zero,
                 estimatedCostUSD: nil,
                 lastUpdated: epochDate(raw.lastUsageAt),
-                isActive: raw.accountKey == registry.activeAccountKey,
+                isActive: raw.accountKey == activeAccountKey,
                 loginWarning: loginWarning,
                 workspaceName: workspaceName,
                 workspaceID: workspaceID,
@@ -151,7 +160,8 @@ struct CodexUsageReader {
             refreshedAt: now,
             pricingFingerprint: Pricing.fingerprint
         )
-        return (snapshot, epochMillisecondsDate(registry.activeAccountActivatedAtMs))
+        let activatedAt = activeAccountKey == registry.activeAccountKey ? epochMillisecondsDate(registry.activeAccountActivatedAtMs) : nil
+        return (snapshot, activatedAt)
     }
 
     static func parseSessionJsonl(
@@ -391,11 +401,13 @@ private struct CodexRegistryAccount: Decodable {
         authError = try container.decodeIfPresent(CodexAuthError.self, forKey: .authError)
     }
 
-    func hasForcedLogoutWarning(authModifiedAt: Date? = nil) -> Bool {
+    func hasForcedLogoutWarning(authSnapshotInfo: CodexAuthSnapshotInfo? = nil) -> Bool {
         if let authError, authError.statusCode == 401 {
             if let detectedAt = authError.detectedAt,
-               let authModifiedAt,
-               authModifiedAt.timeIntervalSince1970 > detectedAt {
+               let authSnapshotInfo,
+               let authModifiedAt = authSnapshotInfo.modifiedAt,
+               authModifiedAt.timeIntervalSince1970 > detectedAt,
+               matchesAuthAccountID(authSnapshotInfo.accountID) {
                 return false
             }
             return true
@@ -413,6 +425,26 @@ private struct CodexRegistryAccount: Decodable {
         let organizationNamed = organizationNames.map { UsageWorkspace(name: $0, workspaceID: nil) }
         let candidates = workspaces + organizations + invites + chatGPTAccounts
         return ([scalar] + named + identified + organizationNamed + candidates.map(\.usageWorkspace)).dedupedWorkspaces()
+    }
+
+    func matchesAuthAccountID(_ accountID: String?) -> Bool {
+        guard let accountID = accountID?.trimmingCharacters(in: .whitespacesAndNewlines), !accountID.isEmpty else {
+            return false
+        }
+        return [accountKey, chatGPTAccountID, workspaceID, accountKey.codexWorkspaceID]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .contains(accountID)
+    }
+}
+
+private struct CodexAuthSnapshotInfo {
+    var modifiedAt: Date?
+    var accountID: String?
+}
+
+private extension Array where Element == CodexRegistryAccount {
+    func accountKey(matchingAuthAccountID accountID: String?) -> String? {
+        first { $0.matchesAuthAccountID(accountID) }?.accountKey
     }
 }
 

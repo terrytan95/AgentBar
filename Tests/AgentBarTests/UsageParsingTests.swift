@@ -11,6 +11,7 @@ final class UsageParsingTests: XCTestCase {
         checkAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows()
         try checkCodexRegistryFlagsAccountsThatNeedLoginAgain()
         try checkCodexReadClearsStale401AfterNewerAuthSnapshot()
+        try checkCodexReadUsesActiveAuthAccountWhenRegistryActiveIsStale()
         try checkCodexSessionJsonlAggregatesTokenUsageAndRateLimits()
         try checkCodexSessionJsonlUsesTurnContextModelForCostBreakdown()
         try checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents()
@@ -21,6 +22,7 @@ final class UsageParsingTests: XCTestCase {
         try await checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates()
         try await checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess()
         try await checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
+        try await checkCodexUsageAPISyncerRefreshesActiveAuthAccountWhenRegistryActiveIsStale()
         checkCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot()
         checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
@@ -250,12 +252,44 @@ final class UsageParsingTests: XCTestCase {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
         let authURL = accountDir.appending(path: "\(authFileKey).auth.json")
-        try "{}".data(using: .utf8)!.write(to: authURL)
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"new-token","account_id":"org"}}
+        """.data(using: .utf8)!.write(to: authURL)
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: authURL.path)
 
         let snapshot = CodexUsageReader(homeDirectory: temp).read()
 
         XCTAssertNil(snapshot.accounts.first?.loginWarning)
+    }
+
+    private func checkCodexReadUsesActiveAuthAccountWhenRegistryActiveIsStale() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "acct-a",
+          "accounts": [
+            {"account_key":"acct-a","email":"locked@example.com","chatgpt_account_id":"chatgpt-a","agentbar_auth_error":{"status_code":401,"detected_at":1000}},
+            {"account_key":"acct-b","email":"current@example.com","chatgpt_account_id":"chatgpt-b"}
+          ]
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"current-token","account_id":"chatgpt-b"}}
+        """.data(using: .utf8)!.write(to: temp.appending(path: ".codex/auth.json"))
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"wrong-token","account_id":"chatgpt-b"}}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-a.auth.json"))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: accountDir.appending(path: "acct-a.auth.json").path)
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+
+        XCTAssertFalse(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-a" }).isActive)
+        XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-a" }?.loginWarning, .forcedLogout)
+        XCTAssertTrue(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-b" }).isActive)
     }
 
     private func checkCodexSessionJsonlAggregatesTokenUsageAndRateLimits() throws {
@@ -600,6 +634,46 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(result, .success)
         XCTAssertTrue((try String(contentsOf: staleSnapshotURL)).contains("new-token"))
         XCTAssertNil(try registryAccount(from: registryURL)["agentbar_auth_error"])
+    }
+
+    @MainActor
+    private func checkCodexUsageAPISyncerRefreshesActiveAuthAccountWhenRegistryActiveIsStale() async throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registryURL = accountDir.appending(path: "registry.json")
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "acct-a",
+          "accounts": [
+            {"account_key":"acct-a","email":"locked@example.com","chatgpt_account_id":"chatgpt-a","agentbar_auth_error":{"status_code":401,"detected_at":1000}},
+            {"account_key":"acct-b","email":"current@example.com","chatgpt_account_id":"chatgpt-b"}
+          ]
+        }
+        """.data(using: .utf8)!.write(to: registryURL)
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"current-token","account_id":"chatgpt-b"}}
+        """.data(using: .utf8)!.write(to: temp.appending(path: ".codex/auth.json"))
+
+        let syncer = CodexUsageAPISyncer(
+            homeDirectory: temp,
+            usageClient: { request, _ in
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer current-token")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-Id"), "chatgpt-b")
+                return CodexUsageAPIResponse(
+                    statusCode: 200,
+                    data: #"{"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}}}"#.data(using: .utf8)!
+                )
+            }
+        )
+
+        let result = await syncer.refreshUsage()
+        XCTAssertEqual(result, .success)
+        let accounts = try registryAccounts(from: registryURL)
+        XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-a" }?["last_usage"])
+        XCTAssertNotNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["last_usage"])
     }
 
     private func checkCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot() {

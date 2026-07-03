@@ -16,6 +16,10 @@ struct QuotaCapacitySample: Codable, Equatable, Identifiable, Sendable {
 struct QuotaCapacityHistory: Equatable, Sendable {
     var samples: [QuotaCapacitySample]
 
+    init(samples: [QuotaCapacitySample]) {
+        self.samples = Self.sanitized(samples)
+    }
+
     var latestEstimate: QuotaCapacitySample? {
         samples.last { $0.estimatedFiveHourTotalTokens != nil || $0.estimatedWeeklyTotalTokens != nil }
     }
@@ -31,14 +35,16 @@ struct QuotaCapacityHistory: Equatable, Sendable {
             return self
         }
 
-        let previous = samples.last { $0.accountID == account.id }
-        let tokensSincePrevious = points
-            .filter { point in
-                point.service == .codex &&
-                    previous.map { point.date > $0.capturedAt } ?? true &&
-                    point.date <= now
-            }
-            .reduce(0) { $0 + $1.tokens.total }
+        let previous = samples.last?.accountID == account.id ? samples.last : nil
+        let tokensSincePrevious = previous.map { previous in
+            points
+                .filter { point in
+                    point.service == .codex &&
+                        point.date > previous.capturedAt &&
+                        point.date <= now
+                }
+                .reduce(0) { $0 + $1.tokens.total }
+        } ?? 0
 
         let next = QuotaCapacitySample(
             capturedAt: now,
@@ -65,6 +71,19 @@ struct QuotaCapacityHistory: Equatable, Sendable {
         )
 
         return QuotaCapacityHistory(samples: (samples + [next]).suffix(720))
+    }
+
+    private static func sanitized(_ samples: [QuotaCapacitySample]) -> [QuotaCapacitySample] {
+        var previous: QuotaCapacitySample?
+        return samples.map { sample in
+            defer { previous = sample }
+            guard previous?.accountID != sample.accountID else { return sample }
+            var baseline = sample
+            baseline.tokensSincePreviousSample = 0
+            baseline.estimatedFiveHourTotalTokens = nil
+            baseline.estimatedWeeklyTotalTokens = nil
+            return baseline
+        }
     }
 
     private static func estimate(

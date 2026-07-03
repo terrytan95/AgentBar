@@ -13,6 +13,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexReadClearsStale401AfterNewerAuthSnapshot()
         try checkCodexReadUsesActiveAuthAccountWhenRegistryActiveIsStale()
         try checkCodexReadUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs()
+        try checkExpiredQuotaWindowsRestoreLocallyWithoutRefreshingUsage()
         try checkCodexSessionJsonlAggregatesTokenUsageAndRateLimits()
         try checkCodexSessionJsonlUsesTurnContextModelForCostBreakdown()
         try checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents()
@@ -177,6 +178,38 @@ final class UsageParsingTests: XCTestCase {
         ])
     }
 
+    private func checkExpiredQuotaWindowsRestoreLocallyWithoutRefreshingUsage() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let now = Date(timeIntervalSince1970: 1_781_388_300)
+        let registry = """
+        {
+          "schema_version": 3,
+          "active_account_key": "acct-a",
+          "accounts": [
+            {
+              "account_key": "acct-a",
+              "email": "person@example.com",
+              "last_usage": {
+                "primary": {"used_percent": 88, "window_minutes": 300, "resets_at": 1781388000},
+                "secondary": {"used_percent": 62, "window_minutes": 10080, "resets_at": 1781388100}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        try registry.write(to: accountDir.appending(path: "registry.json"))
+
+        let account = try XCTUnwrap(codexReader(homeDirectory: temp, now: now).read().accounts.first)
+
+        XCTAssertEqual(account.fiveHourWindow?.remainingPercent, 100)
+        XCTAssertEqual(account.weeklyWindow?.remainingPercent, 100)
+        XCTAssertNil(account.fiveHourWindow?.resetsAt)
+        XCTAssertNil(account.weeklyWindow?.resetsAt)
+    }
+
     private func checkAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         var core = testAccount(id: "person::core", name: "person@example.com", fiveHourUsed: 18, weeklyUsed: 51, now: now)
@@ -267,7 +300,7 @@ final class UsageParsingTests: XCTestCase {
         """.data(using: .utf8)!.write(to: authURL)
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: authURL.path)
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
 
         XCTAssertNil(snapshot.accounts.first?.loginWarning)
     }
@@ -295,7 +328,7 @@ final class UsageParsingTests: XCTestCase {
         """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-a.auth.json"))
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: accountDir.appending(path: "acct-a.auth.json").path)
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
 
         XCTAssertFalse(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-a" }).isActive)
         XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-a" }?.loginWarning, .forcedLogout)
@@ -323,7 +356,7 @@ final class UsageParsingTests: XCTestCase {
             .write(to: activeAuthURL)
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: activeAuthURL.path)
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
 
         XCTAssertFalse(try XCTUnwrap(snapshot.accounts.first { $0.id == "user-old::workspace-2" }).isActive)
         let current = try XCTUnwrap(snapshot.accounts.first { $0.id == "user-current::workspace-2" })
@@ -940,7 +973,7 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-06-14T06:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":34,"window_minutes":10080,"resets_at":1781910000},"plan_type":"team"}}}
         """.data(using: .utf8)!.write(to: sessionDir.appending(path: "current.jsonl"))
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
         let active = try XCTUnwrap(snapshot.accounts.first { $0.id == "active" })
         let inactive = try XCTUnwrap(snapshot.accounts.first { $0.id == "inactive" })
 
@@ -967,7 +1000,7 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-06-14T06:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":9,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":11,"window_minutes":10080,"resets_at":1781910000},"plan_type":"team"}}}
         """.data(using: .utf8)!.write(to: sessionDir.appending(path: "a-newer.jsonl"))
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
         let active = try XCTUnwrap(snapshot.accounts.first)
 
         XCTAssertEqual(active.fiveHourWindow?.usedPercent, 9)
@@ -995,7 +1028,7 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-06-14T06:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":9,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":11,"window_minutes":10080,"resets_at":1781910000},"plan_type":"team"},"rate_limit_reset_credits":{"available_count":1}}}
         """.data(using: .utf8)!.write(to: sessionDir.appending(path: "current.jsonl"))
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
         let active = try XCTUnwrap(snapshot.accounts.first { $0.id == "active" })
         let inactive = try XCTUnwrap(snapshot.accounts.first { $0.id == "inactive" })
 
@@ -1026,7 +1059,7 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-06-14T06:00:00Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":10,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":20,"window_minutes":10080,"resets_at":1781910000}}}}
         """.data(using: .utf8)!.write(to: sessionFile)
 
-        var snapshot = CodexUsageReader(homeDirectory: temp).read()
+        var snapshot = codexReader(homeDirectory: temp).read()
         XCTAssertEqual(snapshot.accounts.first?.fiveHourWindow?.usedPercent, 10)
         XCTAssertEqual(snapshot.points.reduce(0) { $0 + $1.tokens.total }, 2)
 
@@ -1035,7 +1068,7 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-06-14T07:00:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":3,"cached_input_tokens":0,"output_tokens":4,"reasoning_output_tokens":0,"total_tokens":7}},"rate_limits":{"primary":{"used_percent":35,"window_minutes":300,"resets_at":1781420000},"secondary":{"used_percent":45,"window_minutes":10080,"resets_at":1781920000}}}}
         """.data(using: .utf8)!.write(to: sessionFile)
 
-        snapshot = CodexUsageReader(homeDirectory: temp).read()
+        snapshot = codexReader(homeDirectory: temp).read()
 
         XCTAssertEqual(snapshot.accounts.first?.fiveHourWindow?.usedPercent, 35)
         XCTAssertEqual(snapshot.accounts.first?.weeklyWindow?.usedPercent, 45)
@@ -1061,11 +1094,11 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-06-14T06:00:00Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":10,"window_minutes":300,"resets_at":1781410000},"secondary":{"used_percent":20,"window_minutes":10080,"resets_at":1781910000}}}}
         """.data(using: .utf8)!.write(to: sessionFile)
 
-        var snapshot = CodexUsageReader(homeDirectory: temp).read()
+        var snapshot = codexReader(homeDirectory: temp).read()
         XCTAssertEqual(snapshot.points.count, 1)
 
         try FileManager.default.removeItem(at: sessionFile)
-        snapshot = CodexUsageReader(homeDirectory: temp).read()
+        snapshot = codexReader(homeDirectory: temp).read()
 
         XCTAssertTrue(snapshot.points.isEmpty)
         XCTAssertNil(snapshot.accounts.first?.fiveHourWindow)
@@ -1107,7 +1140,7 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-06-14T06:30:00.000Z","payload":{"info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}},"rate_limits":{"primary":{"used_percent":91,"window_minutes":300,"resets_at":1781400000},"secondary":{"used_percent":81,"window_minutes":10080,"resets_at":1781900000},"plan_type":"team"}}}
         """.data(using: .utf8)!.write(to: sessionDir.appending(path: "previous-account.jsonl"))
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
         let active = try XCTUnwrap(snapshot.accounts.first { $0.id == "new-active" })
 
         XCTAssertEqual(active.fiveHourWindow?.usedPercent, 22)
@@ -1143,7 +1176,7 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"not-a-date","payload":{"rate_limits":{"primary":{"used_percent":97,"window_minutes":300,"resets_at":1781420000},"secondary":{"used_percent":96,"window_minutes":10080,"resets_at":1781920000}}}}
         """.data(using: .utf8)!.write(to: sessionDir.appending(path: "forged.jsonl"))
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
         let active = try XCTUnwrap(snapshot.accounts.first)
 
         XCTAssertEqual(active.fiveHourWindow?.usedPercent, 25)
@@ -1163,7 +1196,7 @@ final class UsageParsingTests: XCTestCase {
         try Data(count: CodexUsageReader.maximumSessionFileBytes + 1)
             .write(to: sessionDir.appending(path: "oversized.jsonl"))
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
 
         XCTAssertEqual(snapshot.points.count, 0)
         XCTAssertEqual(snapshot.accounts.first?.tokens.total, 0)
@@ -1180,7 +1213,7 @@ final class UsageParsingTests: XCTestCase {
             try "{}".data(using: .utf8)!.write(to: sessionDir.appending(path: "\(index).jsonl"))
         }
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
 
         XCTAssertTrue(snapshot.securityNotes.first?.contains("1 beyond the 1000 file scan cap") == true)
         XCTAssertEqual(UsageInsights.dataSourceHealth(snapshots: [.codex: snapshot]).rows.first?.note, snapshot.securityNotes.first)
@@ -1203,7 +1236,7 @@ final class UsageParsingTests: XCTestCase {
         try "{}".data(using: .utf8)!.write(to: sessionFile)
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: sessionFile.path)
 
-        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+        let snapshot = codexReader(homeDirectory: temp).read()
         let health = UsageInsights.dataSourceHealth(snapshots: [.codex: snapshot])
 
         XCTAssertEqual(snapshot.status, .needsAuthorization)
@@ -1839,6 +1872,13 @@ final class UsageParsingTests: XCTestCase {
 
         XCTAssertThrowsError(try CodexAccountSwitcher(homeDirectory: temp).switchActiveAccount(accountID: "acct-b"))
         XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "old active auth")
+    }
+
+    private func codexReader(
+        homeDirectory: URL,
+        now: Date = Date(timeIntervalSince1970: 1_781_385_600)
+    ) -> CodexUsageReader {
+        CodexUsageReader(homeDirectory: homeDirectory, now: { now })
     }
 
     private func testAccount(

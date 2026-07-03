@@ -3,15 +3,17 @@ import Foundation
 struct CodexUsageReader {
     var homeDirectory: URL
     var fileManager: FileManager = .default
+    var now: @Sendable () -> Date = Date.init
     static let maximumSessionFileBytes = 10 * 1024 * 1024
     static let maximumSessionFiles = 1_000
 
-    init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
+    init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser, now: @escaping @Sendable () -> Date = Date.init) {
         self.homeDirectory = homeDirectory
+        self.now = now
     }
 
     func read() -> UsageSnapshot {
-        let now = Date()
+        let now = now()
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
         var accounts: [UsageAccount] = []
@@ -98,7 +100,7 @@ struct CodexUsageReader {
                     account.tokens = metrics.tokenTotals
                 }
                 account.lastUpdated = account.lastUpdated ?? (canUseSessionRateLimitsForActiveAccount ? metrics.latestRateLimitAt : nil)
-                return account
+                return account.restoringExpiredQuotaWindows(now: now)
             }
         }
 

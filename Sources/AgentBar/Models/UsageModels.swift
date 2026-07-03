@@ -57,6 +57,14 @@ struct UsageWindow: Codable, Equatable, Identifiable, Sendable {
         max(0, 100 - usedPercent)
     }
 
+    func restoringExpiredQuota(now: Date) -> UsageWindow {
+        guard let resetsAt, resetsAt <= now else { return self }
+        var window = self
+        window.usedPercent = 0
+        window.resetsAt = nil
+        return window
+    }
+
     func resetLine(language: AppLanguage) -> String {
         guard let resetsAt else { return L.text("reset_time_unknown", language) }
         let timestamp = DisplayFormatters.shortDateTimeString(for: resetsAt, language: language)
@@ -206,6 +214,13 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
 
     var needsLogin: Bool {
         loginWarning != nil
+    }
+
+    func restoringExpiredQuotaWindows(now: Date) -> UsageAccount {
+        var account = self
+        account.fiveHourWindow = fiveHourWindow?.restoringExpiredQuota(now: now)
+        account.weeklyWindow = weeklyWindow?.restoringExpiredQuota(now: now)
+        return account
     }
 
     func loginWarningLine(language: AppLanguage) -> String? {

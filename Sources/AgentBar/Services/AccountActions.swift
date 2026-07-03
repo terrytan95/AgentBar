@@ -7,6 +7,7 @@ enum AccountActionError: LocalizedError {
     case invalidRegistry
     case missingAccount
     case missingAccountSnapshot
+    case mismatchedAccountSnapshot
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +16,7 @@ enum AccountActionError: LocalizedError {
         case .invalidRegistry: "Codex account registry could not be parsed."
         case .missingAccount: "The selected account was not found in the Codex registry."
         case .missingAccountSnapshot: "The selected Codex account auth snapshot was not found."
+        case .mismatchedAccountSnapshot: "The selected Codex account auth snapshot belongs to a different login."
         }
     }
 }
@@ -47,8 +49,19 @@ struct CodexAccountSwitcher {
         else {
             throw AccountActionError.invalidRegistry
         }
-        guard accounts.contains(where: { $0["account_key"] as? String == accountID }) else {
+        guard let selectedAccount = accounts.first(where: { $0["account_key"] as? String == accountID }) else {
             throw AccountActionError.missingAccount
+        }
+        let selectedAuth = try Data(contentsOf: accountSnapshotURL)
+        if let identity = CodexAccountStorage.chatGPTAuthIdentity(from: selectedAuth),
+           !identity.matches(
+            accountKey: selectedAccount["account_key"] as? String,
+            email: selectedAccount["email"] as? String,
+            chatGPTAccountID: selectedAccount["chatgpt_account_id"] as? String,
+            workspaceID: selectedAccount["workspace_id"] as? String,
+            accountID: selectedAccount["account_id"] as? String
+           ) {
+            throw AccountActionError.mismatchedAccountSnapshot
         }
 
         let previous = json["active_account_key"] as? String
@@ -58,7 +71,6 @@ struct CodexAccountSwitcher {
         json["active_account_key"] = accountID
         json["active_account_activated_at_ms"] = Int(Date().timeIntervalSince1970 * 1000)
 
-        let selectedAuth = try Data(contentsOf: accountSnapshotURL)
         let previousAuth = try? Data(contentsOf: activeAuthURL)
         let activeAuthPermissions = try? fileManager.attributesOfItem(atPath: activeAuthURL.path)[.posixPermissions]
         try selectedAuth.write(to: activeAuthURL, options: [.atomic])
@@ -158,7 +170,7 @@ enum AccountLoginLauncher {
             alert.informativeText = """
             Account: \(accountLabel)
 
-            Finish the Codex login. AgentBar will save it for this account and retry on the next refresh.
+            Finish the Codex login. AgentBar will use the account you logged into on the next refresh.
 
             Terminal will run: codex login
 

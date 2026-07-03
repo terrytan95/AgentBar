@@ -12,6 +12,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexRegistryFlagsAccountsThatNeedLoginAgain()
         try checkCodexReadClearsStale401AfterNewerAuthSnapshot()
         try checkCodexReadUsesActiveAuthAccountWhenRegistryActiveIsStale()
+        try checkCodexReadUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs()
         try checkCodexSessionJsonlAggregatesTokenUsageAndRateLimits()
         try checkCodexSessionJsonlUsesTurnContextModelForCostBreakdown()
         try checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents()
@@ -23,7 +24,8 @@ final class UsageParsingTests: XCTestCase {
         try await checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess()
         try await checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
         try await checkCodexUsageAPISyncerRefreshesActiveAuthAccountWhenRegistryActiveIsStale()
-        checkCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot()
+        try await checkCodexUsageAPISyncerUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs()
+        checkCodexRecoveryLoginCommandDoesNotBlindlyCopyActiveAuth()
         checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
         await checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
@@ -66,6 +68,7 @@ final class UsageParsingTests: XCTestCase {
         checkDailyUsageBarTooltipIncludesDateAndUsageDetails()
         checkAccountMetadataShowsResetActivityAndAccountType()
         try checkCodexAccountSwitcherCopiesSnapshotToActiveAuthAndTracksPrevious()
+        try checkCodexAccountSwitcherRejectsMismatchedSnapshot()
         try checkCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails()
     }
     private func checkCodexRegistryParsesMultipleAccountsWithoutSecrets() throws {
@@ -290,6 +293,35 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-a" }).isActive)
         XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-a" }?.loginWarning, .forcedLogout)
         XCTAssertTrue(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-b" }).isActive)
+    }
+
+    private func checkCodexReadUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "user-old::workspace-2",
+          "accounts": [
+            {"account_key":"user-old::workspace-2","email":"chatgpt1@example.com","chatgpt_account_id":"workspace-2"},
+            {"account_key":"user-current::workspace-2","email":"person@example.com","account_name":"Workspace 2","chatgpt_account_id":"workspace-2","agentbar_auth_error":{"status_code":401,"detected_at":1000}}
+          ]
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        let activeAuthURL = temp.appending(path: ".codex/auth.json")
+        try authJSON(accessToken: "current-token", accountID: "workspace-2", email: "person@example.com")
+            .data(using: .utf8)!
+            .write(to: activeAuthURL)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: activeAuthURL.path)
+
+        let snapshot = CodexUsageReader(homeDirectory: temp).read()
+
+        XCTAssertFalse(try XCTUnwrap(snapshot.accounts.first { $0.id == "user-old::workspace-2" }).isActive)
+        let current = try XCTUnwrap(snapshot.accounts.first { $0.id == "user-current::workspace-2" })
+        XCTAssertTrue(current.isActive)
+        XCTAssertNil(current.loginWarning)
     }
 
     private func checkCodexSessionJsonlAggregatesTokenUsageAndRateLimits() throws {
@@ -676,11 +708,52 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNotNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["last_usage"])
     }
 
-    private func checkCodexRecoveryLoginCommandSavesActiveAuthToSelectedSnapshot() {
+    @MainActor
+    private func checkCodexUsageAPISyncerUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs() async throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registryURL = accountDir.appending(path: "registry.json")
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "user-old::workspace-2",
+          "accounts": [
+            {"account_key":"user-old::workspace-2","email":"chatgpt1@example.com","chatgpt_account_id":"workspace-2"},
+            {"account_key":"user-current::workspace-2","email":"person@example.com","account_name":"Workspace 2","chatgpt_account_id":"workspace-2","agentbar_auth_error":{"status_code":401,"detected_at":1000}}
+          ]
+        }
+        """.data(using: .utf8)!.write(to: registryURL)
+        try authJSON(accessToken: "current-token", accountID: "workspace-2", email: "person@example.com")
+            .data(using: .utf8)!
+            .write(to: temp.appending(path: ".codex/auth.json"))
+
+        let syncer = CodexUsageAPISyncer(
+            homeDirectory: temp,
+            usageClient: { request, _ in
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer current-token")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-Id"), "workspace-2")
+                return CodexUsageAPIResponse(
+                    statusCode: 200,
+                    data: #"{"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}}}"#.data(using: .utf8)!
+                )
+            }
+        )
+
+        let result = await syncer.refreshUsage()
+        XCTAssertEqual(result, .success)
+        let accounts = try registryAccounts(from: registryURL)
+        XCTAssertNil(accounts.first { $0["account_key"] as? String == "user-old::workspace-2" }?["last_usage"])
+        let current = try XCTUnwrap(accounts.first { $0["account_key"] as? String == "user-current::workspace-2" })
+        XCTAssertNotNil(current["last_usage"])
+        XCTAssertNil(current["agentbar_auth_error"])
+    }
+
+    private func checkCodexRecoveryLoginCommandDoesNotBlindlyCopyActiveAuth() {
         let command = AccountLoginLauncher.codexRecoveryLoginCommand(accountID: "user-a::org")
 
-        XCTAssertTrue(command.hasPrefix("codex login &&"))
-        XCTAssertTrue(command.contains(#"cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/dXNlci1hOjpvcmc.auth.json""#))
+        XCTAssertEqual(command, "codex login")
     }
 
     private func checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths() {
@@ -691,7 +764,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(storage.activeAuthURL.path, "/tmp/agentbar-codex-home/.codex/auth.json")
         XCTAssertEqual(storage.accountAuthURL(for: "user-a::org").path, "/tmp/agentbar-codex-home/.codex/accounts/dXNlci1hOjpvcmc.auth.json")
         XCTAssertEqual(storage.accountAuthURL(for: "plain-account").path, "/tmp/agentbar-codex-home/.codex/accounts/plain-account.auth.json")
-        XCTAssertTrue(storage.recoveryLoginCommand(accountID: "user-a::org").contains(#"cp "$HOME/.codex/auth.json" "$HOME/.codex/accounts/dXNlci1hOjpvcmc.auth.json""#))
+        XCTAssertEqual(storage.recoveryLoginCommand(accountID: "user-a::org"), "codex login")
     }
 
     @MainActor
@@ -1612,6 +1685,27 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "selected account auth")
     }
 
+    private func checkCodexAccountSwitcherRejectsMismatchedSnapshot() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registry = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"a@example.com","chatgpt_account_id":"workspace-a"},{"account_key":"acct-b","email":"b@example.com","chatgpt_account_id":"workspace-b"}]}
+        """.data(using: .utf8)!.write(to: registry)
+        let activeAuth = temp.appending(path: ".codex/auth.json")
+        try "old active auth".data(using: .utf8)!.write(to: activeAuth)
+        try authJSON(accessToken: "wrong-token", accountID: "workspace-a", email: "a@example.com")
+            .data(using: .utf8)!
+            .write(to: accountDir.appending(path: "acct-b.auth.json"))
+
+        XCTAssertThrowsError(try CodexAccountSwitcher(homeDirectory: temp).switchActiveAccount(accountID: "acct-b")) { error in
+            XCTAssertEqual(error as? AccountActionError, .mismatchedAccountSnapshot)
+        }
+        XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "old active auth")
+    }
+
     private func checkCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -1668,6 +1762,22 @@ final class UsageParsingTests: XCTestCase {
         let data = try Data(contentsOf: url)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         return try XCTUnwrap(json["accounts"] as? [[String: Any]])
+    }
+
+    private func authJSON(accessToken: String, accountID: String, email: String) -> String {
+        #"{"auth_mode":"chatgpt","tokens":{"access_token":"\#(accessToken)","account_id":"\#(accountID)","id_token":"\#(idToken(email: email))"}}"#
+    }
+
+    private func idToken(email: String) -> String {
+        "\(base64URL(#"{"alg":"none"}"#)).\(base64URL(#"{"email":"\#(email)"}"#))."
+    }
+
+    private func base64URL(_ value: String) -> String {
+        Data(value.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     private final class RefreshOrderRecorder: @unchecked Sendable {

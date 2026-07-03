@@ -34,6 +34,12 @@ struct ResizablePopoverRootView: View {
         .onAppear {
             refreshPopoverLayout()
         }
+        .onChange(of: store.accounts.count) { _, _ in
+            applyAutomaticHeight()
+        }
+        .onChange(of: store.uiDataSourceSnapshots.count) { _, _ in
+            applyAutomaticHeight()
+        }
         .onChange(of: settings.popoverHeight) { _, newHeight in
             onHeightChange(CGFloat(newHeight))
         }
@@ -48,6 +54,16 @@ struct ResizablePopoverRootView: View {
         DispatchQueue.main.async {
             onHeightChange(height)
         }
+    }
+
+    private func applyAutomaticHeight() {
+        let height = PopoverLayout.height(
+            accountCount: store.accounts.count,
+            sourceCount: store.uiDataSourceSnapshots.count,
+            maximumHeight: maximumHeight
+        )
+        settings.popoverHeight = Double(height)
+        onHeightChange(height)
     }
 
     private var resizeBorder: some View {

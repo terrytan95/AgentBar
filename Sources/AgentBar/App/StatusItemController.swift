@@ -67,9 +67,9 @@ final class StatusItemController: NSObject {
         let height = PopoverLayout.height(
             accountCount: store.accounts.count,
             sourceCount: store.uiDataSourceSnapshots.count,
-            preferredHeight: CGFloat(settings.popoverHeight),
             maximumHeight: maximumHeight
         )
+        settings.popoverHeight = Double(height)
 
         let popover = NSPopover()
         let content = ResizablePopoverRootView(

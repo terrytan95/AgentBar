@@ -10,10 +10,6 @@ enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-enum AppThemeColor {
-    case blue
-}
-
 enum AccountSortMode: String, CaseIterable, Identifiable {
     case quotaPressure
     case activeFirst
@@ -63,8 +59,6 @@ final class SettingsStore: ObservableObject {
     @Published var showClaudeInMenuBar: Bool {
         didSet { defaults.set(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
     }
-
-    let themeColor: AppThemeColor = .blue
 
     @Published var useDarkAppearance: Bool {
         didSet { defaults.set(useDarkAppearance, forKey: Keys.useDarkAppearance) }

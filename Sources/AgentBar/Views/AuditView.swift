@@ -7,7 +7,6 @@ struct AuditView: View {
     var points: [UsagePoint]
     var selectedSessionLabel: String?
     var dataSourceHealth: DataSourceHealthSummary
-    var theme: AppThemeColor
     var onClearSessionSelection: () -> Void = {}
 
     @State private var selectedTab: AuditUsageTab = .threads
@@ -116,7 +115,7 @@ struct AuditView: View {
     private func statusPill(_ snapshot: AuditUsageSnapshot) -> some View {
         Text("\(snapshot.rangePoints.count) \(localized("calls")) · JSONL")
             .font(.agentBar(size: 12, weight: .bold))
-            .foregroundStyle(theme.primary)
+            .foregroundStyle(AgentBarPalette.primary)
             .padding(.horizontal, 10)
             .frame(height: 30)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -314,7 +313,7 @@ struct AuditView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, nested ? 8 : 11)
-            .background(selectedCallID == point.callID ? theme.primary.opacity(0.10) : Color.clear)
+            .background(selectedCallID == point.callID ? AgentBarPalette.primary.opacity(0.10) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -330,7 +329,7 @@ struct AuditView: View {
                 column(dateText(thread.latest), width: 108, alignment: .leading)
                 HStack(spacing: 8) {
                     Image(systemName: expandedThreadID == thread.id ? "minus.circle.fill" : "plus.circle.fill")
-                        .foregroundStyle(theme.primary)
+                        .foregroundStyle(AgentBarPalette.primary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(thread.title)
                             .font(.agentBar(size: 12, weight: .bold))
@@ -367,8 +366,8 @@ struct AuditView: View {
             .minimumScaleFactor(0.62)
             .padding(.horizontal, pill ? 8 : 0)
             .frame(width: width, alignment: alignment)
-            .foregroundStyle(pill ? theme.primary : .primary.opacity(0.9))
-            .background(pill ? theme.primary.opacity(0.10) : Color.clear, in: Capsule())
+            .foregroundStyle(pill ? AgentBarPalette.primary : .primary.opacity(0.9))
+            .background(pill ? AgentBarPalette.primary.opacity(0.10) : Color.clear, in: Capsule())
     }
 
     private func threadColumn(_ text: String, strong: Bool = false) -> some View {
@@ -458,7 +457,7 @@ struct AuditView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.primary.opacity(0.06))
+        .background(AgentBarPalette.primary.opacity(0.06))
     }
 
     private func detailCard(_ title: String, _ value: String, _ subtitle: String) -> some View {
@@ -490,7 +489,7 @@ struct AuditView: View {
             if let exportStatus {
                 Text(exportStatus)
                     .font(.agentBar(size: 11, weight: .bold))
-                    .foregroundStyle(theme.primary)
+                    .foregroundStyle(AgentBarPalette.primary)
             }
             Button {
                 export(format: .json, snapshot: snapshot)

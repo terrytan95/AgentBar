@@ -86,10 +86,28 @@ struct AuditView: View {
             Button {
                 store.refresh(force: true, showManualFeedback: true)
             } label: {
-                Label(L.text("refresh", store.language), systemImage: "arrow.clockwise")
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.agentBar(size: 14, weight: .bold))
+                    Text(L.text("refresh", store.language))
+                        .font(.agentBar(size: 13, weight: .bold))
+                    if store.isManualRefreshFeedbackVisible {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 14, height: 14)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .foregroundStyle(AgentBarPalette.primary)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 40, maxHeight: 40)
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(L.text("refresh", store.language)))
             }
-            .buttonStyle(.bordered)
-            .pointingHandCursor()
+            .tactilePlainButton()
+            .agentBarPanel(cornerRadius: 12)
+            .help(L.text("refresh", store.language))
             statusPill(snapshot)
         }
     }

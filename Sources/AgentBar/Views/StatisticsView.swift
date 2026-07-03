@@ -431,27 +431,27 @@ struct StatisticsView: View {
         Button {
             store.refresh(force: true, showManualFeedback: true)
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.agentBar(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 14, weight: .bold))
                 Text(L.text("refresh", store.language))
-                    .font(.agentBar(size: 12, weight: .semibold))
+                    .font(.agentBar(size: 13, weight: .bold))
                 if store.isManualRefreshFeedbackVisible {
                     ProgressView()
                         .controlSize(.small)
-                        .frame(width: 12, height: 12)
+                        .frame(width: 14, height: 14)
                         .accessibilityHidden(true)
                 }
             }
             .foregroundStyle(AgentBarPalette.primary)
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 40, maxHeight: 40)
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(L.text("refresh", store.language)))
         }
         .tactilePlainButton()
-        .agentBarPanel(cornerRadius: 10)
+        .agentBarPanel(cornerRadius: 12)
         .help(L.text("refresh", store.language))
     }
 
@@ -2871,30 +2871,46 @@ private struct AccountHealthCenterPanel: View {
         switch row.kind {
         case .login:
             if let accountID = row.accountID {
-                HStack(spacing: 6) {
-                    Button(localized("login")) {
+                HStack(spacing: 8) {
+                    Button {
                         onLogin(accountID)
+                    } label: {
+                        Label(localized("login"), systemImage: "person.crop.circle.badge.exclamationmark")
+                            .font(.agentBar(size: 13, weight: .bold))
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 40, maxHeight: 40)
+                            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .controlSize(.small)
-                    .pointingHandCursor()
+                    .foregroundStyle(.red)
+                    .tactilePlainButton()
+                    .agentBarPanel(cornerRadius: 12)
                     Button(role: .destructive) {
                         onRemove(accountID)
                     } label: {
                         Image(systemName: "trash")
+                            .font(.agentBar(size: 13, weight: .bold))
+                            .frame(width: 40, height: 40)
+                            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
                     .foregroundStyle(.red)
+                    .tactilePlainButton()
+                    .agentBarPanel(cornerRadius: 12)
                     .help(localized("remove"))
-                    .pointingHandCursor()
                 }
             }
         case .dataSource:
-            Button(localized("refresh")) {
+            Button {
                 onRefresh()
+            } label: {
+                Label(localized("refresh"), systemImage: "arrow.clockwise")
+                    .font(.agentBar(size: 13, weight: .bold))
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 40, maxHeight: 40)
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            .controlSize(.small)
-            .pointingHandCursor()
+            .foregroundStyle(AgentBarPalette.primary)
+            .tactilePlainButton()
+            .agentBarPanel(cornerRadius: 12)
         }
     }
 

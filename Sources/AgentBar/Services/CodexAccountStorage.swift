@@ -64,7 +64,12 @@ struct CodexAccountStorage {
     }
 
     func recoveryLoginCommand(accountID: String) -> String {
-        "codex login"
+        [
+            "codex login",
+            "mkdir -p \(Self.shellQuoted(accountsDirectory.path))",
+            "cp \(Self.shellQuoted(activeAuthURL.path)) \(Self.shellQuoted(accountAuthURL(for: accountID).path))",
+            "/usr/bin/notifyutil -p \(Self.recoveryLoginFinishedNotificationName)"
+        ].joined(separator: " && ")
     }
 
     static func chatGPTAccountID(from authData: Data) -> String? {
@@ -123,6 +128,12 @@ struct CodexAccountStorage {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+
+    static let recoveryLoginFinishedNotificationName = "com.agentbar.codexRecoveryLoginFinished"
+
+    private static func shellQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     private static func firstNonEmptyString(_ values: [Any?]) -> String? {

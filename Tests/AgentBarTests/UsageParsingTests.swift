@@ -25,7 +25,7 @@ final class UsageParsingTests: XCTestCase {
         try await checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
         try await checkCodexUsageAPISyncerRefreshesActiveAuthAccountWhenRegistryActiveIsStale()
         try await checkCodexUsageAPISyncerUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs()
-        checkCodexRecoveryLoginCommandDoesNotBlindlyCopyActiveAuth()
+        checkCodexRecoveryLoginCommandSnapshotsAuthAfterLogin()
         checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
         await checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
@@ -750,10 +750,13 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertNil(current["agentbar_auth_error"])
     }
 
-    private func checkCodexRecoveryLoginCommandDoesNotBlindlyCopyActiveAuth() {
-        let command = AccountLoginLauncher.codexRecoveryLoginCommand(accountID: "user-a::org")
+    private func checkCodexRecoveryLoginCommandSnapshotsAuthAfterLogin() {
+        let storage = CodexAccountStorage(homeDirectory: URL(fileURLWithPath: "/tmp/agentbar-codex-home"))
 
-        XCTAssertEqual(command, "codex login")
+        XCTAssertEqual(
+            storage.recoveryLoginCommand(accountID: "user-a::org"),
+            "codex login && mkdir -p '/tmp/agentbar-codex-home/.codex/accounts' && cp '/tmp/agentbar-codex-home/.codex/auth.json' '/tmp/agentbar-codex-home/.codex/accounts/dXNlci1hOjpvcmc.auth.json' && /usr/bin/notifyutil -p com.agentbar.codexRecoveryLoginFinished"
+        )
     }
 
     private func checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths() {
@@ -764,7 +767,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(storage.activeAuthURL.path, "/tmp/agentbar-codex-home/.codex/auth.json")
         XCTAssertEqual(storage.accountAuthURL(for: "user-a::org").path, "/tmp/agentbar-codex-home/.codex/accounts/dXNlci1hOjpvcmc.auth.json")
         XCTAssertEqual(storage.accountAuthURL(for: "plain-account").path, "/tmp/agentbar-codex-home/.codex/accounts/plain-account.auth.json")
-        XCTAssertEqual(storage.recoveryLoginCommand(accountID: "user-a::org"), "codex login")
+        XCTAssertTrue(storage.recoveryLoginCommand(accountID: "user-a::org").contains("dXNlci1hOjpvcmc.auth.json"))
     }
 
     @MainActor

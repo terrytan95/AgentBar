@@ -14,6 +14,14 @@ AgentBar is a native macOS menu bar app for monitoring local AI coding agent usa
       <img src="screenshots/agentbar-overview-dashboard.png" alt="AgentBar overview dashboard showing Codex usage, quota pressure, and spending charts">
     </td>
     <td width="50%">
+      <img src="screenshots/agentbar-resets.png" alt="AgentBar resets page showing quota windows, expiry dates, and account rotation state">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="screenshots/agentbar-audit.png" alt="AgentBar audit page showing local usage threads, token counts, and estimated cost">
+    </td>
+    <td width="50%">
       <img src="screenshots/agentbar-settings.png" alt="AgentBar settings page showing accounts, menu bar options, budgets, and refresh settings">
     </td>
   </tr>

@@ -83,6 +83,7 @@ struct AuditView: View {
             }
             Spacer()
             auditRangePicker
+            statusPill(snapshot)
             Button {
                 store.refresh(force: true, showManualFeedback: true)
             } label: {
@@ -108,7 +109,6 @@ struct AuditView: View {
             .tactilePlainButton()
             .agentBarPanel(cornerRadius: 12)
             .help(L.text("refresh", store.language))
-            statusPill(snapshot)
         }
     }
 

@@ -778,9 +778,6 @@ struct StatisticsView: View {
                 SettingsRow(title: L.text("quota_reset_notifications", store.language), subtitle: L.text("quota_reset_notifications_subtitle", store.language)) {
                     Toggle("", isOn: $settings.quotaResetNotificationsEnabled).labelsHidden()
                 }
-                SettingsRow(title: L.text("login_item", store.language), subtitle: settings.loginItemMessage ?? L.text("open_at_login_subtitle", store.language)) {
-                    Toggle("", isOn: $settings.launchAtLogin).labelsHidden()
-                }
             }
 
             SettingsGroup(title: L.text("general", store.language), subtitle: L.text("general_settings_subtitle", store.language)) {
@@ -796,6 +793,9 @@ struct StatisticsView: View {
                 SettingsRow(title: L.text("dark_theme", store.language), subtitle: L.text("dark_theme_subtitle", store.language)) {
                     Toggle("", isOn: $settings.useDarkAppearance)
                         .labelsHidden()
+                }
+                SettingsRow(title: L.text("login_item", store.language), subtitle: settings.loginItemMessage ?? L.text("open_at_login_subtitle", store.language)) {
+                    Toggle("", isOn: $settings.launchAtLogin).labelsHidden()
                 }
             }
 

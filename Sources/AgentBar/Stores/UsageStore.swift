@@ -94,7 +94,7 @@ final class UsageStore: ObservableObject {
             CodexUsageReader().read()
         },
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot = {
-            ClaudeUsageReader().read()
+            ClaudeUsageReader.discover(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
         },
         codexAccountSwitcher: @escaping @Sendable (String) throws -> Void = { accountID in
             try CodexAccountSwitcher().switchActiveAccount(accountID: accountID)
@@ -220,15 +220,10 @@ final class UsageStore: ObservableObject {
     }
 
     var usageDataDisplayPoints: [UsagePoint] {
-        usageDataDisplayPoints(points)
-    }
-
-    func usageDataDisplayPoints(_ points: [UsagePoint]) -> [UsagePoint] {
-        UsageRangeProjection.displayPoints(
-            points,
-            showAggregatedAccountData: settings.showAggregatedAccountData,
-            activeService: activeAccount?.service
-        )
+        guard !settings.showAggregatedAccountData, let activeService = activeAccount?.service else {
+            return points
+        }
+        return points.filter { $0.service == activeService }
     }
 
     var summary: UsageSummary {

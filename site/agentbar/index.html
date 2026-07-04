@@ -3,13 +3,124 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>AgentBar - native macOS Codex usage monitor</title>
+    <title>AgentBar - macOS Codex usage and quota monitor</title>
     <meta
       name="description"
-      content="AgentBar is a native macOS menu bar app for monitoring local Codex usage, quota pressure, resets, and audit signals."
+      content="AgentBar is a native macOS menu bar app for monitoring Codex usage, quota pressure, reset windows, local session audits, tokens, and cost signals."
     >
+    <meta name="author" content="Terry Tan">
+    <meta name="application-name" content="AgentBar">
+    <meta name="keywords" content="AgentBar, Codex usage monitor, macOS menu bar app, Codex quota, Codex token usage, AI coding agent usage, local usage audit">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="googlebot" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://terrytan.dev/agentbar/">
+    <link rel="alternate" type="text/plain" href="https://terrytan.dev/agentbar/llms.txt">
+    <link rel="sitemap" type="application/xml" href="https://terrytan.dev/agentbar/sitemap.xml">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="AgentBar">
+    <meta property="og:title" content="AgentBar - macOS Codex usage and quota monitor">
+    <meta property="og:description" content="Monitor Codex usage, quota pressure, reset windows, local session audits, tokens, and cost signals from the macOS menu bar.">
+    <meta property="og:url" content="https://terrytan.dev/agentbar/">
+    <meta property="og:image" content="https://terrytan.dev/agentbar/assets/agentbar-logo.png">
+    <meta property="og:image:alt" content="AgentBar app logo">
+    <meta property="og:locale" content="en_US">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="AgentBar - macOS Codex usage and quota monitor">
+    <meta name="twitter:description" content="Native macOS menu bar monitoring for Codex usage, quota pressure, reset windows, and local usage audits.">
+    <meta name="twitter:image" content="https://terrytan.dev/agentbar/assets/agentbar-logo.png">
+    <meta name="theme-color" content="#146dff">
     <link rel="icon" href="./assets/agentbar-logo.png">
+    <link rel="apple-touch-icon" href="./assets/agentbar-logo.png">
+    <link rel="preload" as="image" href="./assets/agentbar-logo.png">
+    <link rel="preload" as="image" href="./assets/agentbar-menu-icon.png">
     <link rel="stylesheet" href="./styles.css">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://terrytan.dev/agentbar/#app",
+            "name": "AgentBar",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "macOS 14+",
+            "description": "AgentBar is a native macOS menu bar app for monitoring Codex usage, quota pressure, reset windows, local session audits, tokens, and cost signals.",
+            "image": "https://terrytan.dev/agentbar/assets/agentbar-logo.png",
+            "url": "https://terrytan.dev/agentbar/",
+            "downloadUrl": "https://github.com/terrytan95/AgentBar/releases/latest",
+            "installUrl": "https://github.com/terrytan95/homebrew-tap",
+            "codeRepository": "https://github.com/terrytan95/AgentBar",
+            "softwareVersion": "2.1.9",
+            "author": {
+              "@type": "Person",
+              "name": "Terry Tan",
+              "url": "https://terrytan.dev/"
+            },
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "featureList": [
+              "Codex usage monitoring",
+              "5-hour and weekly quota pressure",
+              "Reset window tracking",
+              "Local JSONL session audit",
+              "Token and cost signal dashboard",
+              "Homebrew cask install"
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://terrytan.dev/agentbar/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is AgentBar?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "AgentBar is a native macOS menu bar app that monitors local Codex usage, quota pressure, reset windows, token totals, and audit signals."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does AgentBar read secrets?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "AgentBar reads local Codex usage records in read-only mode and does not open credential auth files."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How do you install AgentBar?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Install AgentBar with Homebrew using brew install --cask terrytan95/tap/agentbar, or download the latest macOS release from GitHub."
+                }
+              }
+            ]
+          },
+          {
+            "@type": "BreadcrumbList",
+            "@id": "https://terrytan.dev/agentbar/#breadcrumbs",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": "https://terrytan.dev/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "AgentBar",
+                "item": "https://terrytan.dev/agentbar/"
+              }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <header class="site-header" data-elevated="false">
@@ -21,6 +132,7 @@
         <a href="#overview">Overview</a>
         <a href="#popover">Menu bar</a>
         <a href="#audit">Audit</a>
+        <a href="#faq">FAQ</a>
         <a href="#install">Install</a>
       </nav>
       <a class="header-cta" href="https://github.com/terrytan95/AgentBar/releases/latest">Download</a>
@@ -272,6 +384,27 @@
         </div>
       </section>
 
+      <section class="faq section-shell" id="faq" aria-labelledby="faq-title">
+        <div class="section-caption">
+          <h2 id="faq-title">AgentBar answers.</h2>
+          <p>Short facts for search engines, AI answers, and people comparing Codex usage tools.</p>
+        </div>
+        <div class="faq-grid">
+          <article>
+            <h3>What is AgentBar?</h3>
+            <p>AgentBar is a native macOS menu bar app for monitoring local Codex usage, quota pressure, reset windows, tokens, and cost signals.</p>
+          </article>
+          <article>
+            <h3>Does AgentBar read secrets?</h3>
+            <p>No. AgentBar reads local Codex usage records in read-only mode and does not open credential auth files.</p>
+          </article>
+          <article>
+            <h3>How do you install AgentBar?</h3>
+            <p>Install with Homebrew using <code>brew install --cask terrytan95/tap/agentbar</code>, or download the latest macOS release from GitHub.</p>
+          </article>
+        </div>
+      </section>
+
       <section class="install section-shell" id="install">
         <h2>Install AgentBar.</h2>
         <p>Native macOS monitoring for local Codex usage signals.</p>
@@ -304,6 +437,8 @@
       <a href="https://github.com/terrytan95/AgentBar/releases/latest">Latest release</a>
       <a href="https://github.com/terrytan95/homebrew-tap">Homebrew tap</a>
       <a href="https://github.com/terrytan95/AgentBar">GitHub</a>
+      <a href="./llms.txt">LLMs</a>
+      <a href="./sitemap.xml">Sitemap</a>
       <span>macOS 14+</span>
     </footer>
 

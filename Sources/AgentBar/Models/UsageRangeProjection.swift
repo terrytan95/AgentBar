@@ -67,14 +67,4 @@ struct UsageRangeProjection {
         return points.filter { interval.contains($0.date) }
     }
 
-    static func displayPoints(
-        _ points: [UsagePoint],
-        showAggregatedAccountData: Bool,
-        activeService: UsageService?
-    ) -> [UsagePoint] {
-        guard !showAggregatedAccountData, let activeService else {
-            return points
-        }
-        return points.filter { $0.service == activeService }
-    }
 }

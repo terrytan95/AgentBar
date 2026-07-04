@@ -6,10 +6,6 @@ enum UsageExportFormat: String, Sendable {
 }
 
 enum UsageAuditReporter {
-    static func tokenComposition(points: [UsagePoint]) -> TokenTotals {
-        points.reduce(TokenTotals.zero) { $0 + $1.tokens }
-    }
-
     static func exportRows(
         points: [UsagePoint],
         range: UsageRange,

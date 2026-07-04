@@ -5,7 +5,7 @@ enum SmokeReporter {
     static func writeReport(to url: URL) {
         let settings = SettingsStore()
         let codex = CodexUsageReader().read()
-        let claude = ClaudeUsageReader().read()
+        let claude = ClaudeUsageReader.discover(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
         let accounts = codex.accounts + claude.accounts
         let points = codex.points + claude.points
         let summary = UsageStatistics.summarize(points: points, range: .all)

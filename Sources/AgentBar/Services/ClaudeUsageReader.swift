@@ -1,16 +1,6 @@
 import Foundation
 
-struct ClaudeUsageReader {
-    var homeDirectory: URL
-
-    init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
-        self.homeDirectory = homeDirectory
-    }
-
-    func read() -> UsageSnapshot {
-        Self.discover(homeDirectory: homeDirectory)
-    }
-
+enum ClaudeUsageReader {
     static func discover(homeDirectory: URL) -> UsageSnapshot {
         let claudeCliDir = homeDirectory.appending(path: ".claude")
         let desktopDir = homeDirectory.appending(path: "Library/Application Support/Claude")

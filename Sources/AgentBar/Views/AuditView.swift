@@ -682,7 +682,7 @@ struct AuditUsageSnapshot {
             rangePoints: rangePoints,
             sortedCalls: sortedCalls(rangePoints, sortColumn: sortColumn, sortAscending: sortAscending),
             threadRows: threadRows,
-            composition: UsageAuditReporter.tokenComposition(points: rangePoints),
+            composition: rangePoints.reduce(TokenTotals.zero) { $0 + $1.tokens },
             totalCost: totalCost(rangePoints),
             callIDs: rangePoints.map(\.callID)
         )

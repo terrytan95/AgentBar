@@ -175,6 +175,9 @@ footer {
 
 .command-chip,
 .terminal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-top: 20px;
   width: min(100%, 520px);
   border: 1px solid #c9d9e7;
@@ -191,8 +194,47 @@ footer {
   padding: 18px 20px;
 }
 
-.command-chip span {
+.prompt {
   color: #7cc1ff;
+}
+
+.command-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #dff1ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(223, 241, 255, .2);
+  border-radius: 11px;
+  color: #dff1ff;
+  background: rgba(255, 255, 255, .06);
+}
+
+.copy-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.command-chip:hover .copy-icon,
+.terminal:hover .copy-icon,
+.command-chip.copied .copy-icon,
+.terminal.copied .copy-icon {
+  color: #7cc1ff;
+  border-color: rgba(124, 193, 255, .44);
 }
 
 .hero-stage {
@@ -932,16 +974,9 @@ td:nth-child(4) {
 }
 
 .terminal {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 20px;
   max-width: 680px;
   padding: 22px 24px;
-}
-
-.terminal b {
-  color: #7cc1ff;
 }
 
 .install-steps {
@@ -1121,8 +1156,6 @@ footer span:first-child {
   }
 
   .terminal {
-    align-items: flex-start;
-    flex-direction: column;
     font-size: 13px;
   }
 }

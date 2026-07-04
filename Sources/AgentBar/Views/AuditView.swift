@@ -143,7 +143,7 @@ struct AuditView: View {
         guard let note = dataSourceHealth.rows.first(where: { $0.service == .codex })?.note,
               note.hasPrefix("Codex session scan skipped")
         else { return nil }
-        return note
+        return L.codexSessionScanWarning(note, language: store.language)
     }
 
     private func scanWarning(_ note: String) -> some View {

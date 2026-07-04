@@ -582,7 +582,7 @@ struct StatisticsView: View {
                 Spacer()
             }
 
-            DashboardStackedBars(bars: displayBars, language: store.language)
+            DashboardStackedBars(bars: displayBars, language: store.language, isHourly: displayBarsAreHourly)
                 .frame(height: 230)
         }
         .padding(16)
@@ -884,9 +884,17 @@ struct StatisticsView: View {
     }
 
     private var displayBars: [DailyUsageBar] {
-        let bars = summary.dailyBars
+        let projection = usageRangeProjection
+        if displayBarsAreHourly {
+            return UsageStatistics.hourlyBars(points: projection.rangePoints, range: projection.range, now: projection.now, calendar: projection.calendar)
+        }
+        let bars = projection.summary.dailyBars
         guard !bars.isEmpty else { return [] }
         return Array(bars.suffix(24))
+    }
+
+    private var displayBarsAreHourly: Bool {
+        store.selectedRange == .today || store.selectedRange == .yesterday
     }
 
     private var yearActivityBars: [DailyUsageBar] {
@@ -1506,6 +1514,7 @@ private struct ModelBreakdownPopoverRow: View {
 private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
+    var isHourly = false
     @State private var hoveredBarID: Date?
     @State private var hoverLocation: CGPoint?
     @State private var hoverPlotSize: CGSize = .zero
@@ -1605,7 +1614,7 @@ private struct DashboardStackedBars: View {
 
                     if let hoveredBar, let hoverLocation {
                         let tooltipPosition = chartTooltipPosition(cursor: hoverLocation, calloutSize: calloutSize, plotSize: hoverPlotSize)
-                        ChartHoverCallout(bar: hoveredBar, language: language)
+                        ChartHoverCallout(bar: hoveredBar, language: language, isHourly: isHourly)
                             .frame(width: calloutSize.width, height: calloutSize.height)
                             .position(x: tooltipPosition.x + leftAxisWidth, y: tooltipPosition.y + 4)
                             .padding(.top, 4)
@@ -1677,7 +1686,7 @@ private struct DashboardStackedBars: View {
 
     private func axisDate(_ date: Date?) -> String {
         guard let date else { return "" }
-        return DisplayFormatters.localizedDateString(for: date, template: "MMM d", language: language)
+        return DisplayFormatters.localizedDateString(for: date, template: isHourly ? "HH:mm" : "MMM d", language: language)
     }
 
     private func tokenValue(_ bar: DailyUsageBar) -> Double {
@@ -2018,6 +2027,7 @@ private struct YearActivityMonthMarker: Identifiable {
 private struct ChartHoverCallout: View {
     var bar: DailyUsageBar
     var language: AppLanguage
+    var isHourly = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -2072,7 +2082,7 @@ private struct ChartHoverCallout: View {
     }
 
     private var dateText: String {
-        DisplayFormatters.localizedDateString(for: bar.day, template: "yMMMd", language: language)
+        DisplayFormatters.localizedDateString(for: bar.day, template: isHourly ? "yMMMd HH:mm" : "yMMMd", language: language)
     }
 }
 

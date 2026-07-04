@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AgentBar - native macOS Codex usage monitor</title>
+    <meta
+      name="description"
+      content="AgentBar is a native macOS menu bar app for monitoring local Codex usage, quota pressure, resets, and audit signals."
+    >
+    <link rel="icon" href="./assets/agentbar-logo.png">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="site-header" data-elevated="false">
+      <a class="brand" href="#top" aria-label="AgentBar home">
+        <img src="./assets/agentbar-logo.png" alt="" width="34" height="34">
+        <span>AgentBar</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#overview">Overview</a>
+        <a href="#popover">Menu bar</a>
+        <a href="#audit">Audit</a>
+        <a href="#install">Install</a>
+      </nav>
+      <a class="header-cta" href="https://github.com/terrytan95/AgentBar/releases/latest">Download</a>
+    </header>
+
+    <main id="top">
+      <section class="hero section-shell">
+        <div class="hero-copy">
+          <h1>Know your agent limits.</h1>
+          <p>
+            A native macOS menu bar for Codex usage, quota pressure, resets, and
+            audit visibility.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/terrytan95/AgentBar/releases/latest">
+              Download for macOS
+            </a>
+            <a class="button secondary" href="https://github.com/terrytan95/AgentBar">View on GitHub</a>
+          </div>
+          <button class="command-chip" type="button" data-copy="brew install --cask terrytan95/tap/agentbar">
+            <span>$</span> brew install --cask terrytan95/tap/agentbar
+          </button>
+        </div>
+
+        <div class="hero-stage" aria-label="AgentBar product preview">
+          <div class="menu-meter">
+            <img src="./assets/agentbar-menu-icon.png" alt="" width="24" height="24">
+            <strong>5H 19%</strong>
+            <strong>WK 34%</strong>
+          </div>
+          <article class="popover-card">
+            <div class="popover-head">
+              <img src="./assets/agentbar-logo.png" alt="" width="58" height="58">
+              <div>
+                <h2>AgentBar</h2>
+                <p>5H 19% remaining · WK 34% remaining</p>
+                <span>Current account: account@example.dev · Workspace A</span>
+              </div>
+              <button aria-label="Refresh preview">↻</button>
+            </div>
+            <div class="mini-stats">
+              <div>
+                <span class="icon blue"></span>
+                <small>Tokens</small>
+                <strong>359,739,729</strong>
+              </div>
+              <div>
+                <span class="icon cyan"></span>
+                <small>Cost</small>
+                <strong>$353.90</strong>
+              </div>
+              <div>
+                <span class="icon orange"></span>
+                <small>Sources</small>
+                <strong>1/2</strong>
+              </div>
+            </div>
+            <div class="account-list">
+              <div class="account-row active">
+                <div>
+                  <strong>Local Codex Account</strong>
+                  <span>Workspace A · sample-a</span>
+                </div>
+                <b>Current</b>
+                <div class="bar orange" style="--value: 19%"></div>
+                <div class="bar blue" style="--value: 34%"></div>
+              </div>
+              <div class="account-row">
+                <div>
+                  <strong>account@example.dev</strong>
+                  <span>Workspace B · sample-b</span>
+                </div>
+                <button>Use account</button>
+                <div class="bar red" style="--value: 3%"></div>
+                <div class="bar blue" style="--value: 82%"></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="overview section-shell" id="overview">
+        <div class="section-caption">
+          <h2>Overview without guesswork.</h2>
+          <p>Daily, weekly, and yearly usage in one native macOS dashboard.</p>
+          <ul>
+            <li>Tokens and cost</li>
+            <li>Quota pressure</li>
+            <li>Activity heatmap</li>
+          </ul>
+          <a class="text-link" href="https://github.com/terrytan95/AgentBar#features">Explore Overview →</a>
+        </div>
+        <div class="app-window large">
+          <div class="traffic"><i></i><i></i><i></i><span>AgentBar</span></div>
+          <aside>
+            <strong>AgentBar</strong>
+            <a class="selected">Overview</a>
+            <a>Resets</a>
+            <a>Audit</a>
+            <a>Settings</a>
+          </aside>
+          <div class="window-content">
+            <div class="window-title">
+              <div>
+                <h3>Overview</h3>
+                <p>Daily usage · Week</p>
+              </div>
+              <button>Refresh</button>
+            </div>
+            <div class="metric-grid">
+              <div class="metric cool"><span>Total tokens</span><strong>359.7397 mil</strong><em>↑ 146.5%</em></div>
+              <div class="metric green"><span>Total cost</span><strong>$353.90</strong><em>↑ 164.8%</em></div>
+              <div class="metric"><span>OpenAI overview</span><strong>$353.90</strong><em>100% share</em></div>
+            </div>
+            <div class="quota-banner"><strong>Quota pressure</strong><span>active 5H 19%, weekly 34%; Local Codex Account</span><a>View details</a></div>
+            <div class="chart-card">
+              <div class="chart-head"><strong>This week usage</strong><span>Interval: Week</span></div>
+              <svg viewBox="0 0 740 210" role="img" aria-label="Weekly usage line chart">
+                <defs>
+                  <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#1d72ff" stop-opacity=".28"></stop>
+                    <stop offset="100%" stop-color="#1d72ff" stop-opacity=".03"></stop>
+                  </linearGradient>
+                </defs>
+                <path class="grid-line" d="M20 30H720M20 104H720M20 178H720"></path>
+                <path class="area" d="M34 83 L160 114 L285 182 L410 63 L535 128 L648 28 L710 130 L710 180 L34 180Z"></path>
+                <path class="line blue-line" d="M34 83 L160 114 L285 182 L410 63 L535 128 L648 28 L710 130"></path>
+                <path class="line orange-line" d="M34 96 L160 132 L285 182 L410 75 L535 136 L648 28 L710 140"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="popover-feature section-shell" id="popover">
+        <div class="popover-art">
+          <div class="desktop-pill">
+            <img src="./assets/agentbar-menu-icon.png" alt="" width="22" height="22">
+            <span>5H 19% · WK 34%</span>
+          </div>
+          <div class="floating-popover">
+            <div class="float-title">
+              <img src="./assets/agentbar-logo.png" alt="" width="56" height="56">
+              <div><strong>AgentBar</strong><span>Current account: ••••@example.dev</span></div>
+              <button>↻</button>
+            </div>
+            <div class="overview-cards">
+              <div><small>Tokens</small><b>359,739,729</b></div>
+              <div><small>Cost</small><b>$353.90</b></div>
+              <div><small>Data sources</small><b>1/2</b></div>
+            </div>
+            <h3>Accounts</h3>
+            <div class="compact-account">
+              <strong>Local Codex Account</strong>
+              <span>Workspace A · 5H 19% · Weekly 34%</span>
+              <div class="bar orange" style="--value: 19%"></div>
+              <div class="bar blue" style="--value: 34%"></div>
+            </div>
+            <div class="popover-actions"><button>Statistics</button><button>Settings</button><button>Quit</button></div>
+          </div>
+        </div>
+        <div class="section-caption popover-copy">
+          <h2>Your quota lives in the menu bar.</h2>
+          <p>Check 5-hour and weekly capacity without opening a dashboard.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/terrytan95/AgentBar/releases/latest">Download</a>
+            <a class="button secondary" href="#overview">See popover</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="resets section-shell" id="resets">
+        <div class="section-caption">
+          <h2>Know when to keep working.</h2>
+          <p>Banked resets, expiry warnings, and current quota windows stay visible before a big run.</p>
+          <a class="button secondary" href="https://github.com/terrytan95/AgentBar#features">See reset windows</a>
+        </div>
+        <div class="resets-board">
+          <div class="gauge">34%</div>
+          <div class="resets-top">
+            <div><small>Resets</small><strong>14</strong></div>
+            <div><small>Next expiry</small><strong>7/11, 6:15 PM</strong></div>
+            <div><small>5H left</small><strong>19%</strong></div>
+            <div><small>Weekly left</small><strong>34%</strong></div>
+          </div>
+          <div class="cruise"><strong>Cruise mode</strong><span>34% weekly left · Re-check before a big run.</span></div>
+          <div class="resets-columns">
+            <div class="expiry-list">
+              <h3>Expiry watch</h3>
+              <p>Local Codex Account · 2 Workspaces</p>
+              <div>Workspace A · Reset 1 <b>Available</b></div>
+              <div>Workspace A · Reset 2 <b>Available</b></div>
+              <div>Workspace B · Reset 1 <b>Available</b></div>
+              <div>Workspace B · Reset 2 <b>Available</b></div>
+            </div>
+            <div class="window-list">
+              <h3>Current windows</h3>
+              <div class="window-row"><strong>Local Codex Account</strong><span>5-hour 19% · Weekly 34%</span></div>
+              <div class="window-row"><strong>account@example.dev</strong><span>5-hour 0% · Weekly 82%</span></div>
+              <div class="window-row"><strong>Team Account</strong><span>5-hour 100% · Weekly 0%</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="audit section-shell" id="audit">
+        <div class="audit-copy">
+          <h2>Audit local sessions, not secrets.</h2>
+          <p>AgentBar reads local JSONL usage records so spend and token pressure stay traceable.</p>
+          <div class="privacy-strip">
+            <span>Read-only</span>
+            <span>Local files</span>
+            <span>Credential auth files unopened</span>
+          </div>
+        </div>
+        <div class="audit-table">
+          <div class="audit-toolbar">
+            <strong>Codex Usage Audit</strong>
+            <span>Week</span>
+            <span>4,047 calls · JSONL</span>
+            <button>CSV</button>
+          </div>
+          <div class="audit-warning">Codex session scan skipped 5 JSONL files over the configured size limit.</div>
+          <table>
+            <thead>
+              <tr><th>Time</th><th>Thread</th><th>Duration</th><th>Model</th><th>Tokens</th><th>Cached</th><th>Reasoning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Jul 4 1:09 AM</td><td>Refactor dashboard layout</td><td>6m 8s</td><td>gpt-5.5</td><td>1.7880 mil</td><td>1.5379 mil</td><td>4.4K</td></tr>
+              <tr><td>Jul 4 12:53 AM</td><td>Review release notes</td><td>7m 49s</td><td>gpt-5.5</td><td>1.6799 mil</td><td>1.3956 mil</td><td>4.5K</td></tr>
+              <tr><td>Jul 4 12:44 AM</td><td>Run focused tests</td><td>3m 48s</td><td>gpt-5.5</td><td>1.1648 mil</td><td>1.0753 mil</td><td>2.1K</td></tr>
+              <tr><td>Jul 3 10:53 PM</td><td>Fix cache refresh</td><td>10m 30s</td><td>gpt-5.5</td><td>3.8237 mil</td><td>3.5232 mil</td><td>6.1K</td></tr>
+            </tbody>
+          </table>
+          <div class="audit-actions">
+            <a class="button secondary" href="https://github.com/terrytan95/AgentBar">Open audit</a>
+            <a class="button primary" href="https://github.com/terrytan95/AgentBar/releases/latest">Export CSV</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="install section-shell" id="install">
+        <h2>Install AgentBar.</h2>
+        <p>Native macOS monitoring for local Codex usage signals.</p>
+        <div class="install-actions">
+          <a class="button primary" href="https://github.com/terrytan95/AgentBar/releases/latest">Download for macOS</a>
+          <a class="button secondary" href="https://github.com/terrytan95/AgentBar">View on GitHub</a>
+        </div>
+        <button class="terminal" type="button" data-copy="brew install --cask terrytan95/tap/agentbar">
+          <span>brew install --cask terrytan95/tap/agentbar</span>
+          <b>Copy</b>
+        </button>
+        <div class="install-steps">
+          <div><strong>1</strong><span>Install cask</span></div>
+          <div><strong>2</strong><span>Open AgentBar</span></div>
+          <div><strong>3</strong><span>Review local usage</span></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>AgentBar</span>
+      <a href="https://github.com/terrytan95/AgentBar/releases/latest">Latest release</a>
+      <a href="https://github.com/terrytan95/homebrew-tap">Homebrew tap</a>
+      <a href="https://github.com/terrytan95/AgentBar">GitHub</a>
+      <span>macOS 14+</span>
+    </footer>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

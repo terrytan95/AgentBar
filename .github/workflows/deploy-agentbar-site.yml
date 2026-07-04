@@ -1,0 +1,47 @@
+name: Deploy AgentBar site
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/agentbar/**"
+      - ".github/workflows/deploy-agentbar-site.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-agentbar-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate site files
+        run: |
+          test -f site/agentbar/index.html
+          test -f site/agentbar/styles.css
+          test -f site/agentbar/script.js
+          grep -q "brew install --cask terrytan95/tap/agentbar" site/agentbar/index.html
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AGENTBAR_SITE_SSH_KEY }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/agentbar_site
+          chmod 600 ~/.ssh/agentbar_site
+          ssh-keyscan -H 31.97.212.46 >> ~/.ssh/known_hosts
+
+      - name: Deploy static files
+        run: |
+          ssh -i ~/.ssh/agentbar_site root@31.97.212.46 'mkdir -p /var/www/terrytan.dev/agentbar && find /var/www/terrytan.dev/agentbar -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+          tar -C site/agentbar -czf - . | ssh -i ~/.ssh/agentbar_site root@31.97.212.46 'tar -xzf - -C /var/www/terrytan.dev/agentbar'
+
+      - name: Verify published page
+        run: |
+          curl --fail --silent --show-error https://terrytan.dev/agentbar/ | grep -q "Know your agent limits"

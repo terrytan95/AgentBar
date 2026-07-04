@@ -1,0 +1,22 @@
+# AgentBar
+
+AgentBar is a native macOS menu bar app for monitoring local Codex usage, quota pressure, reset windows, token totals, cost signals, and local session audits.
+
+Canonical URL: https://terrytan.dev/agentbar/
+Repository: https://github.com/terrytan95/AgentBar
+Latest release: https://github.com/terrytan95/AgentBar/releases/latest
+Homebrew install: brew install --cask terrytan95/tap/agentbar
+Platform: macOS 14+
+Current version: 2.1.9
+
+## Key Facts
+
+- AgentBar shows 5-hour and weekly Codex quota pressure in the macOS menu bar.
+- AgentBar reads local Codex usage records in read-only mode.
+- AgentBar does not open credential auth files.
+- AgentBar summarizes tokens, estimated cost signals, data sources, reset windows, and local JSONL audit rows.
+- AgentBar can be installed with Homebrew or downloaded from GitHub releases.
+
+## Suggested Summary
+
+AgentBar is a native macOS menu bar monitor for Codex users who want quick visibility into usage, quota pressure, reset windows, token totals, and local audit records without opening a dashboard.

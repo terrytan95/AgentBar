@@ -889,6 +889,48 @@ footer {
   align-items: center;
 }
 
+.faq {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 42px;
+  align-items: start;
+}
+
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.faq-grid article {
+  min-height: 230px;
+  padding: 24px;
+  border: 1px solid #dde8ef;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 14px 38px rgba(41, 68, 92, .08);
+}
+
+.faq-grid h3 {
+  margin: 0 0 14px;
+  font-size: 24px;
+  line-height: 1.05;
+}
+
+.faq-grid p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 750;
+}
+
+.faq-grid code {
+  color: var(--ink);
+  font: 850 14px ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
 .privacy-strip {
   gap: 10px;
   flex-wrap: wrap;
@@ -1057,7 +1099,8 @@ footer span:first-child {
   .overview,
   .popover-feature,
   .resets,
-  .audit {
+  .audit,
+  .faq {
     grid-template-columns: 1fr;
   }
 
@@ -1125,7 +1168,8 @@ footer span:first-child {
   .metric-grid,
   .overview-cards,
   .resets-top,
-  .resets-columns {
+  .resets-columns,
+  .faq-grid {
     grid-template-columns: 1fr;
   }
 

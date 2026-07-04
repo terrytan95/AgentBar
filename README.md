@@ -1,12 +1,10 @@
-# AgentBar
+<h1><img src="Sources/AgentBar/Resources/AgentBarLogo.png" alt="AgentBar logo" height="32" align="center"> AgentBar</h1>
 
 [![release](https://img.shields.io/github/v/release/terrytan95/AgentBar?style=flat-square&label=release&labelColor=555555&color=111111)](https://github.com/terrytan95/AgentBar/releases/latest)
 ![macOS](https://img.shields.io/badge/macOS-14%2B-111111?style=flat-square&labelColor=555555)
 [![brew](https://img.shields.io/badge/brew-terrytan95%2Ftap%2Fagentbar-ff6b2b?style=flat-square&labelColor=555555)](https://github.com/terrytan95/homebrew-tap)
 
 AgentBar is a native macOS menu bar app for monitoring local AI coding agent usage signals. It focuses on Codex today, with safe Claude Code source detection that reports unavailable state instead of fabricating data.
-
-![AgentBar logo](Sources/AgentBar/Resources/AgentBarLogo.png)
 
 ## Screenshots
 

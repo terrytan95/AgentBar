@@ -89,7 +89,15 @@ enum UsageStatistics {
             calendar.dateInterval(of: .hour, for: point.date)?.start ?? point.date
         }
 
-        return (0..<24).compactMap { offset in
+        let hourCount: Int
+        if range == .today {
+            let elapsedHours = calendar.dateComponents([.hour], from: interval.start, to: now).hour ?? 0
+            hourCount = min(24, max(1, elapsedHours + 1))
+        } else {
+            hourCount = 24
+        }
+
+        return (0..<hourCount).compactMap { offset in
             guard let hour = calendar.date(byAdding: .hour, value: offset, to: interval.start) else { return nil }
             return makeBar(date: hour, points: grouped[hour, default: []])
         }

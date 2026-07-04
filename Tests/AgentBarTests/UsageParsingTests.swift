@@ -1607,12 +1607,11 @@ final class UsageParsingTests: XCTestCase {
         let todayBars = UsageStatistics.hourlyBars(points: points, range: .today, now: now, calendar: calendar)
         let yesterdayBars = UsageStatistics.hourlyBars(points: points, range: .yesterday, now: now, calendar: calendar)
 
-        XCTAssertEqual(todayBars.count, 24)
+        XCTAssertEqual(todayBars.count, 23)
         XCTAssertEqual(todayBars.first?.day, todayStart)
-        XCTAssertEqual(todayBars.last?.day, todayStart.addingTimeInterval(23 * 3_600))
+        XCTAssertEqual(todayBars.last?.day, todayStart.addingTimeInterval(22 * 3_600))
         XCTAssertEqual(todayBars[2].codexTokens, 12)
-        XCTAssertEqual(todayBars[23].claudeTokens, 24)
-        XCTAssertEqual(todayBars.map { $0.codexTokens + $0.claudeTokens }.reduce(0, +), 36)
+        XCTAssertEqual(todayBars.map { $0.codexTokens + $0.claudeTokens }.reduce(0, +), 12)
         XCTAssertEqual(yesterdayBars.count, 24)
         XCTAssertEqual(yesterdayBars[7].codexTokens, 36)
     }

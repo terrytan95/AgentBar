@@ -1,5 +1,9 @@
 # AgentBar
 
+[![release](https://img.shields.io/github/v/release/terrytan95/AgentBar?style=flat-square&label=release&labelColor=555555&color=111111)](https://github.com/terrytan95/AgentBar/releases/latest)
+![macOS](https://img.shields.io/badge/macOS-14%2B-111111?style=flat-square&labelColor=555555)
+[![brew](https://img.shields.io/badge/brew-terrytan95%2Ftap%2Fagentbar-ff6b2b?style=flat-square&labelColor=555555)](https://github.com/terrytan95/homebrew-tap)
+
 AgentBar is a native macOS menu bar app for monitoring local AI coding agent usage signals. It focuses on Codex today, with safe Claude Code source detection that reports unavailable state instead of fabricating data.
 
 ![AgentBar logo](Sources/AgentBar/Resources/AgentBarLogo.png)
@@ -34,6 +38,12 @@ AgentBar is a native macOS menu bar app for monitoring local AI coding agent usa
 - Claude Code: detects local Claude Code availability. If no `~/.claude` CLI usage source is found, AgentBar reports an unavailable live source rather than using mock data.
 - Costs: local subscription sessions do not expose authoritative per-request cost. The UI shows `N/A` unless a real model-pricing table or authorized Admin API source is added.
 
+## Install
+
+```bash
+brew install --cask terrytan95/tap/agentbar
+```
+
 ## Build
 
 ```bash
@@ -48,7 +58,7 @@ The app bundle is staged at `dist/AgentBar.app`.
 
 ```bash
 ./script/build_and_run.sh --package
-ditto -c -k --norsrc --noextattr --keepParent dist/AgentBar.app dist/AgentBar-v1.0.5.zip
+ditto -c -k --norsrc --noextattr --keepParent dist/AgentBar.app dist/AgentBar-v2.1.7.zip
 ```
 
 The local bundle is ad-hoc signed for development and local use. It is not notarized.
@@ -57,6 +67,6 @@ The local bundle is ad-hoc signed for development and local use. It is not notar
 
 GitHub releases attach a zipped `.app` bundle:
 
-- `AgentBar-v1.0.5.zip`
+- `AgentBar-v2.1.7.zip`
 
 After unzipping, move `AgentBar.app` to `/Applications` or run it from the extracted folder.

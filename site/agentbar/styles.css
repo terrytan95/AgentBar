@@ -179,7 +179,7 @@ footer {
   align-items: center;
   gap: 12px;
   margin-top: 20px;
-  width: min(100%, 520px);
+  width: min(100%, 640px);
   border: 1px solid #c9d9e7;
   border-radius: 18px;
   background: #111820;
@@ -201,10 +201,10 @@ footer {
 .command-text {
   min-width: 0;
   flex: 1;
-  overflow: hidden;
   color: #dff1ff;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .copy-icon {
@@ -219,7 +219,8 @@ footer {
   background: rgba(255, 255, 255, .06);
 }
 
-.copy-icon svg {
+.copy-svg,
+.check-svg {
   width: 19px;
   height: 19px;
   fill: none;
@@ -229,12 +230,31 @@ footer {
   stroke-width: 2;
 }
 
+.check-svg {
+  display: none;
+}
+
 .command-chip:hover .copy-icon,
-.terminal:hover .copy-icon,
-.command-chip.copied .copy-icon,
-.terminal.copied .copy-icon {
+.terminal:hover .copy-icon {
   color: #7cc1ff;
   border-color: rgba(124, 193, 255, .44);
+}
+
+.command-chip.copied .copy-icon,
+.terminal.copied .copy-icon {
+  color: #39d36b;
+  border-color: rgba(57, 211, 107, .48);
+  background: rgba(57, 211, 107, .1);
+}
+
+.command-chip.copied .copy-svg,
+.terminal.copied .copy-svg {
+  display: none;
+}
+
+.command-chip.copied .check-svg,
+.terminal.copied .check-svg {
+  display: block;
 }
 
 .hero-stage {

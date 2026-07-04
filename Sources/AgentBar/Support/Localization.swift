@@ -24,6 +24,42 @@ enum L {
         }
     }
 
+    static func codexSessionScanWarning(_ note: String, language: AppLanguage) -> String {
+        guard language == .chinese,
+              note.hasPrefix("Codex session scan skipped ")
+        else { return note }
+
+        let skipped = note
+            .dropFirst("Codex session scan skipped ".count)
+            .split(separator: " ")
+            .first
+            .map(String.init) ?? ""
+        guard !skipped.isEmpty else { return note }
+
+        var reasons: [String] = []
+        if let oversized = matchScanWarningReason(in: note, pattern: #"(\d+) over the (\d+) MB file limit"#) {
+            reasons.append("\(oversized[0]) 个超过 \(oversized[1]) MB 文件限制")
+        }
+        if let capped = matchScanWarningReason(in: note, pattern: #"(\d+) beyond the (\d+) file scan cap"#) {
+            reasons.append("\(capped[0]) 个超过 \(capped[1]) 个文件扫描上限")
+        }
+
+        let detail = reasons.isEmpty ? "" : "：" + reasons.joined(separator: "，")
+        return "Codex 会话扫描已跳过 \(skipped) 个 JSONL 文件\(detail)。用量可能被低估。"
+    }
+
+    private static func matchScanWarningReason(in note: String, pattern: String) -> [String]? {
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: note, range: NSRange(note.startIndex..., in: note))
+        else { return nil }
+
+        let captures = (1..<match.numberOfRanges).compactMap { index -> String? in
+            guard let range = Range(match.range(at: index), in: note) else { return nil }
+            return String(note[range])
+        }
+        return captures.count == match.numberOfRanges - 1 ? captures : nil
+    }
+
     private static let english: [String: String] = [
         "overview": "Overview",
         "audit": "Audit",

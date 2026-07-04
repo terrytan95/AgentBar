@@ -80,6 +80,21 @@ enum UsageStatistics {
         )
     }
 
+    static func hourlyBars(points: [UsagePoint], range: UsageRange, now: Date = Date(), calendar: Calendar = .current) -> [DailyUsageBar] {
+        guard range == .today || range == .yesterday,
+              let interval = range.dateInterval(now: now, calendar: calendar)
+        else { return [] }
+
+        let grouped = Dictionary(grouping: points.filter { interval.contains($0.date) }) { point in
+            calendar.dateInterval(of: .hour, for: point.date)?.start ?? point.date
+        }
+
+        return (0..<24).compactMap { offset in
+            guard let hour = calendar.date(byAdding: .hour, value: offset, to: interval.start) else { return nil }
+            return makeBar(date: hour, points: grouped[hour, default: []])
+        }
+    }
+
     static func percentChange(current: Int, previous: Int) -> Double? {
         guard previous > 0 else { return nil }
         return (Double(current - previous) / Double(previous)) * 100
@@ -99,16 +114,19 @@ enum UsageStatistics {
         }
 
         return grouped.keys.sorted().map { day in
-            let points = grouped[day, default: []]
-            let codexPoints = points.filter { $0.service == .codex }
-            let claudePoints = points.filter { $0.service == .claudeCode }
-            return DailyUsageBar(
-                day: day,
-                codexTokens: codexPoints.reduce(0) { $0 + $1.tokens.total },
-                claudeTokens: claudePoints.reduce(0) { $0 + $1.tokens.total },
-                codexCostUSD: codexPoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +),
-                claudeCostUSD: claudePoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
-            )
+            makeBar(date: day, points: grouped[day, default: []])
         }
+    }
+
+    private static func makeBar(date: Date, points: [UsagePoint]) -> DailyUsageBar {
+        let codexPoints = points.filter { $0.service == .codex }
+        let claudePoints = points.filter { $0.service == .claudeCode }
+        return DailyUsageBar(
+            day: date,
+            codexTokens: codexPoints.reduce(0) { $0 + $1.tokens.total },
+            claudeTokens: claudePoints.reduce(0) { $0 + $1.tokens.total },
+            codexCostUSD: codexPoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +),
+            claudeCostUSD: claudePoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
+        )
     }
 }

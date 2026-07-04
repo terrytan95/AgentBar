@@ -55,6 +55,7 @@ final class UsageParsingTests: XCTestCase {
         checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta()
         checkQuotaCapacityHistoryDoesNotEstimateAcrossAccountSwitches()
         checkStatisticsBucketsAggregateExpectedRanges()
+        checkTodayAndYesterdayChartBarsUseHourlyBuckets()
         checkYearActivityBarsFillLast365Days()
         checkPeriodChangeComparesSelectedRangeAgainstPreviousPeriod()
         checkPeriodChangeHasNoPercentWithoutComparableBaseline()
@@ -1589,6 +1590,31 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(all.serviceBreakdown[.claudeCode], 36)
         XCTAssertEqual(today.dailyBars.first?.codexCostUSD, Decimal(string: "0.001"))
         XCTAssertEqual(sevenDays.dailyBars.map(\.codexCostUSD).reduce(Decimal(0), +), Decimal(string: "0.003"))
+    }
+
+    private func checkTodayAndYesterdayChartBarsUseHourlyBuckets() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
+        let todayStart = calendar.startOfDay(for: now)
+        let yesterdayStart = calendar.date(byAdding: .day, value: -1, to: todayStart)!
+        let points = [
+            UsagePoint(service: .codex, model: "codex-local", date: todayStart.addingTimeInterval(2 * 3_600 + 60), tokens: TokenTotals(input: 10, cachedInput: 0, output: 2, reasoningOutput: 0, total: 12), estimatedCostUSD: Decimal(string: "0.001")),
+            UsagePoint(service: .claudeCode, model: "claude-local", date: todayStart.addingTimeInterval(23 * 3_600 + 30), tokens: TokenTotals(input: 20, cachedInput: 0, output: 4, reasoningOutput: 0, total: 24), estimatedCostUSD: Decimal(string: "0.002")),
+            UsagePoint(service: .codex, model: "codex-local", date: yesterdayStart.addingTimeInterval(7 * 3_600), tokens: TokenTotals(input: 30, cachedInput: 0, output: 6, reasoningOutput: 0, total: 36), estimatedCostUSD: Decimal(string: "0.003"))
+        ]
+
+        let todayBars = UsageStatistics.hourlyBars(points: points, range: .today, now: now, calendar: calendar)
+        let yesterdayBars = UsageStatistics.hourlyBars(points: points, range: .yesterday, now: now, calendar: calendar)
+
+        XCTAssertEqual(todayBars.count, 24)
+        XCTAssertEqual(todayBars.first?.day, todayStart)
+        XCTAssertEqual(todayBars.last?.day, todayStart.addingTimeInterval(23 * 3_600))
+        XCTAssertEqual(todayBars[2].codexTokens, 12)
+        XCTAssertEqual(todayBars[23].claudeTokens, 24)
+        XCTAssertEqual(todayBars.map { $0.codexTokens + $0.claudeTokens }.reduce(0, +), 36)
+        XCTAssertEqual(yesterdayBars.count, 24)
+        XCTAssertEqual(yesterdayBars[7].codexTokens, 36)
     }
 
     private func checkYearActivityBarsFillLast365Days() {

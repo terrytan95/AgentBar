@@ -640,7 +640,7 @@ struct StatisticsView: View {
                     SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: quotaMeterColor(store.activeAccount?.weeklyWindow?.remainingPercent), progress: store.activeAccount?.weeklyWindow?.remainingPercent)
                 }
             }
-            .frame(height: 90)
+            .frame(height: 78)
 
             ResetAdvicePanel(advice: resetSpendAdvice)
 

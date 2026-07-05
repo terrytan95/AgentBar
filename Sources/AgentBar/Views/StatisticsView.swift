@@ -1869,7 +1869,7 @@ private struct YearActivityPanel: View {
 
             HStack(spacing: 28) {
                 statistic(value: "\(activeDaysCount)", title: language == .chinese ? "活跃天数" : "active days", color: githubAccent)
-                statistic(value: DisplayFormatters.compactTokenString(peakDayTokens, language: language), title: language == .chinese ? "峰值日" : "peak day")
+                statistic(value: DisplayFormatters.compactTokenString(peakDayTokens, language: language), title: peakDayTitle)
             }
         }
     }
@@ -1929,7 +1929,17 @@ private struct YearActivityPanel: View {
     }
 
     private var peakDayTokens: Int {
-        bars.map { totalTokens(for: $0) }.max() ?? 0
+        peakDayBar.map(totalTokens(for:)) ?? 0
+    }
+
+    private var peakDayBar: DailyUsageBar? {
+        bars.max { totalTokens(for: $0) < totalTokens(for: $1) }
+    }
+
+    private var peakDayTitle: String {
+        let title = language == .chinese ? "峰值日" : "peak day"
+        guard let peakDayBar, totalTokens(for: peakDayBar) > 0 else { return title }
+        return "\(title) · \(dayText(peakDayBar.day))"
     }
 
     private var githubAccent: Color {
@@ -2008,6 +2018,10 @@ private struct YearActivityPanel: View {
 
     private func monthText(_ date: Date) -> String {
         DisplayFormatters.localizedDateString(for: date, template: "MMM", language: language)
+    }
+
+    private func dayText(_ date: Date) -> String {
+        DisplayFormatters.localizedDateString(for: date, template: "MMM d", language: language)
     }
 
 }

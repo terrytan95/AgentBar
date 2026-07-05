@@ -997,7 +997,7 @@ struct StatisticsView: View {
                     language: store.language,
                 )
 
-                LazyVStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(currentLimitDisplayGroups) { group in
                         AccountLimitDisplayGroupView(
                             group: group,

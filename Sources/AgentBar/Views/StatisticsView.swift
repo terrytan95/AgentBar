@@ -1875,19 +1875,30 @@ private struct YearActivityPanel: View {
 
             HStack(spacing: 28) {
                 statistic(value: "\(activeDaysCount)", title: language == .chinese ? "活跃天数" : "active days", color: githubAccent)
-                statistic(value: DisplayFormatters.compactTokenString(peakDayTokens, language: language), title: peakDayTitle)
+                statistic(
+                    value: DisplayFormatters.compactTokenString(peakDayTokens, language: language),
+                    detail: peakDayDateText,
+                    title: language == .chinese ? "峰值日" : "peak day"
+                )
             }
         }
     }
 
-    private func statistic(value: String, title: String, color: Color = Color.primary) -> some View {
+    private func statistic(value: String, detail: String? = nil, title: String, color: Color = Color.primary) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(value)
-                .font(.agentBar(size: 24, weight: .bold))
-                .foregroundStyle(color)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(value)
+                    .font(.agentBar(size: 24, weight: .bold))
+                    .foregroundStyle(color)
+                if let detail {
+                    Text("· \(detail)")
+                        .font(.agentBar(size: 13, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
             Text(title)
                 .font(.agentBar(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
@@ -1942,10 +1953,9 @@ private struct YearActivityPanel: View {
         bars.max { totalTokens(for: $0) < totalTokens(for: $1) }
     }
 
-    private var peakDayTitle: String {
-        let title = language == .chinese ? "峰值日" : "peak day"
-        guard let peakDayBar, totalTokens(for: peakDayBar) > 0 else { return title }
-        return "\(title) · \(dayText(peakDayBar.day))"
+    private var peakDayDateText: String? {
+        guard let peakDayBar, totalTokens(for: peakDayBar) > 0 else { return nil }
+        return dayText(peakDayBar.day)
     }
 
     private var githubAccent: Color {
@@ -2027,7 +2037,7 @@ private struct YearActivityPanel: View {
     }
 
     private func dayText(_ date: Date) -> String {
-        DisplayFormatters.localizedDateString(for: date, template: "MMM d", language: language)
+        DisplayFormatters.localizedDateString(for: date, template: "MMM d, y", language: .english)
     }
 
 }

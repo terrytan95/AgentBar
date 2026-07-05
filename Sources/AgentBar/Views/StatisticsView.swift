@@ -1628,36 +1628,42 @@ private struct DashboardStackedBars: View {
     }
 
     private func chartArea(size: CGSize, values: [Double], maximum: Double, color: Color, showsFill: Bool) -> some View {
-        let points = plotPoints(size: size, values: values, maximum: maximum)
-        return ZStack {
+        Canvas(rendersAsynchronously: true) { context, canvasSize in
+            let drawingSize = canvasSize == .zero ? size : canvasSize
+            let points = plotPoints(size: drawingSize, values: values, maximum: maximum)
+            guard let first = points.first else { return }
+
             if showsFill {
-                Path { path in
-                    guard let first = points.first else { return }
-                    path.move(to: CGPoint(x: first.x, y: size.height))
-                    points.forEach { path.addLine(to: $0) }
-                    if let last = points.last {
-                        path.addLine(to: CGPoint(x: last.x, y: size.height))
-                        path.closeSubpath()
-                    }
+                var fillPath = Path()
+                fillPath.move(to: CGPoint(x: first.x, y: drawingSize.height))
+                points.forEach { fillPath.addLine(to: $0) }
+                if let last = points.last {
+                    fillPath.addLine(to: CGPoint(x: last.x, y: drawingSize.height))
+                    fillPath.closeSubpath()
                 }
-                .fill(
-                    LinearGradient(colors: [color.opacity(0.32), color.opacity(0.05)], startPoint: .top, endPoint: .bottom)
+                context.fill(
+                    fillPath,
+                    with: .linearGradient(
+                        Gradient(colors: [color.opacity(0.32), color.opacity(0.05)]),
+                        startPoint: .zero,
+                        endPoint: CGPoint(x: 0, y: drawingSize.height)
+                    )
                 )
             }
-            Path { path in
-                guard let first = points.first else { return }
-                path.move(to: first)
-                points.dropFirst().forEach { path.addLine(to: $0) }
-            }
-            .stroke(color, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
-            .shadow(color: color.opacity(0.32), radius: 4, y: 2)
 
-            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 7, height: 7)
-                    .overlay(Circle().stroke(color, lineWidth: 2))
-                    .position(point)
+            var linePath = Path()
+            linePath.move(to: first)
+            points.dropFirst().forEach { linePath.addLine(to: $0) }
+
+            var shadowContext = context
+            shadowContext.addFilter(.shadow(color: color.opacity(0.32), radius: 4, x: 0, y: 2))
+            shadowContext.stroke(linePath, with: .color(color), style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+
+            for point in points {
+                let rect = CGRect(x: point.x - 3.5, y: point.y - 3.5, width: 7, height: 7)
+                let dot = Path(ellipseIn: rect)
+                context.fill(dot, with: .color(.white))
+                context.stroke(dot, with: .color(color), lineWidth: 2)
             }
         }
     }
@@ -2661,24 +2667,19 @@ private struct QuotaCapacityLineChart: View {
     }
 
     private func line(for keyPath: KeyPath<QuotaCapacitySample, Int?>, maximumValue: Int, color: Color, in size: CGSize) -> some View {
-        let points = plottedPoints(for: keyPath, maximumValue: maximumValue, in: size)
-        return ZStack {
-            Path { path in
-                for (index, point) in points.enumerated() {
-                    if index == 0 {
-                        path.move(to: point)
-                    } else {
-                        path.addLine(to: point)
-                    }
-                }
-            }
-            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+        Canvas(rendersAsynchronously: true) { context, canvasSize in
+            let drawingSize = canvasSize == .zero ? size : canvasSize
+            let points = plottedPoints(for: keyPath, maximumValue: maximumValue, in: drawingSize)
+            guard let first = points.first else { return }
 
-            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
-                Circle()
-                    .fill(color)
-                    .frame(width: 5, height: 5)
-                    .position(point)
+            var linePath = Path()
+            linePath.move(to: first)
+            points.dropFirst().forEach { linePath.addLine(to: $0) }
+            context.stroke(linePath, with: .color(color), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+
+            for point in points {
+                let dot = Path(ellipseIn: CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5))
+                context.fill(dot, with: .color(color))
             }
         }
     }

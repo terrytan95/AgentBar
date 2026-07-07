@@ -800,7 +800,7 @@ private func epochMillisecondsDate(_ value: Double?) -> Date? {
 enum LocalFileAccessWarning {
     static func codexNote(for error: Error, path: String) -> String? {
         guard isAccessDenied(error as NSError) else { return nil }
-        return "AgentBar cannot read local Codex data at \(displayPath(path)). Grant AgentBar Desktop/Documents/Downloads or Full Disk Access in System Settings, then refresh."
+        return "AgentBar cannot read local Codex data at \(displayPath(path)). Grant AgentBar Files and Folders or Full Disk Access in System Settings, then refresh."
     }
 
     private static func isAccessDenied(_ error: NSError) -> Bool {

@@ -177,6 +177,7 @@ enum L {
         "current": "Current",
         "account_forced_logout_warning": "OpenAI returned 401. Log in to this account again.",
         "account_unreadable_reset_warning": "Reset data is unreadable. Log in to this account again.",
+        "account_quota_unavailable_warning": "Quota check returned 401, but this token-backed account can still be used by Codex.",
         "no_cost_data": "No cost data",
         "usage_windows": "Usage windows",
         "team": "Team"
@@ -450,6 +451,7 @@ enum L {
         "current": "当前",
         "account_forced_logout_warning": "OpenAI 返回 401，请重新登录此账号。",
         "account_unreadable_reset_warning": "重置数据不可读，请重新登录此账号。",
+        "account_quota_unavailable_warning": "额度查询返回 401，但这个 token 账号仍可供 Codex 使用。",
         "no_cost_data": "暂无费用数据",
         "usage_windows": "用量窗口",
         "team": "团队",

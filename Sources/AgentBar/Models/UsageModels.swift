@@ -116,6 +116,7 @@ struct UsageResetCredits: Codable, Equatable, Sendable {
 enum UsageAccountLoginWarning: String, Codable, Equatable, Sendable {
     case forcedLogout
     case unreadableReset
+    case quotaUnavailable
 }
 
 struct UsageWorkspace: Codable, Equatable, Sendable {
@@ -213,7 +214,12 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     }
 
     var needsLogin: Bool {
-        loginWarning != nil
+        switch loginWarning {
+        case .forcedLogout, .unreadableReset:
+            true
+        case .quotaUnavailable, nil:
+            false
+        }
     }
 
     func restoringExpiredQuotaWindows(now: Date) -> UsageAccount {
@@ -229,6 +235,8 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
             L.text("account_forced_logout_warning", language)
         case .unreadableReset:
             L.text("account_unreadable_reset_warning", language)
+        case .quotaUnavailable:
+            L.text("account_quota_unavailable_warning", language)
         case nil:
             nil
         }

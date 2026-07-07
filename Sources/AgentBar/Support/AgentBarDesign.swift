@@ -3,7 +3,6 @@ import CoreText
 
 enum AgentBarDesign {
     static let radiusMedium: CGFloat = 12
-    static let radiusLarge: CGFloat = 18
     static let appBackground = adaptiveColor(
         light: NSColor.windowBackgroundColor,
         dark: NSColor(calibratedRed: 0.060, green: 0.064, blue: 0.058, alpha: 1)

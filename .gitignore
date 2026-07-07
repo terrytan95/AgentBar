@@ -6,6 +6,6 @@ screenshots/*
 verification/
 tmp/
 .superpowers/
-.DS_Store
+**/.DS_Store
 *.xcuserdata/
 DerivedData/

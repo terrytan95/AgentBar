@@ -9,6 +9,9 @@ on:
       - ".github/workflows/deploy-agentbar-site.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-agentbar-site
   cancel-in-progress: true
@@ -35,7 +38,7 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/agentbar_site
           chmod 600 ~/.ssh/agentbar_site
-          ssh-keyscan -H 31.97.212.46 >> ~/.ssh/known_hosts
+          printf '%s\n' '31.97.212.46 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAlePtW/498BguEpZUY3cZ05m2doCO+rx7ea/PGRmE1h' > ~/.ssh/known_hosts
 
       - name: Deploy static files
         run: |

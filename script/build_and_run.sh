@@ -10,7 +10,14 @@ APP_BUILD="187"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
+RUN_DIST_DIR="${AGENTBAR_RUN_DIST_DIR:-${TMPDIR:-/tmp}/AgentBar}"
+BUILD_SCRATCH_DIR="${AGENTBAR_BUILD_DIR:-${TMPDIR:-/tmp}/AgentBar-build}"
+
+if [ "$MODE" = "--package" ] || [ "$MODE" = "package" ]; then
+  APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
+else
+  APP_BUNDLE="$RUN_DIST_DIR/$APP_NAME.app"
+fi
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
@@ -26,7 +33,12 @@ if [ "$MODE" = "--package" ] || [ "$MODE" = "package" ]; then
   BUILD_CONFIGURATION="release"
 fi
 
-SWIFT_BUILD_ARGS=(-c "$BUILD_CONFIGURATION")
+SWIFT_BUILD_ARGS=(
+  --scratch-path "$BUILD_SCRATCH_DIR"
+  -c "$BUILD_CONFIGURATION"
+  -Xswiftc -debug-prefix-map -Xswiftc "$ROOT_DIR=."
+  -Xswiftc -file-prefix-map -Xswiftc "$ROOT_DIR=."
+)
 if [ -n "${AGENTBAR_SWIFT_BUILD_EXTRA_ARGS:-}" ]; then
   IFS=' ' read -r -a EXTRA_SWIFT_BUILD_ARGS <<< "$AGENTBAR_SWIFT_BUILD_EXTRA_ARGS"
   SWIFT_BUILD_ARGS+=("${EXTRA_SWIFT_BUILD_ARGS[@]}")
@@ -70,8 +82,6 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
-  <key>NSDesktopFolderUsageDescription</key>
-  <string>AgentBar needs Desktop folder access to write exports and reports you create there.</string>
 </dict>
 </plist>
 PLIST
@@ -81,7 +91,7 @@ if command -v codesign >/dev/null 2>&1; then
 fi
 
 open_app() {
-  /usr/bin/open -n "$APP_BUNDLE"
+  (cd / && /usr/bin/open -n "$APP_BUNDLE")
 }
 
 case "$MODE" in

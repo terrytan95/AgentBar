@@ -1,13 +1,15 @@
 import AppKit
 import Foundation
 
-enum AccountActionError: LocalizedError {
+enum AccountActionError: LocalizedError, Equatable {
     case unsupportedService
     case missingRegistry
     case invalidRegistry
     case missingAccount
     case missingAccountSnapshot
     case mismatchedAccountSnapshot
+    case emptyAccessToken
+    case accessTokenLoginFailed(Int32)
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +19,11 @@ enum AccountActionError: LocalizedError {
         case .missingAccount: "The selected account was not found in the Codex registry."
         case .missingAccountSnapshot: "The selected Codex account auth snapshot was not found."
         case .mismatchedAccountSnapshot: "The selected Codex account auth snapshot belongs to a different login."
+        case .emptyAccessToken: "No Codex access token was entered."
+        case .accessTokenLoginFailed(let status) where status == 503:
+            "Codex returned 503 while applying the access token. Log in to one Codex account locally, then try again."
+        case .accessTokenLoginFailed(let status):
+            "Codex could not apply the access token. codex login exited with status \(status)."
         }
     }
 }
@@ -95,6 +102,73 @@ struct CodexAccountSwitcher {
         } else if fileManager.fileExists(atPath: activeAuthURL.path) {
             try? fileManager.removeItem(at: activeAuthURL)
         }
+    }
+}
+
+struct CodexAccountAccessTokenUpdater {
+    var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    var fileManager: FileManager = .default
+    var envExecutableURL = URL(fileURLWithPath: "/usr/bin/env")
+
+    func updateAccount(accountID: String, accessToken rawAccessToken: String) throws {
+        let accessToken = rawAccessToken
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"^Bearer\s+"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !accessToken.isEmpty else { throw AccountActionError.emptyAccessToken }
+
+        let tempHome = fileManager.temporaryDirectory.appending(path: "agentbar-codex-token-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? fileManager.removeItem(at: tempHome) }
+        try fileManager.createDirectory(at: tempHome, withIntermediateDirectories: true)
+
+        let process = Process()
+        process.executableURL = envExecutableURL
+        process.arguments = ["codex", "login", "--with-access-token"]
+        var environment = ProcessInfo.processInfo.environment
+        environment["HOME"] = tempHome.path
+        environment["CODEX_HOME"] = nil
+        process.environment = environment
+
+        let input = Pipe()
+        process.standardInput = input
+        let output = Pipe()
+        let errorOutput = Pipe()
+        process.standardOutput = output
+        process.standardError = errorOutput
+        try process.run()
+        input.fileHandleForWriting.write(Data((accessToken + "\n").utf8))
+        try? input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let message = String(data: output.fileHandleForReading.readDataToEndOfFile() + errorOutput.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            throw AccountActionError.accessTokenLoginFailed(message.contains("503") ? 503 : process.terminationStatus)
+        }
+
+        let authData = try Data(contentsOf: tempHome.appending(path: ".codex/auth.json"))
+        try writeTokenBackedSnapshot(authData, accountID: accountID)
+    }
+
+    func writeTokenBackedSnapshot(_ authData: Data, accountID: String) throws {
+        let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
+        let data = try Data(contentsOf: storage.registryURL)
+        guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var accounts = json["accounts"] as? [[String: Any]]
+        else {
+            throw AccountActionError.invalidRegistry
+        }
+        guard let index = accounts.firstIndex(where: { $0["account_key"] as? String == accountID }) else {
+            throw AccountActionError.missingAccount
+        }
+
+        try fileManager.createDirectory(at: storage.accountsDirectory, withIntermediateDirectories: true)
+        try authData.write(to: storage.accountAuthURL(for: accountID), options: [.atomic])
+        if json["active_account_key"] as? String == accountID {
+            try authData.write(to: storage.activeAuthURL, options: [.atomic])
+        }
+        accounts[index]["agentbar_token_backed"] = true
+        accounts[index].removeValue(forKey: "agentbar_auth_error")
+        json["accounts"] = accounts
+        try storage.writeRegistry(json)
     }
 }
 
@@ -179,9 +253,17 @@ enum AccountLoginLauncher {
             """
             alert.alertStyle = .informational
             alert.addButton(withTitle: "Open Login")
+            alert.addButton(withTitle: "Use Access Token")
             alert.addButton(withTitle: "Cancel")
-            if alert.runModal() == .alertFirstButtonReturn {
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
                 openTerminal(command: command)
+            case .alertSecondButtonReturn:
+                Task { @MainActor in
+                    promptCodexAccessToken(accountID: accountID, accountLabel: accountLabel)
+                }
+            default:
+                break
             }
         }
     }
@@ -220,6 +302,57 @@ enum AccountLoginLauncher {
             try? process.run()
             process.waitUntilExit()
         }
+    }
+
+    @MainActor
+    private static func promptCodexAccessToken(accountID: String, accountLabel: String) {
+        let alert = NSAlert()
+        alert.messageText = "Update Codex access token"
+        alert.informativeText = "Account: \(accountLabel)\n\nPaste a Codex access token. AgentBar will update this account snapshot without storing the token in shell history."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Update Token")
+        alert.addButton(withTitle: "Cancel")
+        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 420, height: 24))
+        input.placeholderString = "Bearer ..."
+        alert.accessoryView = input
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let token = input.stringValue
+        DispatchQueue.global(qos: .utility).async {
+            let result = Result {
+                try CodexAccountAccessTokenUpdater().updateAccount(accountID: accountID, accessToken: token)
+            }
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    postCodexRecoveryNotification()
+                case .failure(let error):
+                    Task { @MainActor in
+                        showError("Codex access token update failed", message: error.localizedDescription.redactedForCredentialWords)
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private static func showError(_ title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private static func postCodexRecoveryNotification() {
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(CodexAccountStorage.recoveryLoginFinishedNotificationName as CFString),
+            nil,
+            nil,
+            true
+        )
     }
 
     private static func appleScriptString(_ value: String) -> String {

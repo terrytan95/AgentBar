@@ -10,6 +10,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexRegistryParsesMultipleWorkspacesForOneAccount()
         checkAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows()
         try checkCodexRegistryFlagsAccountsThatNeedLoginAgain()
+        try checkCodexRegistryTreatsTokenBacked401AsQuotaUnavailable()
         try checkCodexReadClearsStale401AfterNewerAuthSnapshot()
         try checkCodexReadUsesActiveAuthAccountWhenRegistryActiveIsStale()
         try checkCodexReadUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs()
@@ -27,6 +28,7 @@ final class UsageParsingTests: XCTestCase {
         try await checkCodexUsageAPISyncerRefreshesActiveAuthAccountWhenRegistryActiveIsStale()
         try await checkCodexUsageAPISyncerUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs()
         checkCodexRecoveryLoginCommandSnapshotsAuthAfterLogin()
+        try checkCodexAccessTokenUpdaterMarksTokenBackedSnapshot()
         checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
         await checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
@@ -266,6 +268,33 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-401" }?.loginWarning, .forcedLogout)
         XCTAssertNil(snapshot.accounts.first { $0.id == "acct-401" }?.fiveHourWindow)
         XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-reset" }?.loginWarning, .unreadableReset)
+    }
+
+    private func checkCodexRegistryTreatsTokenBacked401AsQuotaUnavailable() throws {
+        let registry = """
+        {
+          "schema_version": 3,
+          "accounts": [
+            {
+              "account_key": "acct-token",
+              "email": "token@example.com",
+              "agentbar_token_backed": true,
+              "agentbar_auth_error": {"status_code": 401},
+              "last_usage": {
+                "plan_type": "401",
+                "primary": {"used_percent": 401, "window_minutes": 300, "resets_at": 1781400000}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CodexUsageReader.parseRegistry(data: registry, now: Date(timeIntervalSince1970: 1_781_388_300))
+        let account = try XCTUnwrap(snapshot.accounts.first)
+
+        XCTAssertEqual(account.loginWarning, .quotaUnavailable)
+        XCTAssertFalse(account.needsLogin)
+        XCTAssertNil(account.fiveHourWindow)
     }
 
     private func checkCodexReadClearsStale401AfterNewerAuthSnapshot() throws {
@@ -798,6 +827,28 @@ final class UsageParsingTests: XCTestCase {
             storage.recoveryLoginCommand(accountID: "user-a::org"),
             "codex login && mkdir -p '/tmp/agentbar-codex-home/.codex/accounts' && cp '/tmp/agentbar-codex-home/.codex/auth.json' '/tmp/agentbar-codex-home/.codex/accounts/dXNlci1hOjpvcmc.auth.json' && /usr/bin/notifyutil -p com.agentbar.codexRecoveryLoginFinished"
         )
+    }
+
+    private func checkCodexAccessTokenUpdaterMarksTokenBackedSnapshot() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        let registryURL = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"active_account_key":"acct-token","accounts":[{"account_key":"acct-token","email":"token@example.com","agentbar_auth_error":{"status_code":401}}]}
+        """.data(using: .utf8)!.write(to: registryURL)
+        let authData = """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"fresh-token","account_id":"acct-token"}}
+        """.data(using: .utf8)!
+
+        try CodexAccountAccessTokenUpdater(homeDirectory: temp).writeTokenBackedSnapshot(authData, accountID: "acct-token")
+
+        let account = try registryAccount(from: registryURL)
+        XCTAssertEqual(account["agentbar_token_backed"] as? Bool, true)
+        XCTAssertNil(account["agentbar_auth_error"])
+        XCTAssertEqual(try Data(contentsOf: accountDir.appending(path: "acct-token.auth.json")), authData)
+        XCTAssertEqual(try Data(contentsOf: temp.appending(path: ".codex/auth.json")), authData)
     }
 
     private func checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths() {

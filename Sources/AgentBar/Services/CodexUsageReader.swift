@@ -144,6 +144,7 @@ struct CodexUsageReader {
             }
             let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
             let loginWarning: UsageAccountLoginWarning? =
+                raw.hasTokenBackedQuotaWarning ? .quotaUnavailable :
                 raw.hasForcedLogoutWarning(authSnapshotInfo: authSnapshotInfo?(raw.accountKey), activeAuthInfo: activeAuthInfo) ? .forcedLogout :
                 raw.lastUsage?.hasUnreadableResetWarning == true ? .unreadableReset :
                 nil
@@ -375,6 +376,7 @@ private struct CodexRegistryAccount: Decodable {
     var lastUsage: CodexLastUsage?
     var lastUsageAt: Double?
     var authError: CodexAuthError?
+    var tokenBacked: Bool
 
     enum CodingKeys: String, CodingKey {
         case accountKey = "account_key"
@@ -396,6 +398,7 @@ private struct CodexRegistryAccount: Decodable {
         case lastUsage = "last_usage"
         case lastUsageAt = "last_usage_at"
         case authError = "agentbar_auth_error"
+        case tokenBacked = "agentbar_token_backed"
     }
 
     init(from decoder: Decoder) throws {
@@ -419,6 +422,11 @@ private struct CodexRegistryAccount: Decodable {
         lastUsage = try container.decodeIfPresent(CodexLastUsage.self, forKey: .lastUsage)
         lastUsageAt = try container.decodeIfPresent(Double.self, forKey: .lastUsageAt)
         authError = try container.decodeIfPresent(CodexAuthError.self, forKey: .authError)
+        tokenBacked = (try? container.decodeIfPresent(Bool.self, forKey: .tokenBacked)) ?? false
+    }
+
+    var hasTokenBackedQuotaWarning: Bool {
+        tokenBacked && (authError?.statusCode == 401 || plan == "401" || lastUsage?.planType == "401")
     }
 
     func hasForcedLogoutWarning(authSnapshotInfo: CodexAuthSnapshotInfo? = nil, activeAuthInfo: CodexAuthSnapshotInfo? = nil) -> Bool {

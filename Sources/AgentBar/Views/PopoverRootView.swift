@@ -422,6 +422,7 @@ struct AccountRowView: View {
     var onSwitch: () -> Void
     var onLogin: () -> Void
     var onRemove: () -> Void
+    @State private var isConfirmingSwitch = false
     @State private var isConfirmingRemoval = false
 
     var body: some View {
@@ -464,7 +465,7 @@ struct AccountRowView: View {
                             .background(AgentBarPalette.primary, in: Capsule())
                     } else {
                         Button {
-                            onSwitch()
+                            isConfirmingSwitch = true
                         } label: {
                             if isSwitching {
                                 ProgressView()
@@ -542,6 +543,13 @@ struct AccountRowView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(account.needsLogin ? Color.red.opacity(0.70) : Color.clear, lineWidth: 1.5)
+        }
+        .confirmationDialog(L.text("use_account", language), isPresented: $isConfirmingSwitch) {
+            Button(L.text("use_account", language)) {
+                onSwitch()
+            }
+        } message: {
+            Text(L.text("switch_account_confirmation", language))
         }
         .confirmationDialog(L.text("remove_account", language), isPresented: $isConfirmingRemoval) {
             Button(L.text("remove_account", language), role: .destructive) {

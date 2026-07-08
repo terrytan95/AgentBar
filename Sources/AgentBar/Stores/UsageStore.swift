@@ -413,7 +413,14 @@ final class UsageStore: ObservableObject {
     }
 
     private var budgetWarningPrefix: String {
-        (hasBudgetWarning || rapidUsageAlert != nil) ? "! " : ""
+        accounts.contains { account in
+            switch account.loginWarning {
+            case .forcedLogout, .quotaUnavailable:
+                true
+            case .unreadableReset, nil:
+                false
+            }
+        } ? "! " : ""
     }
 
     private func invalidateStatisticsCaches() {

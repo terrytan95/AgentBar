@@ -53,6 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLog("AgentBar launched with menu bar status item")
     }
 
+    func application(_ application: NSApplication, shouldSaveApplicationState coder: NSCoder) -> Bool {
+        false
+    }
+
+    func application(_ application: NSApplication, shouldRestoreApplicationState coder: NSCoder) -> Bool {
+        false
+    }
+
     private func smokeReportURL() -> URL? {
         guard let index = CommandLine.arguments.firstIndex(of: "--smoke-report"),
               CommandLine.arguments.indices.contains(index + 1)

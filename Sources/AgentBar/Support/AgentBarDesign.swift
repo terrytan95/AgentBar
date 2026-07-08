@@ -62,7 +62,9 @@ enum AgentBarFonts {
             ("SourceHanSansSC-Medium", "otf"),
             ("SourceHanSansSC-Bold", "otf")
         ].forEach { name, fileExtension in
-            guard let url = Bundle.module.url(forResource: name, withExtension: fileExtension, subdirectory: "Fonts") else {
+            guard let url = Bundle.main.url(forResource: name, withExtension: fileExtension, subdirectory: "Fonts")
+                ?? Bundle.module.url(forResource: name, withExtension: fileExtension, subdirectory: "Fonts")
+            else {
                 NSLog("AgentBar font missing: \(name)")
                 return
             }

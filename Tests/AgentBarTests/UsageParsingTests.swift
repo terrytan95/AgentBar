@@ -52,8 +52,9 @@ final class UsageParsingTests: XCTestCase {
         checkMenuBarDefaultsToActiveAccountQuotaWindows()
         checkPopoverHeaderShowsActiveAccountFiveHourAndWeeklyRemaining()
         checkMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows()
-        checkBudgetSettingsPersistAndWarnInMenuBarTitle()
-        checkRapidUsageAlertWarnsInMenuBarTitle()
+        checkBudgetSettingsPersistWithoutMenuBarWarning()
+        checkRapidUsageAlertDoesNotWarnInMenuBarTitle()
+        checkAccount401WarnsInMenuBarTitle()
         checkQuotaResetNotificationsDetectWindowRefreshes()
         checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta()
         checkQuotaCapacityHistoryDoesNotEstimateAcrossAccountSwitches()
@@ -1428,7 +1429,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    private func checkBudgetSettingsPersistAndWarnInMenuBarTitle() {
+    private func checkBudgetSettingsPersistWithoutMenuBarWarning() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1458,11 +1459,11 @@ final class UsageParsingTests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(store.menuBarTitle.hasPrefix("! "))
+        XCTAssertFalse(store.menuBarTitle.hasPrefix("! "))
     }
 
     @MainActor
-    private func checkRapidUsageAlertWarnsInMenuBarTitle() {
+    private func checkRapidUsageAlertDoesNotWarnInMenuBarTitle() {
         let now = Date()
         let recentPointDate = max(now.addingTimeInterval(-60), Calendar.current.startOfDay(for: now))
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
@@ -1488,6 +1489,20 @@ final class UsageParsingTests: XCTestCase {
                 )
             ]
         )
+
+        XCTAssertFalse(store.menuBarTitle.hasPrefix("! "))
+    }
+
+    @MainActor
+    private func checkAccount401WarnsInMenuBarTitle() {
+        let now = Date()
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UsageStore(settings: SettingsStore(defaults: defaults), codexUsageSynchronizer: { .success })
+        var account = testAccount(id: "locked", name: "locked@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)
+        account.loginWarning = .forcedLogout
+        store.applyTestData(accounts: [account], points: [])
 
         XCTAssertTrue(store.menuBarTitle.hasPrefix("! "))
     }

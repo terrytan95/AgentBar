@@ -41,7 +41,10 @@ enum Pricing {
         "gpt-5.5-codex": .init(input: 5, output: 30, cacheRead: 0.50, cacheCreation: 0),
         "gpt-5.5-mini": .init(input: 0.25, output: 2, cacheRead: 0.025, cacheCreation: 0),
         "gpt-5.5-pro": .init(input: 5, output: 30, cacheRead: 0.50, cacheCreation: 0),
-        "gpt-5.6": .init(input: 5, output: 30, cacheRead: 0.50, cacheCreation: 0),
+        "gpt-5.6": .init(input: 5, output: 30, cacheRead: 0.50, cacheCreation: 6.25),
+        "gpt-5.6-sol": .init(input: 5, output: 30, cacheRead: 0.50, cacheCreation: 6.25),
+        "gpt-5.6-terra": .init(input: 2.50, output: 15, cacheRead: 0.25, cacheCreation: 3.125),
+        "gpt-5.6-luna": .init(input: 1, output: 6, cacheRead: 0.10, cacheCreation: 1.25),
         "gpt-4.1": .init(input: 2.0, output: 8.0, cacheRead: 0.5, cacheCreation: 0),
         "gpt-4.1-mini": .init(input: 0.4, output: 1.6, cacheRead: 0.1, cacheCreation: 0),
         "gpt-4.1-nano": .init(input: 0.1, output: 0.4, cacheRead: 0.025, cacheCreation: 0),
@@ -56,6 +59,9 @@ enum Pricing {
         var normalized = model.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalized.hasPrefix("openai/") {
             normalized.removeFirst("openai/".count)
+        }
+        if normalized.hasPrefix("openai.") {
+            normalized.removeFirst("openai.".count)
         }
         if let at = normalized.firstIndex(of: "@") {
             normalized = String(normalized[..<at])

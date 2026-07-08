@@ -45,6 +45,7 @@ final class UsageParsingTests: XCTestCase {
         try checkSessionFileCapSkipsAreReported()
         try checkCodexReadWarnsWhenSessionAccessIsDenied()
         try checkOpenAIModelPricingCalculatesPointCost()
+        try checkGPT56BedrockPricingCalculatesPointCost()
         checkPricingNormalizesProviderAndDateSuffixes()
         checkPricingUsesDecimalAndUnknownModelsCostZeroButKeepTokens()
         checkPricingFingerprintIsStableSHA256AndIncludedInSummary()
@@ -1309,8 +1310,24 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.points[0].estimatedCostUSD ?? 0, Decimal(string: "2.1375"))
     }
 
+    private func checkGPT56BedrockPricingCalculatesPointCost() throws {
+        let jsonl = """
+        {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","payload":{"info":{"model":"openai.gpt-5.6-terra","last_token_usage":{"input_tokens":1000000,"cached_input_tokens":100000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}
+        """.data(using: .utf8)!
+
+        let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl)
+
+        XCTAssertEqual(metrics.points.map(\.model), ["gpt-5.6-terra"])
+        XCTAssertEqual(metrics.points[0].estimatedCostUSD ?? 0, Decimal(string: "3.775"))
+        XCTAssertEqual(
+            Pricing.cost(model: "gpt-5.6-luna", input: 0, output: 0, cacheRead: 0, cacheCreation: 1_000_000),
+            Decimal(string: "1.25")
+        )
+    }
+
     private func checkPricingNormalizesProviderAndDateSuffixes() {
         XCTAssertEqual(Pricing.normalize(model: "openai/GPT-5.4@20260131"), "gpt-5.4")
+        XCTAssertEqual(Pricing.normalize(model: "openai.gpt-5.6-sol"), "gpt-5.6-sol")
         XCTAssertEqual(Pricing.normalize(model: "claude-sonnet-4-5-20260229"), "claude-sonnet-4-5")
         XCTAssertEqual(Pricing.normalize(model: "claude-opus-4-7-2026-02-29"), "claude-opus-4-7")
     }

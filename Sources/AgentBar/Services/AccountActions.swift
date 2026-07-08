@@ -312,7 +312,7 @@ enum AccountLoginLauncher {
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Update Token")
         alert.addButton(withTitle: "Cancel")
-        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 420, height: 24))
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 420, height: 24))
         input.placeholderString = "Bearer ..."
         alert.accessoryView = input
         guard alert.runModal() == .alertFirstButtonReturn else { return }

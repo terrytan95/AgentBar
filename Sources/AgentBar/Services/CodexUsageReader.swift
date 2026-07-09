@@ -130,10 +130,11 @@ struct CodexUsageReader {
     ) throws -> (snapshot: UsageSnapshot, activeAccountActivatedAt: Date?) {
         let registry = try JSONDecoder().decode(CodexRegistry.self, from: data)
         let activeAccountKey = registry.accounts.accountKey(matching: activeAuthInfo?.identity) ?? registry.activeAccountKey
+        let workspaceNamesByID = registry.accounts.workspaceNamesByID
         let accounts = registry.accounts.map { raw in
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
             let displayName = username ?? "Codex Account"
-            let workspaces = raw.usageWorkspaces
+            let workspaces = raw.usageWorkspaces.resolvingNames(with: workspaceNamesByID)
             let workspaceName = workspaces.first?.name
             let workspaceID = workspaces.first?.workspaceID
             let primary = raw.lastUsage?.primary.map {
@@ -480,6 +481,16 @@ private extension Array where Element == CodexRegistryAccount {
     func accountKey(matching identity: CodexAuthIdentity?) -> String? {
         first { $0.matchesAuthIdentity(identity) }?.accountKey
     }
+
+    var workspaceNamesByID: [String: String] {
+        flatMap(\.usageWorkspaces).reduce(into: [:]) { names, workspace in
+            guard let workspaceID = firstNonEmptyOptional([workspace.workspaceID]),
+                  let name = firstNonEmptyOptional([workspace.name]),
+                  names[workspaceID] == nil
+            else { return }
+            names[workspaceID] = name
+        }
+    }
 }
 
 private struct CodexWorkspaceCandidate: Decodable {
@@ -766,6 +777,16 @@ private func firstNonEmptyOptional(_ values: [String?]) -> String? {
 }
 
 private extension Array where Element == UsageWorkspace {
+    func resolvingNames(with namesByID: [String: String]) -> [UsageWorkspace] {
+        map { workspace in
+            guard firstNonEmptyOptional([workspace.name]) == nil,
+                  let workspaceID = firstNonEmptyOptional([workspace.workspaceID]),
+                  let name = namesByID[workspaceID]
+            else { return workspace }
+            return UsageWorkspace(name: name, workspaceID: workspaceID)
+        }.dedupedWorkspaces()
+    }
+
     func dedupedWorkspaces() -> [UsageWorkspace] {
         var seen = Set<String>()
         return compactMap { workspace in

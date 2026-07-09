@@ -94,6 +94,20 @@ open_app() {
   (cd / && /usr/bin/open -n "$APP_BUNDLE")
 }
 
+assert_no_embedded_build_paths() {
+  local offender
+  if offender="$(strings "$APP_BINARY" | grep -F -m1 -e "$ROOT_DIR" -e "$BUILD_SCRATCH_DIR")"; then
+    echo "error: $APP_BINARY embeds local build/source path: $offender" >&2
+    exit 1
+  fi
+}
+
+case "$MODE" in
+  --verify|verify|--package|package)
+    assert_no_embedded_build_paths
+    ;;
+esac
+
 case "$MODE" in
   run)
     open_app

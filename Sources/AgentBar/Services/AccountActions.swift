@@ -218,6 +218,8 @@ struct CodexAccountRemover {
 }
 
 enum AccountLoginLauncher {
+    static let codexAppBundleIdentifier = "com.openai.codex"
+
     static func promptCodexLoginAgain(recovery: CodexAccountSwitchRecovery) {
         DispatchQueue.main.async {
             let alert = NSAlert()
@@ -285,14 +287,17 @@ enum AccountLoginLauncher {
     }
 
     static func forceRestartCodexApp() {
-        let script = """
-        tell application "Codex" to quit
-        delay 1
-        do shell script "/usr/bin/pkill -x Codex || true"
-        delay 1
-        tell application "Codex" to activate
+        runAppleScript(codexAppRestartScript())
+    }
+
+    static func codexAppRestartScript() -> String {
         """
-        runAppleScript(script)
+        tell application id "\(codexAppBundleIdentifier)" to quit
+        delay 1
+        do shell script "/usr/bin/pkill -x ChatGPT || /usr/bin/pkill -x Codex || true"
+        delay 1
+        tell application id "\(codexAppBundleIdentifier)" to activate
+        """
     }
 
     private static func runAppleScript(_ script: String) {

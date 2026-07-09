@@ -16,8 +16,9 @@ final class AccountRotationTests: XCTestCase {
         checkSelectorReturnsNilWhenNoActiveCodexAccountExists()
         checkRestartGuardDoesNotRestartWhenCodexWorkIsRunning()
         checkRestartGuardForceRestartsWhenNoCodexWorkIsRunning()
-        checkProcessDetectorTreatsCodexCliRunAsWorkButIgnoresCodexAppProcess()
-        checkProcessDetectorIgnoresCodexAppWhenNoCliWorkIsRunning()
+        checkProcessDetectorTreatsCodexCliRunAsWorkButIgnoresChatGPTAppProcess()
+        checkProcessDetectorIgnoresChatGPTAppWhenNoCliWorkIsRunning()
+        checkRestartScriptUsesCodexBundleIDAndCurrentChatGPTProcessName()
         checkSettingsDefaultDisablesAutoRotationWithConservativeThreshold()
         checkSettingsPersistAutoRotationThresholdAndEnabledState()
         checkUsageStoreAutomaticallySwitchesAndSafelyRestartsWhenActiveCodexBelowThreshold()
@@ -187,11 +188,11 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(recorder.restartResult, .restarted)
     }
 
-    private func checkProcessDetectorTreatsCodexCliRunAsWorkButIgnoresCodexAppProcess() {
+    private func checkProcessDetectorTreatsCodexCliRunAsWorkButIgnoresChatGPTAppProcess() {
         let detector = CodexWorkActivityDetector(
             processLines: {
                 [
-                    "/Applications/Codex.app/Contents/MacOS/Codex",
+                    "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
                     "/opt/homebrew/bin/codex run --model gpt-5",
                     "/Applications/AgentBar.app/Contents/MacOS/AgentBar"
                 ]
@@ -201,17 +202,25 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertTrue(detector.hasRunningCodexWork())
     }
 
-    private func checkProcessDetectorIgnoresCodexAppWhenNoCliWorkIsRunning() {
+    private func checkProcessDetectorIgnoresChatGPTAppWhenNoCliWorkIsRunning() {
         let detector = CodexWorkActivityDetector(
             processLines: {
                 [
-                    "/Applications/Codex.app/Contents/MacOS/Codex",
+                    "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
                     "/Applications/AgentBar.app/Contents/MacOS/AgentBar"
                 ]
             }
         )
 
         XCTAssertFalse(detector.hasRunningCodexWork())
+    }
+
+    private func checkRestartScriptUsesCodexBundleIDAndCurrentChatGPTProcessName() {
+        let script = AccountLoginLauncher.codexAppRestartScript()
+
+        XCTAssertTrue(script.contains("application id \"com.openai.codex\""))
+        XCTAssertTrue(script.contains("pkill -x ChatGPT"))
+        XCTAssertFalse(script.contains("tell application \"Codex\""))
     }
 
     @MainActor

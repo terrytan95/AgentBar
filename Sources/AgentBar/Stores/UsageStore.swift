@@ -68,6 +68,7 @@ final class UsageStore: ObservableObject {
     private let manualCodexAppRestarter: @Sendable () -> Void
     private let codexAccountSwitchFailurePrompter: @Sendable (CodexAccountSwitchRecovery) -> Void
     private let codexAccountRecoveryLoginLauncher: @Sendable (String, String) -> Void
+    private let codexAccountLoginSuccessNotifier: @Sendable (String) -> Void
     private let quotaResetNotifier: @Sendable (QuotaResetNotification) -> Void
     private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
@@ -114,6 +115,9 @@ final class UsageStore: ObservableObject {
         codexAccountRecoveryLoginLauncher: @escaping @Sendable (String, String) -> Void = { accountID, accountLabel in
             AccountLoginLauncher.openCodexRecoveryLogin(accountID: accountID, accountLabel: accountLabel)
         },
+        codexAccountLoginSuccessNotifier: @escaping @Sendable (String) -> Void = { accountLabel in
+            AccountLoginLauncher.showCodexLoginSuccess(accountLabel: accountLabel)
+        },
         quotaResetNotifier: @escaping @Sendable (QuotaResetNotification) -> Void = { notification in
             QuotaResetDesktopNotifier.notify(notification)
         },
@@ -138,6 +142,7 @@ final class UsageStore: ObservableObject {
         self.manualCodexAppRestarter = manualCodexAppRestarter
         self.codexAccountSwitchFailurePrompter = codexAccountSwitchFailurePrompter
         self.codexAccountRecoveryLoginLauncher = codexAccountRecoveryLoginLauncher
+        self.codexAccountLoginSuccessNotifier = codexAccountLoginSuccessNotifier
         self.quotaResetNotifier = quotaResetNotifier
         accountRemovalObserver = NotificationCenter.default.addObserver(
             forName: Self.accountRemovalNotification,
@@ -431,7 +436,11 @@ final class UsageStore: ObservableObject {
         yearActivityBarsCache = nil
     }
 
-    private func switchCodexAccount(_ account: UsageAccount, restartMode: CodexAccountLifecycle.RestartMode) {
+    private func switchCodexAccount(
+        _ account: UsageAccount,
+        restartMode: CodexAccountLifecycle.RestartMode,
+        showLoginSuccess: Bool = false
+    ) {
         do {
             guard let switchingAccountID = try codexAccountLifecycle.beginSwitch(
                 account: account,
@@ -448,6 +457,7 @@ final class UsageStore: ObservableObject {
         let restarter = automaticCodexRestarter
         let manualRestarter = manualCodexAppRestarter
         let promptRelogin = codexAccountSwitchFailurePrompter
+        let notifyLoginSuccess = codexAccountLoginSuccessNotifier
 
         DispatchQueue.global(qos: .utility).async {
             let result = Result {
@@ -472,7 +482,9 @@ final class UsageStore: ObservableObject {
                     loginLauncher: self.codexAccountRecoveryLoginLauncher
                 ) {
                 case .success:
-                    break
+                    if showLoginSuccess {
+                        notifyLoginSuccess(account.displayName)
+                    }
                 case .failure(let message, let recovery):
                     self.lastError = message.redactedForCredentialWords
                     promptRelogin(recovery)
@@ -484,7 +496,7 @@ final class UsageStore: ObservableObject {
 
     private func retryPendingCodexSwitchRecovery() -> Bool {
         guard let pending = codexAccountLifecycle.pendingRecoverySwitch(accounts: accounts) else { return false }
-        switchCodexAccount(pending.account, restartMode: pending.restartMode)
+        switchCodexAccount(pending.account, restartMode: pending.restartMode, showLoginSuccess: true)
         return true
     }
 

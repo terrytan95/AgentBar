@@ -8,6 +8,7 @@ final class UsageParsingTests: XCTestCase {
     func testUsageParsingCoverage() async throws {
         try checkCodexRegistryParsesMultipleAccountsWithoutSecrets()
         try checkCodexRegistryParsesMultipleWorkspacesForOneAccount()
+        try checkCodexRegistrySharesWorkspaceNamesAcrossAccountRecords()
         checkAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows()
         try checkCodexRegistryFlagsAccountsThatNeedLoginAgain()
         try checkCodexRegistryTreatsTokenBacked401AsQuotaUnavailable()
@@ -181,6 +182,32 @@ final class UsageParsingTests: XCTestCase {
             "Client Team · client-ab",
             "+1 more"
         ])
+    }
+
+    private func checkCodexRegistrySharesWorkspaceNamesAcrossAccountRecords() throws {
+        let registry = """
+        {
+          "schema_version": 3,
+          "accounts": [
+            {
+              "account_key": "person-a::workspace-a",
+              "email": "person-a@example.com",
+              "account_name": "Design Team",
+              "chatgpt_account_id": "workspace-a"
+            },
+            {
+              "account_key": "person-b::workspace-a",
+              "email": "person-b@example.com"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CodexUsageReader.parseRegistry(data: registry, now: Date(timeIntervalSince1970: 1_781_388_300))
+        let account = try XCTUnwrap(snapshot.accounts.last)
+
+        XCTAssertEqual(account.workspaceDisplayValue, "Design Team · workspace-a")
+        XCTAssertEqual(account.workspaceLine(language: .english), "Workspace: Design Team · workspace-a")
     }
 
     private func checkExpiredQuotaWindowsRestoreLocallyWithoutRefreshingUsage() throws {

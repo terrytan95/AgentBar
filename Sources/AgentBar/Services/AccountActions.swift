@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+@preconcurrency import UserNotifications
 
 enum AccountActionError: LocalizedError, Equatable {
     case unsupportedService
@@ -347,13 +348,14 @@ enum AccountLoginLauncher {
     }
 
     static func showCodexLoginSuccess(accountLabel: String) {
-        DispatchQueue.main.async {
-            let alert = NSAlert()
-            alert.messageText = "Codex login successful"
-            alert.informativeText = "Account: \(accountLabel)"
-            alert.alertStyle = .informational
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Codex login successful"
+            content.body = "Account: \(accountLabel)"
+            content.sound = .default
+            center.add(UNNotificationRequest(identifier: "codex-login-success-\(UUID().uuidString)", content: content, trigger: nil))
         }
     }
 

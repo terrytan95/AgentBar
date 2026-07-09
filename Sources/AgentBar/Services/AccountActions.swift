@@ -326,6 +326,7 @@ enum AccountLoginLauncher {
                 switch result {
                 case .success:
                     postCodexRecoveryNotification()
+                    showCodexLoginSuccess(accountLabel: accountLabel)
                 case .failure(let error):
                     Task { @MainActor in
                         showError("Codex access token update failed", message: error.localizedDescription.redactedForCredentialWords)
@@ -343,6 +344,17 @@ enum AccountLoginLauncher {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    static func showCodexLoginSuccess(accountLabel: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Codex login successful"
+            alert.informativeText = "Account: \(accountLabel)"
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
     }
 
     private static func postCodexRecoveryNotification() {

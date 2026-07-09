@@ -406,6 +406,7 @@ final class AccountRotationTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let promptExpectation = expectation(description: "login prompt shown")
         let retryExpectation = expectation(description: "failed account retried after recovery")
+        let loginSuccessExpectation = expectation(description: "login success prompt shown")
         let recorder = AccountRotationRecorder()
         let account = account(id: "locked", used: 50, resetsAt: now.addingTimeInterval(300), lastUpdated: now)
         let codexSnapshot = UsageSnapshot(
@@ -440,6 +441,10 @@ final class AccountRotationTests: XCTestCase {
             },
             codexAccountRecoveryLoginLauncher: { accountID, accountLabel in
                 recorder.recordRecoveryLogin(accountID: accountID, accountLabel: accountLabel)
+            },
+            codexAccountLoginSuccessNotifier: { accountLabel in
+                recorder.recordLoginSuccess(accountLabel: accountLabel)
+                loginSuccessExpectation.fulfill()
             }
         )
         store.applyTestData(accounts: [account])
@@ -459,9 +464,10 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertEqual(recorder.recoveryLoginAccountLabel, "locked@example.com")
 
         store.refresh(force: true)
-        wait(for: [retryExpectation], timeout: 2)
+        wait(for: [retryExpectation, loginSuccessExpectation], timeout: 2)
         XCTAssertEqual(recorder.switchedAccountID, "locked")
         XCTAssertEqual(recorder.restartResult, .restarted)
+        XCTAssertEqual(recorder.loginSuccessAccountLabel, "locked@example.com")
     }
 
     private func checkCodexAccountRemoverDeletesActiveAccountFilesAndRegistryEntry() throws {
@@ -584,6 +590,7 @@ final class AccountRotationTests: XCTestCase {
         private var recordedPromptRecovery: CodexAccountSwitchRecovery?
         private var recordedRecoveryLoginAccountID: String?
         private var recordedRecoveryLoginAccountLabel: String?
+        private var recordedLoginSuccessAccountLabel: String?
         private var shouldFailNextSwitch = true
 
         var switchedAccountID: String? {
@@ -614,6 +621,12 @@ final class AccountRotationTests: XCTestCase {
             lock.lock()
             defer { lock.unlock() }
             return recordedRecoveryLoginAccountLabel
+        }
+
+        var loginSuccessAccountLabel: String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedLoginSuccessAccountLabel
         }
 
         func recordSwitch(_ accountID: String) {
@@ -651,6 +664,12 @@ final class AccountRotationTests: XCTestCase {
             lock.unlock()
         }
 
+        func recordLoginSuccess(accountLabel: String) {
+            lock.lock()
+            recordedLoginSuccessAccountLabel = accountLabel
+            lock.unlock()
+        }
+
         func reset() {
             lock.lock()
             recordedSwitchAccountID = nil
@@ -658,6 +677,7 @@ final class AccountRotationTests: XCTestCase {
             recordedPromptRecovery = nil
             recordedRecoveryLoginAccountID = nil
             recordedRecoveryLoginAccountLabel = nil
+            recordedLoginSuccessAccountLabel = nil
             shouldFailNextSwitch = true
             lock.unlock()
         }

@@ -116,10 +116,11 @@ struct CodexWorkActivityDetector {
     func hasRunningCodexWork() -> Bool {
         processLines().contains { line in
             let command = line.lowercased()
-            guard command.range(of: #"(^|[/\s])codex($|\s)"#, options: .regularExpression) != nil else {
+            if command.contains("/chatgpt.app/") || command.contains(".app/contents/macos/chatgpt")
+                || command.contains("/codex.app/") || command.contains(".app/contents/macos/codex") {
                 return false
             }
-            if command.contains("/codex.app/") || command.contains(".app/contents/macos/codex") {
+            guard command.range(of: #"(^|[/\s])codex($|\s)"#, options: .regularExpression) != nil else {
                 return false
             }
             if command.contains("agentbar") {

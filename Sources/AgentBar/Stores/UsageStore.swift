@@ -46,6 +46,7 @@ final class UsageStore: ObservableObject {
         didSet { invalidateStatisticsCaches() }
     }
     @Published private(set) var tasks: [AgentTask] = []
+    @Published private(set) var auditTasks: [AgentTask] = []
     @Published private(set) var quotaCapacityHistory: QuotaCapacityHistory
     @Published private(set) var isRefreshing = false
     @Published private(set) var isManualRefreshFeedbackVisible = false
@@ -572,6 +573,7 @@ final class UsageStore: ObservableObject {
         self.accounts = accounts
         self.points = points
         self.tasks = tasks
+        self.auditTasks = tasks
         hasLoadedTaskCenter = true
         lastTaskRefreshAt = Date()
         hasLoadedAccountInformation = true
@@ -607,6 +609,14 @@ final class UsageStore: ObservableObject {
     }
 
     private func applyTaskCenter(_ nextTasks: [AgentTask], now: Date = Date()) {
+        let sortedAuditTasks = nextTasks.sorted { lhs, rhs in
+            if lhs.auditDate != rhs.auditDate { return lhs.auditDate > rhs.auditDate }
+            return lhs.id > rhs.id
+        }
+        if auditTasks != sortedAuditTasks {
+            auditTasks = sortedAuditTasks
+        }
+
         let previousTasks = tasks
         let completedAfter = lastTaskRefreshAt ?? now
         let historyCutoff = now.addingTimeInterval(-Self.taskHistoryWindow)

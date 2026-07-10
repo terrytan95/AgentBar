@@ -280,12 +280,14 @@ struct CodexUsageReader {
                     title: currentSessionTitle,
                     projectName: projectName,
                     cwd: currentCwd,
+                    sourceFile: sourceFile,
                     startedAt: startedAt,
                     completedAt: nil,
                     lastActivityAt: startedAt,
                     tokens: .zero,
                     estimatedCostUSD: nil,
                     models: [],
+                    reasoningEffort: currentReasoningEffort,
                     terminalState: nil
                 )
                 activeTaskID = turnID
@@ -295,6 +297,7 @@ struct CodexUsageReader {
                 builder.title = taskTitleCandidate ?? builder.title ?? currentSessionTitle
                 builder.cwd = currentCwd ?? builder.cwd
                 builder.projectName = projectName ?? builder.projectName
+                builder.reasoningEffort = currentReasoningEffort ?? builder.reasoningEffort
                 if let parsedEventDate {
                     builder.lastActivityAt = max(builder.lastActivityAt, parsedEventDate)
                 }
@@ -360,6 +363,8 @@ struct CodexUsageReader {
                 builder.completedAt = completedAt
                 builder.lastActivityAt = max(builder.lastActivityAt, completedAt)
                 builder.terminalState = payload.type == "turn_aborted" ? .interrupted : .completed
+                builder.reportedDurationMilliseconds = payload.durationMilliseconds ?? builder.reportedDurationMilliseconds
+                builder.timeToFirstTokenMilliseconds = payload.timeToFirstTokenMilliseconds ?? builder.timeToFirstTokenMilliseconds
                 taskBuilders[turnID] = builder
                 if activeTaskID == turnID {
                     activeTaskID = nil
@@ -795,6 +800,8 @@ private struct CodexSessionPayload: Decodable {
     var turnID: String?
     var startedAt: Double?
     var completedAt: Double?
+    var durationMilliseconds: Double?
+    var timeToFirstTokenMilliseconds: Double?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -810,6 +817,8 @@ private struct CodexSessionPayload: Decodable {
         case turnID = "turn_id"
         case startedAt = "started_at"
         case completedAt = "completed_at"
+        case durationMilliseconds = "duration_ms"
+        case timeToFirstTokenMilliseconds = "time_to_first_token_ms"
     }
 
     init(from decoder: Decoder) throws {
@@ -827,6 +836,8 @@ private struct CodexSessionPayload: Decodable {
         turnID = try container.decodeIfPresent(String.self, forKey: .turnID)
         startedAt = try container.decodeIfPresent(Double.self, forKey: .startedAt)
         completedAt = try container.decodeIfPresent(Double.self, forKey: .completedAt)
+        durationMilliseconds = try? container.decode(Double.self, forKey: .durationMilliseconds)
+        timeToFirstTokenMilliseconds = try? container.decode(Double.self, forKey: .timeToFirstTokenMilliseconds)
     }
 
     var projectName: String? {
@@ -854,13 +865,17 @@ private struct CodexTaskBuilder {
     var title: String?
     var projectName: String?
     var cwd: String?
+    var sourceFile: String? = nil
     var startedAt: Date
     var completedAt: Date?
     var lastActivityAt: Date
     var tokens: TokenTotals
     var estimatedCostUSD: Decimal?
     var models: [String]
+    var reasoningEffort: String? = nil
     var terminalState: AgentTaskState?
+    var reportedDurationMilliseconds: Double? = nil
+    var timeToFirstTokenMilliseconds: Double? = nil
 
     var task: AgentTask {
         AgentTask(
@@ -869,13 +884,17 @@ private struct CodexTaskBuilder {
             title: title,
             projectName: projectName,
             cwd: cwd,
+            sourceFile: sourceFile,
             startedAt: startedAt,
             completedAt: completedAt,
             lastActivityAt: lastActivityAt,
             tokens: tokens,
             estimatedCostUSD: estimatedCostUSD,
             models: models,
-            terminalState: terminalState
+            reasoningEffort: reasoningEffort,
+            terminalState: terminalState,
+            reportedDurationMilliseconds: reportedDurationMilliseconds,
+            timeToFirstTokenMilliseconds: timeToFirstTokenMilliseconds
         )
     }
 }

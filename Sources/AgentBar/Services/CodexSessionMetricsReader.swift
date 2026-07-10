@@ -295,6 +295,13 @@ private extension AgentTask {
         if terminalState == .completed, other.terminalState != .completed { return true }
         if terminalState == .interrupted, other.terminalState == nil { return true }
         if terminalState == nil, other.terminalState != nil { return false }
+        let timingCount = [reportedDurationSeconds, validTimeToFirstTokenMilliseconds]
+            .compactMap { $0 }
+            .count
+        let otherTimingCount = [other.reportedDurationSeconds, other.validTimeToFirstTokenMilliseconds]
+            .compactMap { $0 }
+            .count
+        if timingCount != otherTimingCount { return timingCount > otherTimingCount }
         if lastActivityAt != other.lastActivityAt { return lastActivityAt > other.lastActivityAt }
         return tokens.total > other.tokens.total
     }

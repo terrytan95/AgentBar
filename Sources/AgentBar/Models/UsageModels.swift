@@ -388,13 +388,46 @@ struct AgentTask: Codable, Equatable, Identifiable, Sendable {
     var projectName: String?
     var cwd: String?
     var repositoryPath: String? = nil
+    var sourceFile: String? = nil
     var startedAt: Date
     var completedAt: Date?
     var lastActivityAt: Date
     var tokens: TokenTotals
     var estimatedCostUSD: Decimal?
     var models: [String]
+    var reasoningEffort: String? = nil
     var terminalState: AgentTaskState?
+    var reportedDurationMilliseconds: Double? = nil
+    var timeToFirstTokenMilliseconds: Double? = nil
+
+    var auditDate: Date {
+        completedAt ?? startedAt
+    }
+
+    var reportedDurationSeconds: TimeInterval? {
+        guard let milliseconds = reportedDurationMilliseconds,
+              milliseconds.isFinite,
+              milliseconds > 0
+        else { return nil }
+        return milliseconds / 1_000
+    }
+
+    var validTimeToFirstTokenMilliseconds: Double? {
+        guard let milliseconds = timeToFirstTokenMilliseconds,
+              milliseconds.isFinite,
+              milliseconds > 0
+        else { return nil }
+        return milliseconds
+    }
+
+    var tokensPerSecond: Double? {
+        guard let seconds = reportedDurationSeconds else { return nil }
+        return Double(tokens.output) / seconds
+    }
+
+    var uncachedInputTokens: Int {
+        max(0, tokens.input - tokens.cachedInput)
+    }
 
     func state(at now: Date = Date()) -> AgentTaskState {
         if let terminalState { return terminalState }

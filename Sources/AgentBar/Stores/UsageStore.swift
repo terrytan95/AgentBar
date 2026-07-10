@@ -364,7 +364,7 @@ final class UsageStore: ObservableObject {
                 self.snapshots = [.codex: codex, .claudeCode: claude]
                 self.accounts = codex.accounts + claude.accounts
                 self.points = codex.points + claude.points
-                self.applyTaskCenter(codex.tasks)
+                self.applyTaskCenter(codex.tasks, updatesAuditHistory: true)
                 self.recordQuotaCapacitySample()
                 self.sendQuotaResetNotifications(previousAccounts: previousAccounts, wasLoaded: wasLoaded)
                 self.hasLoadedAccountInformation = true
@@ -608,13 +608,19 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    private func applyTaskCenter(_ nextTasks: [AgentTask], now: Date = Date()) {
-        let sortedAuditTasks = nextTasks.sorted { lhs, rhs in
-            if lhs.auditDate != rhs.auditDate { return lhs.auditDate > rhs.auditDate }
-            return lhs.id > rhs.id
-        }
-        if auditTasks != sortedAuditTasks {
-            auditTasks = sortedAuditTasks
+    private func applyTaskCenter(
+        _ nextTasks: [AgentTask],
+        now: Date = Date(),
+        updatesAuditHistory: Bool = false
+    ) {
+        if updatesAuditHistory {
+            let sortedAuditTasks = nextTasks.sorted { lhs, rhs in
+                if lhs.auditDate != rhs.auditDate { return lhs.auditDate > rhs.auditDate }
+                return lhs.id > rhs.id
+            }
+            if auditTasks != sortedAuditTasks {
+                auditTasks = sortedAuditTasks
+            }
         }
 
         let previousTasks = tasks

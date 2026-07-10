@@ -10,10 +10,10 @@ struct AuditView: View {
     var onClearSessionSelection: () -> Void = {}
 
     @State private var selectedTab: AuditUsageTab = .threads
-    @State private var selectedCallID: String?
+    @State private var selectedTaskID: String?
     @State private var expandedThreadID: String?
     @State private var exportStatus: String?
-    @State private var callsPage = 0
+    @State private var tasksPage = 0
     @State private var threadsPage = 0
     @State private var sortColumn: AuditSortColumn = .time
     @State private var sortAscending = false
@@ -27,6 +27,7 @@ struct AuditView: View {
     private var snapshot: AuditUsageSnapshot {
         AuditUsageSnapshot.make(
             points: points,
+            tasks: store.auditTasks,
             range: store.selectedRange,
             customStart: store.customStart,
             customEnd: store.customEnd,
@@ -53,11 +54,11 @@ struct AuditView: View {
             applySessionSelection(to: preparedSnapshot)
         }
         .onChange(of: selectedSessionLabel) { _, _ in applySessionSelection(to: preparedSnapshot) }
-        .onChange(of: preparedSnapshot.callIDs) { _, ids in
-            callsPage = clampedPage(callsPage, total: ids.count)
+        .onChange(of: preparedSnapshot.taskIDs) { _, ids in
+            tasksPage = clampedPage(tasksPage, total: ids.count)
             threadsPage = clampedPage(threadsPage, total: preparedSnapshot.threadRows.count)
-            guard let selectedCallID, ids.contains(selectedCallID) else {
-                self.selectedCallID = ids.first
+            guard let selectedTaskID, ids.contains(selectedTaskID) else {
+                self.selectedTaskID = ids.first
                 return
             }
         }
@@ -122,7 +123,7 @@ struct AuditView: View {
     }
 
     private func statusPill(_ snapshot: AuditUsageSnapshot) -> some View {
-        Text("\(snapshot.rangePoints.count) \(localized("calls")) · JSONL")
+        Text("\(snapshot.rangeTasks.count) \(localized("tasks")) · JSONL")
             .font(.agentBar(size: 12, weight: .bold))
             .foregroundStyle(AgentBarPalette.primary)
             .padding(.horizontal, 10)
@@ -156,7 +157,7 @@ struct AuditView: View {
         GeometryReader { proxy in
             let columns = Self.kpiGridColumns(for: proxy.size.width)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.kpiGridSpacing), count: columns), spacing: Self.kpiGridSpacing) {
-                metricCard(localized("visible_calls"), "\(snapshot.rangePoints.count)")
+                metricCard(localized("visible_tasks"), "\(snapshot.rangeTasks.count)")
                 metricCard(localized("total_tokens"), DisplayFormatters.compactTokenString(snapshot.composition.total, language: store.language))
                 metricCard(localized("cached_input"), DisplayFormatters.compactTokenString(snapshot.composition.cachedInput, language: store.language))
                 metricCard(localized("uncached_input"), DisplayFormatters.compactTokenString(max(0, snapshot.composition.input - snapshot.composition.cachedInput), language: store.language))
@@ -207,7 +208,7 @@ struct AuditView: View {
     private func tablePanel(_ snapshot: AuditUsageSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                Text(selectedTab == .calls ? localized("model_calls") : localized("threads"))
+                Text(selectedTab == .tasks ? localized("model_tasks") : localized("threads"))
                     .font(.agentBar(size: 16, weight: .bold))
                 Picker("", selection: $selectedTab) {
                     ForEach(AuditUsageTab.allCases) { tab in
@@ -229,7 +230,7 @@ struct AuditView: View {
 
             Divider()
 
-            Text(selectedTab == .calls ? localized("calls_caption") : localized("threads_caption"))
+            Text(selectedTab == .tasks ? localized("tasks_caption") : localized("threads_caption"))
                 .font(.agentBar(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
@@ -244,8 +245,8 @@ struct AuditView: View {
 
                 Divider()
 
-                if selectedTab == .calls {
-                    callsTable(snapshot)
+                if selectedTab == .tasks {
+                    tasksTable(snapshot)
                 } else {
                     threadsTable(snapshot)
                 }
@@ -258,10 +259,11 @@ struct AuditView: View {
         HStack(spacing: 8) {
             sortHeader(.time, localized("time"), width: 108, alignment: .leading)
             sortThreadHeader(localized("thread"))
-            sortHeader(.duration, localized("duration"), width: 60)
-            sortHeader(.initiated, localized("initiated"), width: 58)
             sortHeader(.model, localized("model"), width: 76)
             sortHeader(.effort, localized("effort"), width: 50)
+            sortHeader(.tps, localized("tps"), width: 48)
+            sortHeader(.firstToken, localized("first_token"), width: 72)
+            sortHeader(.duration, localized("duration"), width: 64)
             sortHeader(.tokens, localized("tokens"), width: 68)
             sortHeader(.cached, localized("cached"), width: 68)
             sortHeader(.uncached, localized("uncached"), width: 68)
@@ -272,16 +274,16 @@ struct AuditView: View {
         .foregroundStyle(.secondary)
     }
 
-    private func callsTable(_ snapshot: AuditUsageSnapshot) -> some View {
+    private func tasksTable(_ snapshot: AuditUsageSnapshot) -> some View {
         VStack(spacing: 0) {
-            ForEach(page(snapshot.sortedCalls, index: clampedPage(callsPage, total: snapshot.rangePoints.count))) { point in
-                callRow(point, nested: false)
-                if selectedCallID == point.callID {
-                    callDetail(point: point)
+            ForEach(page(snapshot.sortedTasks, index: clampedPage(tasksPage, total: snapshot.rangeTasks.count))) { task in
+                taskRow(task, threadTitle: snapshot.sessionTitle(for: task), nested: false)
+                if selectedTaskID == task.id {
+                    taskDetail(task: task, threadTitle: snapshot.sessionTitle(for: task))
                 }
                 Divider()
             }
-            paginationFooter(total: snapshot.rangePoints.count, page: $callsPage, itemName: localized("calls"))
+            paginationFooter(total: snapshot.rangeTasks.count, page: $tasksPage, itemName: localized("tasks"))
         }
     }
 
@@ -290,10 +292,10 @@ struct AuditView: View {
             ForEach(page(snapshot.threadRows, index: clampedPage(threadsPage, total: snapshot.threadRows.count))) { thread in
                 threadRow(thread)
                 if expandedThreadID == thread.id {
-                    ForEach(thread.calls.prefix(20)) { point in
-                        callRow(point, nested: true)
-                        if selectedCallID == point.callID {
-                            callDetail(point: point)
+                    ForEach(thread.tasks.prefix(20)) { task in
+                        taskRow(task, threadTitle: thread.title, nested: true)
+                        if selectedTaskID == task.id {
+                            taskDetail(task: task, threadTitle: thread.title)
                         }
                     }
                 }
@@ -303,26 +305,27 @@ struct AuditView: View {
         }
     }
 
-    private func callRow(_ point: UsagePoint, nested: Bool) -> some View {
+    private func taskRow(_ task: AgentTask, threadTitle: String, nested: Bool) -> some View {
         Button {
-            selectedCallID = point.callID
+            selectedTaskID = task.id
         } label: {
             HStack(spacing: 8) {
-                column(dateText(point.date), width: 108, alignment: .leading)
-                threadColumn((nested ? "  " : "") + (point.sessionTitle ?? point.sessionID ?? localized("unknown_thread")), strong: true)
-                column("1", width: 60)
-                column(point.initiator ?? point.service.rawValue, width: 58)
-                column(point.model, width: 76, pill: true)
-                column(point.reasoningEffort ?? "-", width: 50)
-                column(DisplayFormatters.compactTokenString(point.tokens.total, language: store.language), width: 68)
-                column(DisplayFormatters.compactTokenString(point.tokens.cachedInput, language: store.language), width: 68)
-                column(DisplayFormatters.compactTokenString(point.uncachedInputTokens, language: store.language), width: 68)
-                column(DisplayFormatters.compactTokenString(point.tokens.output, language: store.language), width: 58)
-                column(DisplayFormatters.compactTokenString(point.tokens.reasoningOutput, language: store.language), width: 58)
+                column(dateText(task.auditDate), width: 108, alignment: .leading)
+                threadColumn((nested ? "  " : "") + threadTitle, strong: true)
+                column(modelText(task.models), width: 76, pill: true)
+                column(task.reasoningEffort ?? "—", width: 50)
+                column(tpsText(task.tokensPerSecond), width: 48)
+                column(millisecondsText(task.validTimeToFirstTokenMilliseconds), width: 72)
+                column(millisecondsText(task.reportedDurationMilliseconds), width: 64)
+                column(DisplayFormatters.compactTokenString(task.tokens.total, language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(task.tokens.cachedInput, language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(task.uncachedInputTokens, language: store.language), width: 68)
+                column(DisplayFormatters.compactTokenString(task.tokens.output, language: store.language), width: 58)
+                column(DisplayFormatters.compactTokenString(task.tokens.reasoningOutput, language: store.language), width: 58)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, nested ? 8 : 11)
-            .background(selectedCallID == point.callID ? AgentBarPalette.primary.opacity(0.10) : Color.clear)
+            .background(selectedTaskID == task.id ? AgentBarPalette.primary.opacity(0.10) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -332,7 +335,7 @@ struct AuditView: View {
     private func threadRow(_ thread: AuditThreadRow) -> some View {
         Button {
             expandedThreadID = expandedThreadID == thread.id ? nil : thread.id
-            selectedCallID = thread.calls.first?.callID
+            selectedTaskID = thread.tasks.first?.id
         } label: {
             HStack(spacing: 8) {
                 column(dateText(thread.latest), width: 108, alignment: .leading)
@@ -343,17 +346,18 @@ struct AuditView: View {
                         Text(thread.title)
                             .font(.agentBar(size: 12, weight: .bold))
                             .lineLimit(2)
-                        Text(thread.subtitle)
+                        Text("\(thread.tasks.count) \(localized("tasks")) · \(thread.projectName)")
                             .font(.agentBar(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                column(thread.duration, width: 60)
-                column("\(thread.calls.count)", width: 58)
-                column(thread.calls.first?.model ?? "-", width: 76, pill: true)
-                column(thread.calls.first?.reasoningEffort ?? "-", width: 50)
+                column(modelText(thread.models), width: 76, pill: true)
+                column(effortText(thread.reasoningEfforts), width: 50)
+                column(tpsText(thread.tokensPerSecond), width: 48)
+                column(millisecondsText(thread.averageTimeToFirstTokenMilliseconds), width: 72)
+                column(millisecondsText(thread.reportedDurationMilliseconds), width: 64)
                 column(DisplayFormatters.compactTokenString(thread.tokens.total, language: store.language), width: 68)
                 column(DisplayFormatters.compactTokenString(thread.tokens.cachedInput, language: store.language), width: 68)
                 column(DisplayFormatters.compactTokenString(max(0, thread.tokens.input - thread.tokens.cachedInput), language: store.language), width: 68)
@@ -428,21 +432,22 @@ struct AuditView: View {
         .pointingHandCursor()
     }
 
-    private func callDetail(point: UsagePoint) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private func taskDetail(task: AgentTask, threadTitle: String) -> some View {
+        let models = task.models.isEmpty ? "—" : task.models.joined(separator: ", ")
+        return VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(localized("call_investigator"))
+                    Text(localized("task_investigator"))
                         .font(.agentBar(size: 11, weight: .bold))
                         .foregroundStyle(.secondary)
-                    Text(point.sessionTitle ?? point.sessionID ?? localized("unknown_thread"))
+                    Text(task.title ?? threadTitle)
                         .font(.agentBar(size: 16, weight: .bold))
-                    Text("\(dateText(point.date)) · \(point.model) · \(point.reasoningEffort ?? "-")")
+                    Text("\(dateText(task.auditDate)) · \(threadTitle) · \(task.reasoningEffort ?? "—")")
                         .font(.agentBar(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if let sourceFile = point.sourceFile {
+                if let sourceFile = task.sourceFile {
                     Button {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: sourceFile)])
                     } label: {
@@ -454,14 +459,18 @@ struct AuditView: View {
             }
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
-                detailCard(localized("last_call_input"), DisplayFormatters.tokenString(point.tokens.input), localized("exact_from_callback"))
-                detailCard(localized("cached_input"), DisplayFormatters.tokenString(point.tokens.cachedInput), "\(Int(point.cacheRatio * 100))%")
-                detailCard(localized("uncached_input"), DisplayFormatters.tokenString(point.uncachedInputTokens), localized("fresh_context"))
-                detailCard(localized("output"), DisplayFormatters.tokenString(point.tokens.output), localized("assistant_output"))
-                detailCard(localized("reasoning_output"), DisplayFormatters.tokenString(point.tokens.reasoningOutput), localized("reasoning"))
-                detailCard(localized("estimated_cost"), costText(point.estimatedCostUSD), localized("configured_price"))
-                detailCard(localized("source_line"), sourceLineText(point), localized("source_file_line"))
-                detailCard("Cwd", point.cwd ?? "-", point.projectName ?? "-")
+                detailCard(localized("tps"), tpsText(task.tokensPerSecond), localized("end_to_end_throughput"))
+                detailCard(localized("first_token"), millisecondsText(task.validTimeToFirstTokenMilliseconds), localized("reported_by_codex"))
+                detailCard(localized("duration"), millisecondsText(task.reportedDurationMilliseconds), localized("reported_by_codex"))
+                detailCard(localized("last_call_input"), DisplayFormatters.tokenString(task.tokens.input), localized("exact_from_callback"))
+                detailCard(localized("cached_input"), DisplayFormatters.tokenString(task.tokens.cachedInput), "")
+                detailCard(localized("uncached_input"), DisplayFormatters.tokenString(task.uncachedInputTokens), localized("fresh_context"))
+                detailCard(localized("output"), DisplayFormatters.tokenString(task.tokens.output), localized("assistant_output"))
+                detailCard(localized("reasoning_output"), DisplayFormatters.tokenString(task.tokens.reasoningOutput), localized("reasoning"))
+                detailCard(localized("estimated_cost"), costText(task.estimatedCostUSD), localized("configured_price"))
+                detailCard(localized("model"), models, task.reasoningEffort ?? "—")
+                detailCard("Task ID", task.id, task.sessionID)
+                detailCard("Cwd", task.cwd ?? "—", task.projectName ?? "—")
             }
         }
         .padding(16)
@@ -571,36 +580,35 @@ struct AuditView: View {
             sortColumn = column
             sortAscending = column.defaultAscending
         }
-        callsPage = 0
+        tasksPage = 0
         threadsPage = 0
     }
 
     private func applySessionSelection(to snapshot: AuditUsageSnapshot) {
-        selectedCallID = selectedCallID ?? snapshot.callIDs.first
+        selectedTaskID = selectedTaskID ?? snapshot.taskIDs.first
         guard selectedSessionLabel != nil else { return }
         selectedTab = .threads
-        callsPage = 0
+        tasksPage = 0
         threadsPage = 0
         expandedThreadID = snapshot.threadRows.first?.id
-        selectedCallID = snapshot.threadRows.first?.calls.first?.callID ?? snapshot.callIDs.first
+        selectedTaskID = snapshot.threadRows.first?.tasks.first?.id ?? snapshot.taskIDs.first
     }
 
     private func clearSessionSelection() {
         selectedTab = .threads
-        selectedCallID = nil
+        selectedTaskID = nil
         expandedThreadID = nil
-        callsPage = 0
+        tasksPage = 0
         threadsPage = 0
         onClearSessionSelection()
     }
 
     private func export(format: UsageExportFormat, snapshot: AuditUsageSnapshot) {
-        let rows = UsageAuditReporter.exportRows(
-            points: snapshot.rangePoints,
-            range: .all
-        )
+        let rows = selectedTab == .tasks
+            ? snapshot.taskExportRows
+            : snapshot.threadExportRows
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "AgentBar-usage.\(format.rawValue)"
+        panel.nameFieldStringValue = "AgentBar-audit-\(selectedTab.rawValue).\(format.rawValue)"
         panel.allowedContentTypes = format == .csv ? [.commaSeparatedText] : [.json]
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -613,12 +621,28 @@ struct AuditView: View {
         }
     }
 
-    private func sourceLineText(_ point: UsagePoint) -> String {
-        guard let sourceFile = point.sourceFile else { return "-" }
-        if let sourceLine = point.sourceLine {
-            return "\(sourceFile):\(sourceLine)"
-        }
-        return sourceFile
+    private func tpsText(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return "—" }
+        return String(format: "%.0f", value)
+    }
+
+    private func millisecondsText(_ value: Double?) -> String {
+        guard let value, value.isFinite, value > 0 else { return "—" }
+        if value < 1_000 { return String(format: "%.0f ms", value) }
+        if value < 10_000 { return String(format: "%.2f s", value / 1_000) }
+        return String(format: "%.1f s", value / 1_000)
+    }
+
+    private func modelText(_ models: [String]) -> String {
+        let values = Array(Set(models)).sorted()
+        guard let first = values.first else { return "—" }
+        return values.count == 1 ? first : localized("mixed")
+    }
+
+    private func effortText(_ efforts: [String]) -> String {
+        let values = Array(Set(efforts)).sorted()
+        guard let first = values.first else { return "—" }
+        return values.count == 1 ? first : localized("mixed")
     }
 
     private func dateText(_ date: Date) -> String {
@@ -637,24 +661,34 @@ struct AuditView: View {
 
 struct AuditUsageSnapshot {
     var rangePoints: [UsagePoint]
+    var rangeTasks: [AgentTask]
     var sortedCalls: [UsagePoint]
+    var sortedTasks: [AgentTask]
     var threadRows: [AuditThreadRow]
+    var sessionTitles: [String: String]
     var composition: TokenTotals
     var totalCost: Decimal?
     var callIDs: [String]
+    var taskIDs: [String]
 
     static func make(
         points: [UsagePoint],
+        tasks: [AgentTask] = [],
         range: UsageRange,
         customStart: Date?,
         customEnd: Date?,
         selectedSessionLabel: String? = nil,
         sortColumn: AuditSortColumn,
-        sortAscending: Bool
+        sortAscending: Bool,
+        now: Date = Date(),
+        calendar: Calendar = .current
     ) -> AuditUsageSnapshot {
+        let sessionTitles = makeSessionTitles(points)
         let rangePoints = UsageRangeProjection.filteredPoints(
             points: points,
             range: range,
+            now: now,
+            calendar: calendar,
             customStart: customStart,
             customEnd: customEnd
         )
@@ -663,44 +697,178 @@ struct AuditUsageSnapshot {
             return sessionLabel(for: point) == selectedSessionLabel
         }
         .sorted { $0.date > $1.date }
+        let interval = range.dateInterval(
+            now: now,
+            calendar: calendar,
+            customStart: customStart,
+            customEnd: customEnd
+        )
+        let rangeTasks = tasks.filter { task in
+            guard interval?.contains(task.auditDate) ?? true else { return false }
+            guard let selectedSessionLabel else { return true }
+            return sessionLabel(for: task, titles: sessionTitles) == selectedSessionLabel
+        }
+        .sorted { $0.auditDate > $1.auditDate }
         let threadRows = sortedThreads(
-            makeThreadRows(rangePoints),
+            makeThreadRows(rangePoints, tasks: rangeTasks, sessionTitles: sessionTitles),
             sortColumn: sortColumn,
             sortAscending: sortAscending
         )
 
         return AuditUsageSnapshot(
             rangePoints: rangePoints,
+            rangeTasks: rangeTasks,
             sortedCalls: sortedCalls(rangePoints, sortColumn: sortColumn, sortAscending: sortAscending),
+            sortedTasks: sortedTasks(
+                rangeTasks,
+                sessionTitles: sessionTitles,
+                sortColumn: sortColumn,
+                sortAscending: sortAscending
+            ),
             threadRows: threadRows,
+            sessionTitles: sessionTitles,
             composition: rangePoints.reduce(TokenTotals.zero) { $0 + $1.tokens },
             totalCost: totalCost(rangePoints),
-            callIDs: rangePoints.map(\.callID)
+            callIDs: rangePoints.map(\.callID),
+            taskIDs: rangeTasks.map(\.id)
         )
+    }
+
+    func sessionTitle(for task: AgentTask) -> String {
+        Self.sessionLabel(for: task, titles: sessionTitles)
+    }
+
+    var taskExportRows: [UsageAuditPerformanceExportRow] {
+        sortedTasks.map { task in
+            UsageAuditPerformanceExportRow(
+                kind: "task",
+                date: task.auditDate,
+                sessionID: task.sessionID,
+                sessionTitle: sessionTitle(for: task),
+                taskID: task.id,
+                taskTitle: task.title,
+                projectName: task.projectName,
+                models: task.models.joined(separator: ", "),
+                reasoningEffort: task.reasoningEffort,
+                inputTokens: task.tokens.input,
+                cachedInputTokens: task.tokens.cachedInput,
+                outputTokens: task.tokens.output,
+                reasoningOutputTokens: task.tokens.reasoningOutput,
+                totalTokens: task.tokens.total,
+                durationMilliseconds: task.reportedDurationSeconds.map { $0 * 1_000 },
+                timeToFirstTokenMilliseconds: task.validTimeToFirstTokenMilliseconds,
+                tokensPerSecond: task.tokensPerSecond,
+                estimatedCostUSD: task.estimatedCostUSD
+            )
+        }
+    }
+
+    var threadExportRows: [UsageAuditPerformanceExportRow] {
+        threadRows.map { thread in
+            UsageAuditPerformanceExportRow(
+                kind: "thread",
+                date: thread.latest,
+                sessionID: thread.tasks.first?.sessionID ?? thread.calls.first?.sessionID ?? thread.id,
+                sessionTitle: thread.title,
+                taskID: nil,
+                taskTitle: nil,
+                projectName: thread.projectName,
+                models: thread.models.joined(separator: ", "),
+                reasoningEffort: thread.reasoningEfforts.count == 1 ? thread.reasoningEfforts[0] : nil,
+                inputTokens: thread.tokens.input,
+                cachedInputTokens: thread.tokens.cachedInput,
+                outputTokens: thread.tokens.output,
+                reasoningOutputTokens: thread.tokens.reasoningOutput,
+                totalTokens: thread.tokens.total,
+                durationMilliseconds: thread.reportedDurationMilliseconds,
+                timeToFirstTokenMilliseconds: thread.averageTimeToFirstTokenMilliseconds,
+                tokensPerSecond: thread.tokensPerSecond,
+                estimatedCostUSD: thread.cost
+            )
+        }
     }
 
     private static func sessionLabel(for point: UsagePoint) -> String {
         point.sessionTitle ?? point.sessionID ?? "Unknown session"
     }
 
-    private static func makeThreadRows(_ points: [UsagePoint]) -> [AuditThreadRow] {
-        Dictionary(grouping: points) { point in
-            sessionLabel(for: point)
+    private static func makeSessionTitles(_ points: [UsagePoint]) -> [String: String] {
+        points.sorted { $0.date > $1.date }.reduce(into: [:]) { titles, point in
+            guard let sessionID = point.sessionID,
+                  titles[sessionID] == nil
+            else { return }
+            titles[sessionID] = sessionLabel(for: point)
         }
-        .map { title, calls in
-            let sorted = calls.sorted { $0.date > $1.date }
-            let totals = calls.reduce(TokenTotals.zero) { $0 + $1.tokens }
+    }
+
+    private static func sessionLabel(for task: AgentTask, titles: [String: String]) -> String {
+        titles[task.sessionID] ?? task.title ?? task.sessionID
+    }
+
+    private static func threadID(for point: UsagePoint) -> String {
+        point.sessionID ?? sessionLabel(for: point)
+    }
+
+    private static func makeThreadRows(
+        _ points: [UsagePoint],
+        tasks: [AgentTask],
+        sessionTitles: [String: String]
+    ) -> [AuditThreadRow] {
+        let pointGroups = Dictionary(grouping: points, by: threadID(for:))
+        let taskGroups = Dictionary(grouping: tasks, by: \.sessionID)
+        let threadIDs = Set(pointGroups.keys).union(taskGroups.keys)
+
+        return threadIDs.map { threadID in
+            let calls = pointGroups[threadID] ?? []
+            let tasks = taskGroups[threadID] ?? []
+            let sortedCalls = calls.sorted { $0.date > $1.date }
+            let sortedTasks = tasks.sorted { $0.auditDate > $1.auditDate }
+            let totals = tasks.isEmpty
+                ? calls.reduce(TokenTotals.zero) { $0 + $1.tokens }
+                : tasks.reduce(TokenTotals.zero) { $0 + $1.tokens }
             let durationSeconds = durationSeconds(calls: calls)
+            let timedTasks = tasks.compactMap { task -> (AgentTask, Double)? in
+                guard let duration = task.reportedDurationMilliseconds,
+                      task.reportedDurationSeconds != nil
+                else { return nil }
+                return (task, duration)
+            }
+            let reportedDurationMilliseconds = timedTasks.isEmpty
+                ? nil
+                : timedTasks.reduce(0) { $0 + $1.1 }
+            let timedOutputTokens = timedTasks.reduce(0) { $0 + $1.0.tokens.output }
+            let tokensPerSecond = reportedDurationMilliseconds.map { milliseconds in
+                Double(timedOutputTokens) / (milliseconds / 1_000)
+            }
+            let firstTokenValues = tasks.compactMap(\.validTimeToFirstTokenMilliseconds)
+            let averageFirstToken = firstTokenValues.isEmpty
+                ? nil
+                : firstTokenValues.reduce(0, +) / Double(firstTokenValues.count)
+            let projectName = sortedTasks.first?.projectName
+                ?? sortedCalls.first?.projectName
+                ?? "Unknown project"
+            let latest = (calls.map(\.date) + tasks.map(\.auditDate)).max() ?? .distantPast
+            let title = sessionTitles[threadID]
+                ?? sortedCalls.first.map(sessionLabel(for:))
+                ?? sortedTasks.first?.title
+                ?? threadID
             return AuditThreadRow(
-                id: title,
+                id: tasks.isEmpty ? title : threadID,
                 title: title,
-                subtitle: "\(calls.count) calls · \(sorted.first?.projectName ?? "Unknown project")",
-                latest: sorted.first?.date ?? .distantPast,
+                subtitle: "\(tasks.count) tasks · \(projectName)",
+                projectName: projectName,
+                latest: latest,
                 durationSeconds: durationSeconds,
                 duration: durationText(seconds: durationSeconds),
                 tokens: totals,
-                cost: totalCost(calls),
-                calls: sorted
+                cost: tasks.isEmpty ? totalCost(calls) : totalTaskCost(tasks),
+                calls: sortedCalls,
+                tasks: sortedTasks,
+                models: Array(Set(tasks.flatMap(\.models))).sorted(),
+                reasoningEfforts: Array(Set(tasks.compactMap(\.reasoningEffort))).sorted(),
+                reportedDurationMilliseconds: reportedDurationMilliseconds,
+                averageTimeToFirstTokenMilliseconds: averageFirstToken,
+                tokensPerSecond: tokensPerSecond
             )
         }
     }
@@ -710,6 +878,25 @@ struct AuditUsageSnapshot {
         return calls.sorted { lhs, rhs in
             if let ordered = callOrder(lhs, rhs, sortColumn: sortColumn, sortAscending: sortAscending) { return ordered }
             return lhs.date > rhs.date
+        }
+    }
+
+    private static func sortedTasks(
+        _ tasks: [AgentTask],
+        sessionTitles: [String: String],
+        sortColumn: AuditSortColumn,
+        sortAscending: Bool
+    ) -> [AgentTask] {
+        if sortColumn == .time && !sortAscending { return tasks }
+        return tasks.sorted { lhs, rhs in
+            if let ordered = taskOrder(
+                lhs,
+                rhs,
+                sessionTitles: sessionTitles,
+                sortColumn: sortColumn,
+                sortAscending: sortAscending
+            ) { return ordered }
+            return lhs.auditDate > rhs.auditDate
         }
     }
 
@@ -728,12 +915,55 @@ struct AuditUsageSnapshot {
             ordered(sessionLabel(for: lhs), sessionLabel(for: rhs), sortAscending: sortAscending)
         case .duration:
             nil
-        case .initiated:
-            ordered(lhs.initiator ?? lhs.service.rawValue, rhs.initiator ?? rhs.service.rawValue, sortAscending: sortAscending)
+        case .tps, .firstToken:
+            nil
         case .model:
             ordered(lhs.model, rhs.model, sortAscending: sortAscending)
         case .effort:
             ordered(lhs.reasoningEffort ?? "", rhs.reasoningEffort ?? "", sortAscending: sortAscending)
+        case .tokens:
+            ordered(lhs.tokens.total, rhs.tokens.total, sortAscending: sortAscending)
+        case .cached:
+            ordered(lhs.tokens.cachedInput, rhs.tokens.cachedInput, sortAscending: sortAscending)
+        case .uncached:
+            ordered(lhs.uncachedInputTokens, rhs.uncachedInputTokens, sortAscending: sortAscending)
+        case .output:
+            ordered(lhs.tokens.output, rhs.tokens.output, sortAscending: sortAscending)
+        case .reasoning:
+            ordered(lhs.tokens.reasoningOutput, rhs.tokens.reasoningOutput, sortAscending: sortAscending)
+        }
+    }
+
+    private static func taskOrder(
+        _ lhs: AgentTask,
+        _ rhs: AgentTask,
+        sessionTitles: [String: String],
+        sortColumn: AuditSortColumn,
+        sortAscending: Bool
+    ) -> Bool? {
+        switch sortColumn {
+        case .time:
+            ordered(lhs.auditDate, rhs.auditDate, sortAscending: sortAscending)
+        case .thread:
+            ordered(
+                sessionLabel(for: lhs, titles: sessionTitles),
+                sessionLabel(for: rhs, titles: sessionTitles),
+                sortAscending: sortAscending
+            )
+        case .model:
+            ordered(lhs.models.first ?? "", rhs.models.first ?? "", sortAscending: sortAscending)
+        case .effort:
+            ordered(lhs.reasoningEffort ?? "", rhs.reasoningEffort ?? "", sortAscending: sortAscending)
+        case .tps:
+            orderedOptional(lhs.tokensPerSecond, rhs.tokensPerSecond, sortAscending: sortAscending)
+        case .firstToken:
+            orderedOptional(
+                lhs.validTimeToFirstTokenMilliseconds,
+                rhs.validTimeToFirstTokenMilliseconds,
+                sortAscending: sortAscending
+            )
+        case .duration:
+            orderedOptional(lhs.reportedDurationSeconds, rhs.reportedDurationSeconds, sortAscending: sortAscending)
         case .tokens:
             ordered(lhs.tokens.total, rhs.tokens.total, sortAscending: sortAscending)
         case .cached:
@@ -754,13 +984,23 @@ struct AuditUsageSnapshot {
         case .thread:
             ordered(lhs.title, rhs.title, sortAscending: sortAscending)
         case .duration:
-            ordered(lhs.durationSeconds, rhs.durationSeconds, sortAscending: sortAscending)
-        case .initiated:
-            ordered(lhs.calls.first?.initiator ?? lhs.calls.first?.service.rawValue ?? "", rhs.calls.first?.initiator ?? rhs.calls.first?.service.rawValue ?? "", sortAscending: sortAscending)
+            orderedOptional(
+                lhs.reportedDurationMilliseconds,
+                rhs.reportedDurationMilliseconds,
+                sortAscending: sortAscending
+            )
+        case .tps:
+            orderedOptional(lhs.tokensPerSecond, rhs.tokensPerSecond, sortAscending: sortAscending)
+        case .firstToken:
+            orderedOptional(
+                lhs.averageTimeToFirstTokenMilliseconds,
+                rhs.averageTimeToFirstTokenMilliseconds,
+                sortAscending: sortAscending
+            )
         case .model:
-            ordered(lhs.calls.first?.model ?? "", rhs.calls.first?.model ?? "", sortAscending: sortAscending)
+            ordered(lhs.models.first ?? "", rhs.models.first ?? "", sortAscending: sortAscending)
         case .effort:
-            ordered(lhs.calls.first?.reasoningEffort ?? "", rhs.calls.first?.reasoningEffort ?? "", sortAscending: sortAscending)
+            ordered(lhs.reasoningEfforts.first ?? "", rhs.reasoningEfforts.first ?? "", sortAscending: sortAscending)
         case .tokens:
             ordered(lhs.tokens.total, rhs.tokens.total, sortAscending: sortAscending)
         case .cached:
@@ -779,8 +1019,30 @@ struct AuditUsageSnapshot {
         return sortAscending ? lhs < rhs : lhs > rhs
     }
 
+    private static func orderedOptional<T: Comparable>(
+        _ lhs: T?,
+        _ rhs: T?,
+        sortAscending: Bool
+    ) -> Bool? {
+        switch (lhs, rhs) {
+        case let (.some(lhs), .some(rhs)):
+            ordered(lhs, rhs, sortAscending: sortAscending)
+        case (.some, .none):
+            true
+        case (.none, .some):
+            false
+        case (.none, .none):
+            nil
+        }
+    }
+
     private static func totalCost(_ calls: [UsagePoint]) -> Decimal? {
         let costs = calls.compactMap(\.estimatedCostUSD)
+        return costs.isEmpty ? nil : costs.reduce(Decimal(0), +)
+    }
+
+    private static func totalTaskCost(_ tasks: [AgentTask]) -> Decimal? {
+        let costs = tasks.compactMap(\.estimatedCostUSD)
         return costs.isEmpty ? nil : costs.reduce(Decimal(0), +)
     }
 
@@ -797,15 +1059,15 @@ struct AuditUsageSnapshot {
 
 private enum AuditUsageTab: String, CaseIterable, Identifiable {
     case threads
-    case calls
+    case tasks
 
     var id: String { rawValue }
 
     func title(language: AppLanguage) -> String {
         switch (self, language) {
-        case (.calls, .chinese): "调用"
+        case (.tasks, .chinese): "任务"
         case (.threads, .chinese): "线程"
-        case (.calls, _): "Calls"
+        case (.tasks, _): "Tasks"
         case (.threads, _): "Threads"
         }
     }
@@ -815,9 +1077,10 @@ enum AuditSortColumn {
     case time
     case thread
     case duration
-    case initiated
     case model
     case effort
+    case tps
+    case firstToken
     case tokens
     case cached
     case uncached
@@ -826,9 +1089,9 @@ enum AuditSortColumn {
 
     var defaultAscending: Bool {
         switch self {
-        case .thread, .initiated, .model, .effort:
+        case .thread, .model, .effort, .firstToken, .duration:
             true
-        case .time, .duration, .tokens, .cached, .uncached, .output, .reasoning:
+        case .time, .tps, .tokens, .cached, .uncached, .output, .reasoning:
             false
         }
     }
@@ -838,10 +1101,17 @@ struct AuditThreadRow: Identifiable {
     var id: String
     var title: String
     var subtitle: String
+    var projectName: String
     var latest: Date
     var durationSeconds: Int
     var duration: String
     var tokens: TokenTotals
     var cost: Decimal?
     var calls: [UsagePoint]
+    var tasks: [AgentTask]
+    var models: [String]
+    var reasoningEfforts: [String]
+    var reportedDurationMilliseconds: Double?
+    var averageTimeToFirstTokenMilliseconds: Double?
+    var tokensPerSecond: Double?
 }

@@ -270,7 +270,8 @@ private extension CodexSessionMetrics {
 
 private struct CodexUsagePointIdentity: Hashable {
     var taskID: String?
-    var date: Date
+    var cumulativeTokens: TokenTotals?
+    var fallbackDate: Date?
     var model: String
     var tokens: TokenTotals
     var cwd: String?
@@ -279,7 +280,8 @@ private struct CodexUsagePointIdentity: Hashable {
 
     init(point: UsagePoint) {
         taskID = point.taskID
-        date = point.date
+        cumulativeTokens = point.cumulativeTokens
+        fallbackDate = point.taskID != nil && point.cumulativeTokens != nil ? nil : point.date
         model = point.model
         tokens = point.tokens
         cwd = point.cwd

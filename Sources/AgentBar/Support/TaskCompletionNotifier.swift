@@ -28,12 +28,10 @@ enum TaskCompletionNotifications {
             .map { task in
                 let duration = DisplayFormatters.durationString(seconds: task.duration(at: task.completedAt ?? Date()))
                 let tokens = DisplayFormatters.compactTokenString(task.tokens.total, language: language)
-                let title = language == .chinese ? "Codex 任务已完成" : "Codex task completed"
+                let title = L.text("codex_task_completed", language)
                 let taskTitle = task.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let label = taskTitle.flatMap { $0.isEmpty ? nil : $0 } ?? task.displayProjectName
-                let body = language == .chinese
-                    ? "\(label) · \(duration) · \(tokens) Tokens"
-                    : "\(label) · \(duration) · \(tokens) tokens"
+                let label = taskTitle?.trimmedNonEmpty ?? task.displayProjectName(language: language)
+                let body = String(format: L.text("task_completion_body", language), label, duration, tokens)
                 return TaskCompletionNotification(
                     id: "task-complete-\(task.id)",
                     title: title,

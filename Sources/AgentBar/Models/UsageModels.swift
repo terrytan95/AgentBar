@@ -341,6 +341,7 @@ struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var model: String
     var date: Date
     var tokens: TokenTotals
+    var cumulativeTokens: TokenTotals? = nil
     var estimatedCostUSD: Decimal?
     var sessionID: String? = nil
     var sessionTitle: String? = nil
@@ -404,14 +405,14 @@ struct AgentTask: Codable, Equatable, Identifiable, Sendable {
         max(0, (completedAt ?? now).timeIntervalSince(startedAt))
     }
 
-    var displayProjectName: String {
-        if let projectName = projectName?.trimmingCharacters(in: .whitespacesAndNewlines), !projectName.isEmpty {
+    func displayProjectName(language: AppLanguage) -> String {
+        if let projectName = projectName?.trimmedNonEmpty {
             return projectName
         }
         if let path = repositoryPath ?? cwd {
             return URL(fileURLWithPath: path).lastPathComponent
         }
-        return "Unknown project"
+        return L.text("unknown_project", language)
     }
 }
 

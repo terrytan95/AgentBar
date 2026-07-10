@@ -41,6 +41,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexReadDoesNotInventLastActivityForAccountsMissingUsageTimestamp()
         try checkCodexSessionMetricsCacheInvalidatesWhenFileChanges()
         try checkCodexSessionMetricsCacheDropsDeletedFiles()
+        try checkForkedSessionHistoryIsDeduplicated()
         try checkCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation()
         try checkSessionRateLimitsWithoutParsableTimestampDoNotOverrideActiveAccountWindows()
         try checkOversizedSessionFilesAreSkipped()
@@ -1211,6 +1212,38 @@ final class UsageParsingTests: XCTestCase {
 
         XCTAssertTrue(snapshot.points.isEmpty)
         XCTAssertNil(snapshot.accounts.first?.fiveHourWindow)
+    }
+
+    private func checkForkedSessionHistoryIsDeduplicated() throws {
+        CodexUsageReader.resetSessionMetricsCacheForTesting()
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer {
+            try? FileManager.default.removeItem(at: temp)
+            CodexUsageReader.resetSessionMetricsCacheForTesting()
+        }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/07")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {"schema_version":3,"active_account_key":"active","accounts":[{"account_key":"active","email":"active@example.com","plan":"team"}]}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        let copiedHistory = """
+        {"type":"event_msg","timestamp":"2026-07-10T07:00:00Z","payload":{"type":"task_started","turn_id":"shared-turn","started_at":1783666800}}
+        {"type":"turn_context","timestamp":"2026-07-10T07:00:01Z","payload":{"cwd":"/repo/AgentBar","model":"gpt-5.6-terra"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:00:02Z","payload":{"type":"user_message","message":"Build project billing"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:00:10Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":8,"cached_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":0,"total_tokens":10}}}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:01:00Z","payload":{"type":"task_complete","turn_id":"shared-turn","completed_at":1783666860}}
+        """.data(using: .utf8)!
+        try copiedHistory.write(to: sessionDir.appending(path: "parent.jsonl"))
+        try copiedHistory.write(to: sessionDir.appending(path: "fork.jsonl"))
+
+        let snapshot = codexReader(homeDirectory: temp).read()
+
+        XCTAssertEqual(snapshot.points.count, 1)
+        XCTAssertEqual(snapshot.points.first?.tokens.total, 10)
+        XCTAssertEqual(snapshot.tasks.count, 1)
+        XCTAssertEqual(snapshot.tasks.first?.id, "shared-turn")
     }
 
     private func checkCodexReadKeepsSwitchedAccountWindowsWhenLatestSessionPredatesActivation() throws {

@@ -21,7 +21,7 @@ enum DataSourceStatus: String, Codable, Equatable, Sendable {
     }
 }
 
-struct TokenTotals: Codable, Equatable, Sendable {
+struct TokenTotals: Codable, Equatable, Hashable, Sendable {
     var input: Int
     var cachedInput: Int
     var output: Int
@@ -347,6 +347,7 @@ struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var projectName: String? = nil
     var cwd: String? = nil
     var repositoryPath: String? = nil
+    var taskID: String? = nil
     var sourceFile: String? = nil
     var sourceLine: Int? = nil
     var reasoningEffort: String? = nil
@@ -378,7 +379,7 @@ enum AgentTaskState: String, Codable, Equatable, Sendable {
 }
 
 struct AgentTask: Codable, Equatable, Identifiable, Sendable {
-    static let waitingAfter: TimeInterval = 90
+    static let waitingAfter: TimeInterval = 5 * 60
 
     var id: String
     var sessionID: String

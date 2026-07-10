@@ -20,7 +20,8 @@ final class UsageInsightsTests: XCTestCase {
         )
 
         XCTAssertEqual(task.state(at: startedAt.addingTimeInterval(60)), .working)
-        XCTAssertEqual(task.state(at: startedAt.addingTimeInterval(101)), .waiting)
+        XCTAssertEqual(task.state(at: startedAt.addingTimeInterval(299)), .working)
+        XCTAssertEqual(task.state(at: startedAt.addingTimeInterval(311)), .waiting)
     }
 
     func testProjectUsageAggregatesRepositoryModelsTrendAndBudget() throws {

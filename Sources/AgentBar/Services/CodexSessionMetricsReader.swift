@@ -42,6 +42,8 @@ struct CodexSessionMetricsReader {
 
         var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
         var candidates: [CodexSessionFileCandidate] = []
+        var seenPoints = Set<CodexUsagePointIdentity>()
+        var taskIndexes: [String: Int] = [:]
 
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
             do {
@@ -104,7 +106,7 @@ struct CodexSessionMetricsReader {
                 )
             }
 
-            aggregate.merge(metrics)
+            aggregate.merge(metrics, seenPoints: &seenPoints, taskIndexes: &taskIndexes)
         }
         if prunesCache {
             Self.sessionMetricsCache.retain(paths: livePaths, cacheDirectory: cacheDirectory)
@@ -235,13 +237,27 @@ private struct CodexSessionMetricsDiskRecord: Codable {
 }
 
 private extension CodexSessionMetrics {
-    mutating func merge(_ metrics: CodexSessionMetrics) {
-        eventCount += metrics.eventCount
-        if metrics.tokenTotals.total > 0 {
-            tokenTotals = tokenTotals + metrics.tokenTotals
+    mutating func merge(
+        _ metrics: CodexSessionMetrics,
+        seenPoints: inout Set<CodexUsagePointIdentity>,
+        taskIndexes: inout [String: Int]
+    ) {
+        for point in metrics.points {
+            guard seenPoints.insert(CodexUsagePointIdentity(point: point)).inserted else { continue }
+            points.append(point)
+            eventCount += 1
+            tokenTotals = tokenTotals + point.tokens
         }
-        points.append(contentsOf: metrics.points)
-        tasks.append(contentsOf: metrics.tasks)
+        for task in metrics.tasks {
+            if let index = taskIndexes[task.id] {
+                if task.isMoreComplete(than: tasks[index]) {
+                    tasks[index] = task
+                }
+            } else {
+                taskIndexes[task.id] = tasks.count
+                tasks.append(task)
+            }
+        }
         if let latestRateLimitAt = metrics.latestRateLimitAt,
            self.latestRateLimitAt == nil || latestRateLimitAt >= (self.latestRateLimitAt ?? .distantPast) {
             latestFiveHour = metrics.latestFiveHour
@@ -249,5 +265,35 @@ private extension CodexSessionMetrics {
             latestResetCredits = metrics.latestResetCredits
             self.latestRateLimitAt = latestRateLimitAt
         }
+    }
+}
+
+private struct CodexUsagePointIdentity: Hashable {
+    var taskID: String?
+    var date: Date
+    var model: String
+    var tokens: TokenTotals
+    var cwd: String?
+    var reasoningEffort: String?
+    var initiator: String?
+
+    init(point: UsagePoint) {
+        taskID = point.taskID
+        date = point.date
+        model = point.model
+        tokens = point.tokens
+        cwd = point.cwd
+        reasoningEffort = point.reasoningEffort
+        initiator = point.initiator
+    }
+}
+
+private extension AgentTask {
+    func isMoreComplete(than other: AgentTask) -> Bool {
+        if terminalState == .completed, other.terminalState != .completed { return true }
+        if terminalState == .interrupted, other.terminalState == nil { return true }
+        if terminalState == nil, other.terminalState != nil { return false }
+        if lastActivityAt != other.lastActivityAt { return lastActivityAt > other.lastActivityAt }
+        return tokens.total > other.tokens.total
     }
 }

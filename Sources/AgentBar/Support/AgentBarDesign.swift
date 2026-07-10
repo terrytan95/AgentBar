@@ -41,7 +41,7 @@ enum AgentBarFonts {
     static let ui = "IBM Plex Sans"
     static let mono = "IBM Plex Mono"
     static let display = "Space Grotesk"
-    static let chineseFallback = "Source Han Sans SC"
+    static let chineseFallback = "Source Han Sans SC VF"
 
     static func registerIfNeeded() {
         _ = registered
@@ -58,9 +58,7 @@ enum AgentBarFonts {
             ("IBMPlexMono-SemiBold", "ttf"),
             ("IBMPlexMono-Bold", "ttf"),
             ("SpaceGrotesk[wght]", "ttf"),
-            ("SourceHanSansSC-Regular", "otf"),
-            ("SourceHanSansSC-Medium", "otf"),
-            ("SourceHanSansSC-Bold", "otf")
+            ("SourceHanSansSC-VF", "otf")
         ].forEach { name, fileExtension in
             guard let url = Bundle.main.url(forResource: name, withExtension: fileExtension, subdirectory: "Fonts")
                 ?? Bundle.module.url(forResource: name, withExtension: fileExtension, subdirectory: "Fonts")

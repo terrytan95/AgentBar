@@ -60,10 +60,15 @@ struct CodexUsageReader {
         }
 
         let sessionRoot = homeDirectory.appending(path: ".codex/sessions")
+        let sessionCacheDirectory = homeDirectory.standardizedFileURL == FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+            ? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first?
+                .appending(path: "AgentBar/CodexSessionMetrics-v1", directoryHint: .isDirectory)
+            : nil
         let metrics = CodexSessionMetricsReader(fileManager: fileManager).read(
             root: sessionRoot,
             maximumSessionFileBytes: Self.maximumSessionFileBytes,
-            maximumSessionFiles: Self.maximumSessionFiles
+            maximumSessionFiles: Self.maximumSessionFiles,
+            cacheDirectory: sessionCacheDirectory
         )
         if let sessionScanNote = Self.sessionScanNote(metrics) {
             notes.insert(sessionScanNote, at: 0)
@@ -208,8 +213,29 @@ struct CodexUsageReader {
         var currentReasoningEffort: String?
         let decoder = JSONDecoder()
         let dateParser = CodexTimestampParser()
+        let compactResponseItemMarker = Data(#""type":"response_item""#.utf8)
+        let spacedResponseItemMarker = Data(#""type": "response_item""#.utf8)
+        let meaningfulPayloadMarkers = [
+            "last_token_usage",
+            "total_token_usage",
+            "rate_limits",
+            "rate_limit_reset_credits",
+            "turn_context",
+            "session_meta",
+            "user_message",
+            #""cwd":"#,
+            #""model":"#,
+            #""reasoning_effort":"#,
+            #""title":"#
+        ].map { Data($0.utf8) }
 
         for (lineOffset, line) in data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true).enumerated() {
+            if line.range(of: compactResponseItemMarker) != nil || line.range(of: spacedResponseItemMarker) != nil {
+                continue
+            }
+            guard meaningfulPayloadMarkers.contains(where: { line.range(of: $0) != nil }) else {
+                continue
+            }
             guard let event = try? decoder.decode(CodexSessionEvent.self, from: Data(line))
             else { continue }
 

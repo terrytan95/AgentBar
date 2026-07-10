@@ -452,7 +452,12 @@ extension UsageRange {
             return nil
         case .custom:
             guard let customStart, let customEnd else { return nil }
-            return DateInterval(start: customStart, end: customEnd)
+            let startDay = calendar.startOfDay(for: customStart)
+            let endDay = calendar.startOfDay(for: customEnd)
+            guard startDay <= endDay,
+                  let endExclusive = calendar.date(byAdding: .day, value: 1, to: endDay)
+            else { return nil }
+            return DateInterval(start: startDay, end: endExclusive)
         }
     }
 
@@ -515,7 +520,7 @@ struct DailyUsageBar: Equatable, Identifiable, Sendable {
     }
 }
 
-struct CodexSessionMetrics: Equatable, Sendable {
+struct CodexSessionMetrics: Codable, Equatable, Sendable {
     var eventCount: Int
     var tokenTotals: TokenTotals
     var points: [UsagePoint]

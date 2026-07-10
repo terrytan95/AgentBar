@@ -175,11 +175,6 @@ struct ProjectBillingView: View {
                 detailMetric(L.text("models", store.language), "\(project.models.count)", change: nil)
             }
 
-            ProjectUsageTrendChart(
-                bars: project.summary.dailyBars,
-                language: store.language
-            )
-
             HStack(alignment: .top, spacing: 14) {
                 modelPanel(project)
                 budgetPanel(project)
@@ -374,47 +369,4 @@ struct ProjectBillingView: View {
         .agentBarPanel(cornerRadius: 14)
     }
 
-}
-
-private struct ProjectUsageTrendChart: View {
-    var bars: [DailyUsageBar]
-    var language: AppLanguage
-
-    private var visibleBars: [DailyUsageBar] { Array(bars.suffix(30)) }
-    private var maximum: Int {
-        max(1, visibleBars.map { $0.codexTokens + $0.claudeTokens }.max() ?? 1)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(L.text("token_trend", language))
-                    .font(.agentBar(size: 14, weight: .bold))
-                Spacer()
-                Text(L.text("token_trend_caption", language))
-                    .font(.agentBar(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-
-            if visibleBars.isEmpty {
-                Text("--")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 110)
-            } else {
-                HStack(alignment: .bottom, spacing: 5) {
-                    ForEach(visibleBars) { bar in
-                        let tokens = bar.codexTokens + bar.claudeTokens
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(AgentBarPalette.primary.opacity(0.78))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: max(4, CGFloat(tokens) / CGFloat(maximum) * 108))
-                            .help("\(DisplayFormatters.shortDayString(for: bar.day, language: language)) · \(DisplayFormatters.compactTokenString(tokens, language: language))")
-                    }
-                }
-                .frame(height: 112, alignment: .bottom)
-            }
-        }
-        .padding(14)
-        .agentBarPanel(cornerRadius: 12)
-    }
 }

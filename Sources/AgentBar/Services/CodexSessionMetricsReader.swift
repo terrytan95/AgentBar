@@ -164,6 +164,7 @@ private final class CodexSessionMetricsCache: @unchecked Sendable {
         guard let cacheDirectory,
               let data = try? Data(contentsOf: cacheFileURL(for: path, in: cacheDirectory)),
               let record = try? JSONDecoder().decode(CodexSessionMetricsDiskRecord.self, from: data),
+              record.schemaVersion == CodexSessionMetricsDiskRecord.currentSchemaVersion,
               record.path == path,
               record.signature == signature
         else { return nil }
@@ -231,9 +232,19 @@ private final class CodexSessionMetricsCache: @unchecked Sendable {
 }
 
 private struct CodexSessionMetricsDiskRecord: Codable {
+    static let currentSchemaVersion = 2
+
+    var schemaVersion: Int
     var path: String
     var signature: CodexSessionFileSignature
     var metrics: CodexSessionMetrics
+
+    init(path: String, signature: CodexSessionFileSignature, metrics: CodexSessionMetrics) {
+        schemaVersion = Self.currentSchemaVersion
+        self.path = path
+        self.signature = signature
+        self.metrics = metrics
+    }
 }
 
 private extension CodexSessionMetrics {

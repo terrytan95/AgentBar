@@ -1851,6 +1851,10 @@ private struct YearActivityPanel: View {
             Spacer()
 
             HStack(spacing: 28) {
+                statistic(
+                    value: DisplayFormatters.compactTokenString(averageActiveDayTokens, language: language),
+                    title: language == .chinese ? "日均 Tokens" : "daily average"
+                )
                 statistic(value: "\(activeDaysCount)", title: language == .chinese ? "活跃天数" : "active days", color: githubAccent)
                 statistic(
                     value: DisplayFormatters.compactTokenString(peakDayTokens, language: language),
@@ -1920,6 +1924,11 @@ private struct YearActivityPanel: View {
 
     private var activeDaysCount: Int {
         bars.filter { totalTokens(for: $0) > 0 }.count
+    }
+
+    private var averageActiveDayTokens: Int {
+        guard activeDaysCount > 0 else { return 0 }
+        return Int((Double(totalTokens) / Double(activeDaysCount)).rounded())
     }
 
     private var peakDayTokens: Int {

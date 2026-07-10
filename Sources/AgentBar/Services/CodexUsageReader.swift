@@ -6,7 +6,7 @@ struct CodexUsageReader {
     var now: @Sendable () -> Date = Date.init
     static let maximumSessionFileBytes = 10 * 1024 * 1024
     static let maximumSessionFiles = 1_000
-    static let sessionMetricsCacheDirectoryName = "AgentBar/CodexSessionMetrics-v4"
+    static let sessionMetricsCacheDirectoryName = "AgentBar/CodexSessionMetrics-v5"
 
     init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser, now: @escaping @Sendable () -> Date = Date.init) {
         self.homeDirectory = homeDirectory
@@ -231,6 +231,16 @@ struct CodexUsageReader {
             "task_started",
             "task_complete",
             "turn_aborted",
+            "agent_message",
+            "agent_reasoning",
+            "mcp_tool_call_begin",
+            "mcp_tool_call_end",
+            "web_search_begin",
+            "web_search_end",
+            "patch_apply_begin",
+            "patch_apply_end",
+            "exec_command_begin",
+            "exec_command_end",
             #""cwd":"#,
             #""model":"#,
             #""reasoning_effort":"#,
@@ -317,6 +327,7 @@ struct CodexUsageReader {
                         sessionTitle: currentSessionTitle,
                         projectName: projectName,
                         cwd: currentCwd,
+                        taskID: activeTaskID,
                         sourceFile: sourceFile,
                         sourceLine: lineOffset + 1,
                         reasoningEffort: currentReasoningEffort,

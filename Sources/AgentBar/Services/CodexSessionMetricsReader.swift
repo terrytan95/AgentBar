@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct CodexSessionMetricsReader {
@@ -5,7 +6,12 @@ struct CodexSessionMetricsReader {
 
     private static let sessionMetricsCache = CodexSessionMetricsCache()
 
-    func read(root: URL, maximumSessionFileBytes: Int, maximumSessionFiles: Int) -> CodexSessionMetrics {
+    func read(
+        root: URL,
+        maximumSessionFileBytes: Int,
+        maximumSessionFiles: Int,
+        cacheDirectory: URL? = nil
+    ) -> CodexSessionMetrics {
         var accessIssueNote: String?
         do {
             let values = try root.resourceValues(forKeys: [.isDirectoryKey])
@@ -34,31 +40,38 @@ struct CodexSessionMetricsReader {
         }
 
         var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
-        var livePaths = Set<String>()
-        var reviewedFileCount = 0
+        var candidates: [CodexSessionFileCandidate] = []
 
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
-            let signature: CodexSessionFileSignature
             do {
                 guard let fileSignature = try CodexSessionFileSignature(fileURL: fileURL) else { continue }
-                signature = fileSignature
+                candidates.append(CodexSessionFileCandidate(url: fileURL, signature: fileSignature))
             } catch {
                 accessIssueNote = accessIssueNote ?? LocalFileAccessWarning.codexNote(for: error, path: fileURL.path)
-                continue
             }
-            guard signature.size <= maximumSessionFileBytes else {
-                aggregate.skippedOversizedSessionFileCount += 1
-                continue
+        }
+
+        let selectedCandidates = candidates
+            .sorted { lhs, rhs in
+                let lhsDate = lhs.signature.modifiedAt ?? .distantPast
+                let rhsDate = rhs.signature.modifiedAt ?? .distantPast
+                if lhsDate != rhsDate { return lhsDate > rhsDate }
+                return lhs.url.path > rhs.url.path
             }
-            guard reviewedFileCount < maximumSessionFiles else {
-                aggregate.skippedSessionFileCapCount += 1
-                continue
-            }
-            reviewedFileCount += 1
+            .prefix(maximumSessionFiles)
+        aggregate.skippedSessionFileCapCount = max(0, candidates.count - selectedCandidates.count)
+        let livePaths = Set(selectedCandidates.map(\.url.path))
+
+        for candidate in selectedCandidates {
+            let fileURL = candidate.url
+            let signature = candidate.signature
             let path = fileURL.path
-            livePaths.insert(path)
             let metrics: CodexSessionMetrics
-            if let cachedMetrics = Self.sessionMetricsCache.metrics(for: path, signature: signature) {
+            if let cachedMetrics = Self.sessionMetricsCache.metrics(
+                for: path,
+                signature: signature,
+                cacheDirectory: cacheDirectory
+            ) {
                 metrics = cachedMetrics
             } else {
                 let data: Data
@@ -76,12 +89,23 @@ struct CodexSessionMetricsReader {
                       )
                 else { continue }
                 metrics = parsedMetrics
-                Self.sessionMetricsCache.store(metrics, for: path, signature: signature)
+                if signature.size > maximumSessionFileBytes,
+                   metrics.eventCount == 0,
+                   metrics.latestRateLimitAt == nil {
+                    aggregate.skippedOversizedSessionFileCount += 1
+                    continue
+                }
+                Self.sessionMetricsCache.store(
+                    metrics,
+                    for: path,
+                    signature: signature,
+                    cacheDirectory: cacheDirectory
+                )
             }
 
             aggregate.merge(metrics)
         }
-        Self.sessionMetricsCache.retain(paths: livePaths)
+        Self.sessionMetricsCache.retain(paths: livePaths, cacheDirectory: cacheDirectory)
 
         aggregate.accessIssueNote = accessIssueNote
         return aggregate
@@ -92,7 +116,12 @@ struct CodexSessionMetricsReader {
     }
 }
 
-private struct CodexSessionFileSignature: Equatable {
+private struct CodexSessionFileCandidate {
+    var url: URL
+    var signature: CodexSessionFileSignature
+}
+
+private struct CodexSessionFileSignature: Codable, Equatable {
     var size: Int
     var modifiedAt: Date?
 
@@ -115,23 +144,71 @@ private final class CodexSessionMetricsCache: @unchecked Sendable {
     private let lock = NSLock()
     private var entries: [String: Entry] = [:]
 
-    func metrics(for path: String, signature: CodexSessionFileSignature) -> CodexSessionMetrics? {
+    func metrics(
+        for path: String,
+        signature: CodexSessionFileSignature,
+        cacheDirectory: URL?
+    ) -> CodexSessionMetrics? {
         lock.lock()
-        defer { lock.unlock() }
-        guard let entry = entries[path], entry.signature == signature else { return nil }
-        return entry.metrics
+        let memoryEntry = entries[path]
+        lock.unlock()
+        if let memoryEntry, memoryEntry.signature == signature {
+            return memoryEntry.metrics
+        }
+
+        guard let cacheDirectory,
+              let data = try? Data(contentsOf: cacheFileURL(for: path, in: cacheDirectory)),
+              let record = try? JSONDecoder().decode(CodexSessionMetricsDiskRecord.self, from: data),
+              record.path == path,
+              record.signature == signature
+        else { return nil }
+
+        lock.lock()
+        entries[path] = Entry(signature: signature, metrics: record.metrics)
+        lock.unlock()
+        return record.metrics
     }
 
-    func store(_ metrics: CodexSessionMetrics, for path: String, signature: CodexSessionFileSignature) {
+    func store(
+        _ metrics: CodexSessionMetrics,
+        for path: String,
+        signature: CodexSessionFileSignature,
+        cacheDirectory: URL?
+    ) {
         lock.lock()
         entries[path] = Entry(signature: signature, metrics: metrics)
         lock.unlock()
+
+        guard let cacheDirectory else { return }
+        let record = CodexSessionMetricsDiskRecord(path: path, signature: signature, metrics: metrics)
+        guard let data = try? JSONEncoder().encode(record) else { return }
+        do {
+            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cacheDirectory.path)
+            let cacheURL = cacheFileURL(for: path, in: cacheDirectory)
+            try data.write(to: cacheURL, options: [.atomic])
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cacheURL.path)
+        } catch {
+            // The cache is an optimization; source JSONL remains authoritative.
+        }
     }
 
-    func retain(paths: Set<String>) {
+    func retain(paths: Set<String>, cacheDirectory: URL?) {
         lock.lock()
         entries = entries.filter { paths.contains($0.key) }
         lock.unlock()
+
+        guard let cacheDirectory,
+              let cachedFiles = try? FileManager.default.contentsOfDirectory(
+                at: cacheDirectory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+              )
+        else { return }
+        let liveFileNames = Set(paths.map { cacheFileURL(for: $0, in: cacheDirectory).lastPathComponent })
+        for cachedFile in cachedFiles where !liveFileNames.contains(cachedFile.lastPathComponent) {
+            try? FileManager.default.removeItem(at: cachedFile)
+        }
     }
 
     func removeAll() {
@@ -139,6 +216,19 @@ private final class CodexSessionMetricsCache: @unchecked Sendable {
         entries.removeAll()
         lock.unlock()
     }
+
+    private func cacheFileURL(for path: String, in directory: URL) -> URL {
+        let digest = SHA256.hash(data: Data(path.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return directory.appending(path: "\(digest).json")
+    }
+}
+
+private struct CodexSessionMetricsDiskRecord: Codable {
+    var path: String
+    var signature: CodexSessionFileSignature
+    var metrics: CodexSessionMetrics
 }
 
 private extension CodexSessionMetrics {

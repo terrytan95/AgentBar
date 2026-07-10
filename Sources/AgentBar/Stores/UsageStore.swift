@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 private final class DarwinNotificationObserver {
@@ -74,6 +75,7 @@ final class UsageStore: ObservableObject {
     private var timer: Timer?
     private var accountRemovalObserver: NSObjectProtocol?
     private var codexRecoveryLoginObserver: DarwinNotificationObserver?
+    private var refreshIntervalObserver: AnyCancellable?
     private var refreshInFlight = false
     private var refreshQueued = false
     private var manualRefreshQueued = false
@@ -159,6 +161,14 @@ final class UsageStore: ObservableObject {
             }
         }
         configureTimer()
+        refreshIntervalObserver = settings.$refreshInterval
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.configureTimer()
+                }
+            }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
             refresh(force: true)

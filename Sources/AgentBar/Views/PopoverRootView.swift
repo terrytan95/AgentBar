@@ -97,6 +97,7 @@ struct PopoverRootView: View {
     @ObservedObject var store: UsageStore
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @Environment(\.colorScheme) private var colorScheme
+    @State private var isConfirmingQuit = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -123,6 +124,9 @@ struct PopoverRootView: View {
         .background(popoverBackground)
         .preferredColorScheme(store.settings.useDarkAppearance ? .dark : .light)
         .animation(nil, value: store.settings.useDarkAppearance)
+        .onDisappear {
+            isConfirmingQuit = false
+        }
     }
 
     private var popoverBackground: some View {
@@ -251,6 +255,17 @@ struct PopoverRootView: View {
     }
 
     private var footer: some View {
+        Group {
+            if isConfirmingQuit {
+                quitConfirmation
+            } else {
+                footerActions
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var footerActions: some View {
         HStack(spacing: 10) {
             PopoverToolbarButton(title: L.text("statistics", store.language), systemImage: "chart.bar.xaxis") {
                 showStatisticsWindow()
@@ -261,10 +276,39 @@ struct PopoverRootView: View {
             }
 
             PopoverToolbarButton(title: L.text("quit_app", store.language), systemImage: "power") {
-                onQuit()
+                isConfirmingQuit = true
             }
         }
-        .padding(.vertical, 8)
+    }
+
+    private var quitConfirmation: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L.text("quit_app", store.language))
+                    .font(.agentBar(size: 12, weight: .bold))
+                Text(L.text("quit_app_confirmation", store.language))
+                    .font(.agentBar(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Button(L.text("cancel", store.language)) {
+                isConfirmingQuit = false
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .keyboardShortcut(.cancelAction)
+            .pointingHandCursor()
+
+            Button(L.text("quit_app", store.language), role: .destructive) {
+                onQuit()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(.red)
+            .pointingHandCursor()
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func showStatisticsWindow(tab: DashboardTopTab? = nil) {

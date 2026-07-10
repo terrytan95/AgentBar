@@ -60,7 +60,7 @@ final class UsageStore: ObservableObject {
     }
 
     let settings: SettingsStore
-    private let codexUsageSource: @Sendable (Bool) async -> UsageSnapshot
+    private let codexUsageSource: @Sendable () async -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let codexAccountLifecycle = CodexAccountLifecycle()
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
@@ -89,9 +89,6 @@ final class UsageStore: ObservableObject {
         settings: SettingsStore = .shared,
         codexUsageSynchronizer: @escaping @Sendable () async -> CodexUsageSyncResult = {
             await CodexUsageAPISyncer().refreshUsage()
-        },
-        codexDetailedResetCreditsSynchronizer: @escaping @Sendable () async -> CodexUsageSyncResult = {
-            await CodexUsageAPISyncer(detailedResetCreditsEnabled: true).refreshUsage()
         },
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot = {
             CodexUsageReader().read()
@@ -128,9 +125,8 @@ final class UsageStore: ObservableObject {
         self.settings = settings
         self.quotaCapacityHistoryStore = quotaCapacityHistoryStore
         quotaCapacityHistory = quotaCapacityHistoryStore.load()
-        self.codexUsageSource = { detailedResetCreditsEnabled in
-            let syncCodexUsage = detailedResetCreditsEnabled ? codexDetailedResetCreditsSynchronizer : codexUsageSynchronizer
-            let syncResult = await syncCodexUsage()
+        self.codexUsageSource = {
+            let syncResult = await codexUsageSynchronizer()
             var snapshot = codexUsageReader()
             if let note = syncResult.note {
                 snapshot.securityNotes.append(note)
@@ -337,10 +333,9 @@ final class UsageStore: ObservableObject {
         lastError = nil
         let codexUsageSource = codexUsageSource
         let claudeUsageReader = claudeUsageReader
-        let detailedResetCreditsEnabled = settings.detailedResetCreditsEnabled
 
         Task.detached(priority: .utility) { [weak self] in
-            let codex = await codexUsageSource(detailedResetCreditsEnabled)
+            let codex = await codexUsageSource()
             let claude = claudeUsageReader()
 
             await MainActor.run { [weak self] in

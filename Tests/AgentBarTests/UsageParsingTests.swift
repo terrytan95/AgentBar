@@ -23,7 +23,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset()
         try await checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
         try await checkCodexUsageAPISyncerRefreshesOnlyActiveAccount()
-        try await checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates()
+        try await checkCodexUsageAPISyncerAlwaysFetchesDetailedResetExpiryDates()
         try await checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess()
         try await checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
         try await checkCodexUsageAPISyncerRefreshesActiveAuthAccountWhenRegistryActiveIsStale()
@@ -540,6 +540,9 @@ final class UsageParsingTests: XCTestCase {
             homeDirectory: temp,
             now: { Date(timeIntervalSince1970: 1_781_388_300) },
             usageClient: { request, timeout in
+                if request.url == CodexUsageAPISyncer.resetCreditsEndpoint {
+                    return CodexUsageAPIResponse(statusCode: 404, data: Data())
+                }
                 XCTAssertEqual(request.url?.absoluteString, "https://chatgpt.com/backend-api/wham/usage")
                 XCTAssertEqual(timeout, 5)
                 requestRecorder.record(request)
@@ -618,7 +621,7 @@ final class UsageParsingTests: XCTestCase {
 
         let result = await syncer.refreshUsage()
         XCTAssertEqual(result, .success)
-        XCTAssertEqual(requestRecorder.requestCount, 1)
+        XCTAssertEqual(requestRecorder.requestCount, 2)
         XCTAssertEqual(requestRecorder.accountID, "active-chatgpt-id")
         let accounts = try registryAccounts(from: registryURL)
         XCTAssertNotNil(accounts.first { $0["account_key"] as? String == "acct-a" }?["last_usage"])
@@ -627,7 +630,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    private func checkCodexUsageAPISyncerOptInFetchesDetailedResetExpiryDates() async throws {
+    private func checkCodexUsageAPISyncerAlwaysFetchesDetailedResetExpiryDates() async throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
@@ -667,8 +670,7 @@ final class UsageParsingTests: XCTestCase {
                     {"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}},"rate_limit_reset_credits":{"available_count":2}}
                     """.data(using: .utf8)!
                 )
-            },
-            detailedResetCreditsEnabled: true
+            }
         )
 
         let result = await syncer.refreshUsage()
@@ -913,8 +915,8 @@ final class UsageParsingTests: XCTestCase {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: "detailedResetCreditsEnabled")
         let settings = SettingsStore(defaults: defaults)
-        settings.detailedResetCreditsEnabled = true
         let expectation = expectation(description: "refresh completed")
         let recorder = RefreshOrderRecorder()
         let now = Date()
@@ -929,10 +931,6 @@ final class UsageParsingTests: XCTestCase {
         let store = UsageStore(
             settings: settings,
             codexUsageSynchronizer: {
-                XCTFail("Expected detailed reset sync")
-                return .success
-            },
-            codexDetailedResetCreditsSynchronizer: {
                 recorder.record("detailed-sync")
                 return .failed("expired token")
             },

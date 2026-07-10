@@ -610,16 +610,6 @@ struct StatisticsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Toggle(isOn: $settings.detailedResetCreditsEnabled) {
-                    Label(L.text("expiry_dates", store.language), systemImage: settings.detailedResetCreditsEnabled ? "hourglass.circle.fill" : "hourglass")
-                }
-                .toggleStyle(.button)
-                .help(L.text("expiry_dates_help", store.language))
-                .onChange(of: settings.detailedResetCreditsEnabled) { _, enabled in
-                    if enabled {
-                        store.refresh(force: true, showManualFeedback: true)
-                    }
-                }
                 dashboardRefreshButton
             }
 
@@ -1032,17 +1022,13 @@ struct StatisticsView: View {
 
     @ViewBuilder
     private var resetExpiryRows: some View {
-        if !settings.detailedResetCreditsEnabled {
-            EmptyPanelMessage(L.text("enable_expiry_dates", store.language))
+        let groups = resetExpiryDisplayGroups
+        if groups.isEmpty {
+            EmptyPanelMessage(totalResetCreditsCount > 0 ? L.text("no_detailed_expiry_dates", store.language) : L.text("no_banked_resets", store.language))
         } else {
-            let groups = resetExpiryDisplayGroups
-            if groups.isEmpty {
-                EmptyPanelMessage(totalResetCreditsCount > 0 ? L.text("no_detailed_expiry_dates", store.language) : L.text("no_banked_resets", store.language))
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(groups) { group in
-                        ResetExpiryDisplayGroupView(group: group, language: store.language)
-                    }
+            VStack(spacing: 8) {
+                ForEach(groups) { group in
+                    ResetExpiryDisplayGroupView(group: group, language: store.language)
                 }
             }
         }

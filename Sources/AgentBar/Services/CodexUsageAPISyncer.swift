@@ -36,22 +36,19 @@ struct CodexUsageAPISyncer {
     var now: @Sendable () -> Date
     var usageClient: UsageClient
     var timeout: TimeInterval
-    var detailedResetCreditsEnabled: Bool
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default,
         now: @escaping @Sendable () -> Date = Date.init,
         usageClient: @escaping UsageClient = Self.defaultUsageClient,
-        timeout: TimeInterval = 5,
-        detailedResetCreditsEnabled: Bool = false
+        timeout: TimeInterval = 5
     ) {
         self.homeDirectory = homeDirectory
         self.fileManager = fileManager
         self.now = now
         self.usageClient = usageClient
         self.timeout = timeout
-        self.detailedResetCreditsEnabled = detailedResetCreditsEnabled
     }
 
     func refreshUsage() async -> CodexUsageSyncResult {
@@ -137,8 +134,7 @@ struct CodexUsageAPISyncer {
                 lastFailure = .failed("Usage response did not contain rate limit windows.")
                 continue
             }
-            if detailedResetCreditsEnabled,
-               let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
+            if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
                 usage["reset_credits"] = detailedResetCredits
             }
 

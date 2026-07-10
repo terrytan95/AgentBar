@@ -76,10 +76,6 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(autoCodexAccountRotationEnabled, forKey: Keys.autoCodexAccountRotationEnabled) }
     }
 
-    @Published var detailedResetCreditsEnabled: Bool {
-        didSet { defaults.set(detailedResetCreditsEnabled, forKey: Keys.detailedResetCreditsEnabled) }
-    }
-
     @Published var quotaResetNotificationsEnabled: Bool {
         didSet { defaults.set(quotaResetNotificationsEnabled, forKey: Keys.quotaResetNotificationsEnabled) }
     }
@@ -178,7 +174,6 @@ final class SettingsStore: ObservableObject {
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
-        detailedResetCreditsEnabled = defaults.object(forKey: Keys.detailedResetCreditsEnabled) as? Bool ?? false
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
         let savedRotationThreshold = defaults.double(forKey: Keys.codexRotationThresholdRemainingPercent)
         codexRotationThresholdRemainingPercent = Self.clampedRotationThreshold(savedRotationThreshold > 0 ? savedRotationThreshold : 10)
@@ -250,7 +245,6 @@ final class SettingsStore: ObservableObject {
         static let accountSortMode = "accountSortMode"
         static let showAggregatedAccountData = "showAggregatedAccountData"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
-        static let detailedResetCreditsEnabled = "detailedResetCreditsEnabled"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
         static let codexRotationThresholdRemainingPercent = "codexRotationThresholdRemainingPercent"
         static let dailyTokenBudget = "dailyTokenBudget"

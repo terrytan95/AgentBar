@@ -67,7 +67,7 @@ enum ProjectUsageAnalytics {
             )
             let sample = visiblePoints.first
             let path = sample?.repositoryPath ?? sample?.cwd
-            let name = sample?.projectName?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+            let name = sample?.projectName?.trimmedNonEmpty
                 ?? path.map { URL(fileURLWithPath: $0).lastPathComponent }
                 ?? id
             let budget = budgetsByID[id] ?? ProjectBudget(id: id)
@@ -97,11 +97,11 @@ enum ProjectUsageAnalytics {
     }
 
     static func projectID(for point: UsagePoint) -> String {
-        if let path = point.repositoryPath?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+        if let path = point.repositoryPath?.trimmedNonEmpty {
             return URL(fileURLWithPath: path).standardizedFileURL.path
         }
         if point.cwd == nil,
-           let name = point.projectName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+           let name = point.projectName?.trimmedNonEmpty {
             return "project:\(name.lowercased())"
         }
         return unknownProjectID
@@ -147,8 +147,4 @@ enum ProjectUsageAnalytics {
             UsageInsights.budgetStatus(summary: summary, dailyTokenBudget: 0, dailyCostBudgetUSD: nil)
         }
     }
-}
-
-private extension String {
-    var nonEmpty: String? { isEmpty ? nil : self }
 }

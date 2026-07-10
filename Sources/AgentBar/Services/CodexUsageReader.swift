@@ -6,7 +6,7 @@ struct CodexUsageReader {
     var now: @Sendable () -> Date = Date.init
     static let maximumSessionFileBytes = 10 * 1024 * 1024
     static let maximumSessionFiles = 1_000
-    static let sessionMetricsCacheDirectoryName = "AgentBar/CodexSessionMetrics-v5"
+    static let sessionMetricsCacheDirectoryName = "AgentBar/CodexSessionMetrics-v6"
 
     init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser, now: @escaping @Sendable () -> Date = Date.init) {
         self.homeDirectory = homeDirectory
@@ -216,6 +216,7 @@ struct CodexUsageReader {
         var taskBuilders: [String: CodexTaskBuilder] = [:]
         var taskOrder: [String] = []
         var activeTaskID: String?
+        var seenTaskUsageSequences = Set<CodexTaskUsageSequence>()
         let decoder = JSONDecoder()
         let dateParser = CodexTimestampParser()
         let compactResponseItemMarker = Data(#""type":"response_item""#.utf8)
@@ -313,35 +314,42 @@ struct CodexUsageReader {
                     previousCumulativeUsage = cumulativeTotals
                     previousCumulativeResetAt = currentCumulativeResetAt
                 }
-                eventCount += 1
                 let model = Pricing.normalize(model: firstNonEmptyOptional([info.model, currentModel]) ?? "Codex local")
                 let pointCost = Pricing.cost(model: model, tokens: pointUsage)
-                points.append(
-                    UsagePoint(
-                        service: .codex,
-                        model: model,
-                        date: eventDate,
-                        tokens: pointUsage,
-                        estimatedCostUSD: pointCost,
-                        sessionID: sessionID,
-                        sessionTitle: currentSessionTitle,
-                        projectName: projectName,
-                        cwd: currentCwd,
-                        taskID: activeTaskID,
-                        sourceFile: sourceFile,
-                        sourceLine: lineOffset + 1,
-                        reasoningEffort: currentReasoningEffort,
-                        initiator: payload.callInitiator,
-                        modelContextWindow: info.modelContextWindow
+                let usageSequence = activeTaskID.flatMap { taskID in
+                    cumulativeTotals.map { CodexTaskUsageSequence(taskID: taskID, cumulativeTokens: $0) }
+                }
+                let shouldRecordUsage = usageSequence.map { seenTaskUsageSequences.insert($0).inserted } ?? true
+                if shouldRecordUsage {
+                    eventCount += 1
+                    points.append(
+                        UsagePoint(
+                            service: .codex,
+                            model: model,
+                            date: eventDate,
+                            tokens: pointUsage,
+                            cumulativeTokens: cumulativeTotals,
+                            estimatedCostUSD: pointCost,
+                            sessionID: sessionID,
+                            sessionTitle: currentSessionTitle,
+                            projectName: projectName,
+                            cwd: currentCwd,
+                            taskID: activeTaskID,
+                            sourceFile: sourceFile,
+                            sourceLine: lineOffset + 1,
+                            reasoningEffort: currentReasoningEffort,
+                            initiator: payload.callInitiator,
+                            modelContextWindow: info.modelContextWindow
+                        )
                     )
-                )
-                if let activeTaskID, var builder = taskBuilders[activeTaskID] {
-                    builder.tokens = builder.tokens + pointUsage
-                    builder.estimatedCostUSD = (builder.estimatedCostUSD ?? 0) + pointCost
-                    if !builder.models.contains(model) {
-                        builder.models.append(model)
+                    if let activeTaskID, var builder = taskBuilders[activeTaskID] {
+                        builder.tokens = builder.tokens + pointUsage
+                        builder.estimatedCostUSD = (builder.estimatedCostUSD ?? 0) + pointCost
+                        if !builder.models.contains(model) {
+                            builder.models.append(model)
+                        }
+                        taskBuilders[activeTaskID] = builder
                     }
-                    taskBuilders[activeTaskID] = builder
                 }
             }
 
@@ -870,6 +878,11 @@ private struct CodexTaskBuilder {
             terminalState: terminalState
         )
     }
+}
+
+private struct CodexTaskUsageSequence: Hashable {
+    var taskID: String
+    var cumulativeTokens: TokenTotals
 }
 
 private struct CodexInfo: Decodable {

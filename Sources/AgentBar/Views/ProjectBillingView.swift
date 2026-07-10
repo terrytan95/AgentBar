@@ -47,9 +47,9 @@ struct ProjectBillingView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(localized("Project Billing", "项目账单"))
+                Text(L.text("project_billing", store.language))
                     .font(.agentBar(size: 20, weight: .bold))
-                Text(localized("Tokens, estimated cost, models, trends, and budgets by repository.", "按仓库查看 Tokens、预估费用、模型、趋势与预算。"))
+                Text(L.text("project_billing_subtitle", store.language))
                     .font(.agentBar(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
@@ -83,10 +83,10 @@ struct ProjectBillingView: View {
         }.count
 
         return HStack(spacing: 14) {
-            metric(localized("Repositories", "仓库"), "\(projects.count)", icon: "folder.fill", color: AgentBarPalette.primary)
+            metric(L.text("repositories", store.language), "\(projects.count)", icon: "folder.fill", color: AgentBarPalette.primary)
             metric("Tokens", DisplayFormatters.compactTokenString(tokens, language: store.language), icon: "cylinder.split.1x2.fill", color: .blue)
-            metric(localized("Estimated cost", "预估费用"), DisplayFormatters.costString(cost), icon: "dollarsign", color: .green)
-            metric(localized("Budget alerts", "预算提醒"), "\(overBudget)", icon: "exclamationmark.triangle.fill", color: overBudget > 0 ? .orange : .green)
+            metric(L.text("estimated_cost", store.language), DisplayFormatters.costString(cost), icon: "dollarsign", color: .green)
+            metric(L.text("budget_alerts", store.language), "\(overBudget)", icon: "exclamationmark.triangle.fill", color: overBudget > 0 ? .orange : .green)
         }
     }
 
@@ -114,7 +114,7 @@ struct ProjectBillingView: View {
 
     private var projectList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(localized("Repositories", "仓库"))
+            Text(L.text("repositories", store.language))
                 .font(.agentBar(size: 15, weight: .bold))
                 .padding(16)
             Divider()
@@ -171,8 +171,8 @@ struct ProjectBillingView: View {
 
             HStack(spacing: 12) {
                 detailMetric("Tokens", DisplayFormatters.compactTokenString(project.summary.totalTokens, language: store.language), change: project.periodChange.tokenPercent)
-                detailMetric(localized("Estimated cost", "预估费用"), DisplayFormatters.costString(project.summary.estimatedCostUSD), change: project.periodChange.costPercent)
-                detailMetric(localized("Models", "模型"), "\(project.models.count)", change: nil)
+                detailMetric(L.text("estimated_cost", store.language), DisplayFormatters.costString(project.summary.estimatedCostUSD), change: project.periodChange.costPercent)
+                detailMetric(L.text("models", store.language), "\(project.models.count)", change: nil)
             }
 
             ProjectUsageTrendChart(
@@ -231,7 +231,7 @@ struct ProjectBillingView: View {
 
     private func modelPanel(_ project: ProjectUsageSummary) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(localized("Models", "模型"))
+            Text(L.text("models", store.language))
                 .font(.agentBar(size: 14, weight: .bold))
                 .padding(14)
             Divider()
@@ -259,18 +259,18 @@ struct ProjectBillingView: View {
     private func budgetPanel(_ project: ProjectUsageSummary) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(localized("Repository budget", "仓库预算"))
+                Text(L.text("repository_budget", store.language))
                     .font(.agentBar(size: 14, weight: .bold))
-                Text(localized("Set 0 to disable a threshold.", "设为 0 可关闭对应阈值。"))
+                Text(L.text("disable_threshold_hint", store.language))
                     .font(.agentBar(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
             }
             .padding(14)
             Divider()
-            budgetRow(localized("Daily tokens", "每日 Tokens"), value: intBudgetBinding(project.id, \.dailyTokenLimit))
-            budgetRow(localized("Weekly tokens", "每周 Tokens"), value: intBudgetBinding(project.id, \.weeklyTokenLimit))
-            costBudgetRow(localized("Daily cost", "每日费用"), value: doubleBudgetBinding(project.id, \.dailyCostLimitUSD))
-            costBudgetRow(localized("Weekly cost", "每周费用"), value: doubleBudgetBinding(project.id, \.weeklyCostLimitUSD))
+            budgetRow(L.text("daily_token_budget", store.language), value: intBudgetBinding(project.id, \.dailyTokenLimit))
+            budgetRow(L.text("weekly_token_budget", store.language), value: intBudgetBinding(project.id, \.weeklyTokenLimit))
+            costBudgetRow(L.text("daily_cost_budget", store.language), value: doubleBudgetBinding(project.id, \.dailyCostLimitUSD))
+            costBudgetRow(L.text("weekly_cost_budget", store.language), value: doubleBudgetBinding(project.id, \.weeklyCostLimitUSD))
         }
         .frame(width: 330, alignment: .topLeading)
         .agentBarPanel(cornerRadius: 12)
@@ -324,7 +324,7 @@ struct ProjectBillingView: View {
 
     private func budgetStatusPill(_ project: ProjectUsageSummary) -> some View {
         if project.budget.isConfigured, store.selectedRange != .today, store.selectedRange != .thisWeek {
-            return Text(localized("View Today or This Week", "切换到今天或本周"))
+            return Text(L.text("view_today_or_week", store.language))
                 .font(.agentBar(size: 10, weight: .bold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
@@ -336,13 +336,13 @@ struct ProjectBillingView: View {
         let color: Color
         switch severity {
         case .critical:
-            title = localized("Over budget", "超出预算")
+            title = L.text("over_budget", store.language)
             color = .red
         case .warning:
-            title = localized("Near budget", "接近预算")
+            title = L.text("near_budget", store.language)
             color = .orange
         case .ok:
-            title = project.budget.isConfigured ? localized("On budget", "预算正常") : localized("No budget", "未设预算")
+            title = project.budget.isConfigured ? L.text("on_budget", store.language) : L.text("no_budget", store.language)
             color = project.budget.isConfigured ? .green : .secondary
         }
         return Text(title)
@@ -364,9 +364,9 @@ struct ProjectBillingView: View {
             Image(systemName: "folder.badge.questionmark")
                 .font(.system(size: 36))
                 .foregroundStyle(AgentBarPalette.primary)
-            Text(localized("No repository usage in this range", "所选范围内没有仓库用量"))
+            Text(L.text("no_repository_usage", store.language))
                 .font(.agentBar(size: 16, weight: .bold))
-            Text(localized("Choose another range or run a Codex task inside a repository.", "请选择其他范围，或在仓库中运行 Codex 任务。"))
+            Text(L.text("no_repository_usage_subtitle", store.language))
                 .font(.agentBar(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
         }
@@ -374,9 +374,6 @@ struct ProjectBillingView: View {
         .agentBarPanel(cornerRadius: 14)
     }
 
-    private func localized(_ english: String, _ chinese: String) -> String {
-        store.language == .chinese ? chinese : english
-    }
 }
 
 private struct ProjectUsageTrendChart: View {
@@ -391,10 +388,10 @@ private struct ProjectUsageTrendChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(language == .chinese ? "Token 趋势" : "Token trend")
+                Text(L.text("token_trend", language))
                     .font(.agentBar(size: 14, weight: .bold))
                 Spacer()
-                Text(language == .chinese ? "最近最多 30 个活跃日" : "Up to 30 recent active days")
+                Text(L.text("token_trend_caption", language))
                     .font(.agentBar(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
             }

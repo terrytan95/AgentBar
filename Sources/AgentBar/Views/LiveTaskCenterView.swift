@@ -23,14 +23,14 @@ struct LiveTaskCenterView: View {
                 } else {
                     if !activeTasks.isEmpty {
                         taskSection(
-                            title: localized("Active tasks", "当前任务"),
+                            title: L.text("active_tasks", store.language),
                             tasks: activeTasks,
                             now: timeline.date
                         )
                     }
                     if !recentTasks.isEmpty {
                         taskSection(
-                            title: localized("Recent activity", "最近任务"),
+                            title: L.text("recent_activity", store.language),
                             tasks: Array(recentTasks.prefix(20)),
                             now: timeline.date
                         )
@@ -44,9 +44,9 @@ struct LiveTaskCenterView: View {
     private func header(activeTasks: [AgentTask], now: Date) -> some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(localized("Live Tasks", "实时任务"))
+                Text(L.text("live_tasks", store.language))
                     .font(.agentBar(size: 20, weight: .bold))
-                Text(localized("Codex activity refreshes every 5 seconds.", "Codex 活动每 5 秒刷新一次。"))
+                Text(L.text("live_tasks_subtitle", store.language))
                     .font(.agentBar(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
@@ -72,10 +72,10 @@ struct LiveTaskCenterView: View {
         let activeTokens = activeTasks.reduce(0) { $0 + $1.tokens.total }
 
         return HStack(spacing: 14) {
-            taskMetric(localized("Working", "运行中"), "\(working)", color: .green)
-            taskMetric(localized("Waiting", "等待中"), "\(waiting)", color: .orange)
-            taskMetric(localized("Completed", "已完成"), "\(completed)", color: AgentBarPalette.primary)
-            taskMetric(localized("Active tokens", "当前 Tokens"), DisplayFormatters.compactTokenString(activeTokens, language: store.language), color: .blue)
+            taskMetric(L.text("working", store.language), "\(working)", color: .green)
+            taskMetric(L.text("task_waiting", store.language), "\(waiting)", color: .orange)
+            taskMetric(L.text("completed", store.language), "\(completed)", color: AgentBarPalette.primary)
+            taskMetric(L.text("active_tokens", store.language), DisplayFormatters.compactTokenString(activeTokens, language: store.language), color: .blue)
         }
     }
 
@@ -114,15 +114,16 @@ struct LiveTaskCenterView: View {
 
     private func taskRow(_ task: AgentTask, now: Date) -> some View {
         let state = task.state(at: now)
+        let presentation = statePresentation(state)
         return HStack(spacing: 16) {
-            stateIndicator(state)
+            stateIndicator(presentation)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(task.title?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? localized("Untitled task", "未命名任务"))
+                Text(task.title?.trimmedNonEmpty ?? L.text("untitled_task", store.language))
                     .font(.agentBar(size: 13, weight: .bold))
                     .lineLimit(1)
                 HStack(spacing: 8) {
-                    Label(task.displayProjectName, systemImage: "folder")
+                    Label(task.displayProjectName(language: store.language), systemImage: "folder")
                     if let path = task.repositoryPath ?? task.cwd {
                         Text(path)
                             .lineLimit(1)
@@ -134,17 +135,17 @@ struct LiveTaskCenterView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            taskValue(localized("Duration", "运行时长"), DisplayFormatters.durationString(seconds: task.duration(at: now)), width: 90)
+            taskValue(L.text("task_duration", store.language), DisplayFormatters.durationString(seconds: task.duration(at: now)), width: 90)
             taskValue("Tokens", DisplayFormatters.compactTokenString(task.tokens.total, language: store.language), width: 90)
-            taskValue(localized("Cost", "费用"), DisplayFormatters.costString(task.estimatedCostUSD), width: 84)
-            taskValue(localized("Model", "模型"), task.models.first ?? "--", width: 116)
+            taskValue(L.text("task_cost", store.language), DisplayFormatters.costString(task.estimatedCostUSD), width: 84)
+            taskValue(L.text("task_model", store.language), task.models.first ?? "--", width: 116)
 
-            Text(stateTitle(state))
+            Text(presentation.title)
                 .font(.agentBar(size: 11, weight: .bold))
-                .foregroundStyle(stateColor(state))
+                .foregroundStyle(presentation.color)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(stateColor(state).opacity(0.12), in: Capsule())
+                .background(presentation.color.opacity(0.12), in: Capsule())
                 .frame(width: 86)
         }
         .padding(.horizontal, 16)
@@ -164,12 +165,12 @@ struct LiveTaskCenterView: View {
         .frame(width: width, alignment: .trailing)
     }
 
-    private func stateIndicator(_ state: AgentTaskState) -> some View {
+    private func stateIndicator(_ presentation: TaskStatePresentation) -> some View {
         ZStack {
-            Circle().fill(stateColor(state).opacity(0.14)).frame(width: 34, height: 34)
-            Image(systemName: stateIcon(state))
+            Circle().fill(presentation.color.opacity(0.14)).frame(width: 34, height: 34)
+            Image(systemName: presentation.icon)
                 .font(.agentBar(size: 13, weight: .bold))
-                .foregroundStyle(stateColor(state))
+                .foregroundStyle(presentation.color)
         }
     }
 
@@ -178,9 +179,9 @@ struct LiveTaskCenterView: View {
             Image(systemName: "bolt.horizontal.circle")
                 .font(.system(size: 36))
                 .foregroundStyle(AgentBarPalette.primary)
-            Text(localized("No Codex tasks found", "暂未发现 Codex 任务"))
+            Text(L.text("no_codex_tasks", store.language))
                 .font(.agentBar(size: 16, weight: .bold))
-            Text(localized("Start a Codex task and it will appear here automatically.", "启动 Codex 任务后会自动显示在这里。"))
+            Text(L.text("no_codex_tasks_subtitle", store.language))
                 .font(.agentBar(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
         }
@@ -188,38 +189,22 @@ struct LiveTaskCenterView: View {
         .agentBarPanel(cornerRadius: 14)
     }
 
-    private func stateTitle(_ state: AgentTaskState) -> String {
+    private func statePresentation(_ state: AgentTaskState) -> TaskStatePresentation {
         switch state {
-        case .working: localized("Working", "运行中")
-        case .waiting: localized("Waiting", "等待中")
-        case .completed: localized("Completed", "已完成")
-        case .interrupted: localized("Interrupted", "已中断")
+        case .working:
+            TaskStatePresentation(title: L.text("working", store.language), color: .green, icon: "bolt.fill")
+        case .waiting:
+            TaskStatePresentation(title: L.text("task_waiting", store.language), color: .orange, icon: "pause.fill")
+        case .completed:
+            TaskStatePresentation(title: L.text("completed", store.language), color: AgentBarPalette.primary, icon: "checkmark")
+        case .interrupted:
+            TaskStatePresentation(title: L.text("interrupted", store.language), color: .red, icon: "xmark")
         }
-    }
-
-    private func stateColor(_ state: AgentTaskState) -> Color {
-        switch state {
-        case .working: .green
-        case .waiting: .orange
-        case .completed: AgentBarPalette.primary
-        case .interrupted: .red
-        }
-    }
-
-    private func stateIcon(_ state: AgentTaskState) -> String {
-        switch state {
-        case .working: "bolt.fill"
-        case .waiting: "pause.fill"
-        case .completed: "checkmark"
-        case .interrupted: "xmark"
-        }
-    }
-
-    private func localized(_ english: String, _ chinese: String) -> String {
-        store.language == .chinese ? chinese : english
     }
 }
 
-private extension String {
-    var nonEmpty: String? { isEmpty ? nil : self }
+private struct TaskStatePresentation {
+    var title: String
+    var color: Color
+    var icon: String
 }

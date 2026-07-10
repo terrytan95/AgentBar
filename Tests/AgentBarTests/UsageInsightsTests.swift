@@ -2,6 +2,91 @@ import XCTest
 @testable import AgentBar
 
 final class UsageInsightsTests: XCTestCase {
+    func testOpenTaskBecomesWaitingAfterActivityStops() {
+        let startedAt = Date(timeIntervalSince1970: 1_783_666_800)
+        let task = AgentTask(
+            id: "turn-1",
+            sessionID: "session-1",
+            title: "Await approval",
+            projectName: "AgentBar",
+            cwd: "/repo/AgentBar",
+            startedAt: startedAt,
+            completedAt: nil,
+            lastActivityAt: startedAt.addingTimeInterval(10),
+            tokens: .zero,
+            estimatedCostUSD: nil,
+            models: [],
+            terminalState: nil
+        )
+
+        XCTAssertEqual(task.state(at: startedAt.addingTimeInterval(60)), .working)
+        XCTAssertEqual(task.state(at: startedAt.addingTimeInterval(101)), .waiting)
+    }
+
+    func testProjectUsageAggregatesRepositoryModelsTrendAndBudget() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_783_666_800)
+        let today = now.addingTimeInterval(-60)
+        let previousDay = now.addingTimeInterval(-86_400)
+        let points = [
+            projectPoint(path: "/repo/AgentBar", model: "gpt-5.6-terra", date: today, tokens: 700, cost: "0.70"),
+            projectPoint(path: "/repo/AgentBar", model: "gpt-5.6-luna", date: today, tokens: 500, cost: "0.30"),
+            projectPoint(path: "/repo/AgentBar", model: "gpt-5.6-terra", date: previousDay, tokens: 600, cost: "0.50"),
+            projectPoint(path: "/repo/Other", model: "gpt-5.6-luna", date: today, tokens: 200, cost: "0.10")
+        ]
+        let budget = ProjectBudget(id: "/repo/AgentBar", dailyTokenLimit: 1_000, dailyCostLimitUSD: 2)
+
+        let projects = ProjectUsageAnalytics.summaries(
+            points: points,
+            range: .today,
+            budgets: [budget],
+            now: now,
+            calendar: calendar
+        )
+        let agentBar = try XCTUnwrap(projects.first(where: { $0.id == "/repo/AgentBar" }))
+
+        XCTAssertEqual(agentBar.name, "AgentBar")
+        XCTAssertEqual(agentBar.summary.totalTokens, 1_200)
+        XCTAssertEqual(agentBar.summary.estimatedCostUSD, Decimal(string: "1.00"))
+        XCTAssertEqual(agentBar.models.map(\.model), ["gpt-5.6-terra", "gpt-5.6-luna"])
+        XCTAssertEqual(try XCTUnwrap(agentBar.periodChange.tokenPercent), 100, accuracy: 0.001)
+        XCTAssertEqual(agentBar.budgetStatus.tokenSeverity, .critical)
+    }
+
+    func testRepositoryIdentityResolvesGitRootAndRejectsPlainFolders() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = root.appending(path: "AgentBar")
+        let nested = repository.appending(path: "Sources/AgentBar")
+        let plainFolder = root.appending(path: "scratch")
+        try FileManager.default.createDirectory(at: repository.appending(path: ".git"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: plainFolder, withIntermediateDirectories: true)
+
+        XCTAssertEqual(RepositoryIdentityResolver.repositoryPath(for: nested.path), repository.path)
+        XCTAssertNil(RepositoryIdentityResolver.repositoryPath(for: plainFolder.path))
+    }
+
+    @MainActor
+    func testProjectBudgetsPersistPerRepository() {
+        let suiteName = "ProjectBudgets-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.updateProjectBudget(ProjectBudget(
+            id: "/repo/AgentBar",
+            dailyTokenLimit: 10_000,
+            weeklyTokenLimit: 50_000,
+            dailyCostLimitUSD: 5,
+            weeklyCostLimitUSD: 20
+        ))
+
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertEqual(reloaded.projectBudget(for: "/repo/AgentBar").dailyTokenLimit, 10_000)
+        XCTAssertEqual(reloaded.projectBudget(for: "/repo/AgentBar").weeklyCostLimitUSD, 20)
+    }
+
     func testDashboardOverviewUsesStatisticsInsights() {
         let now = Date(timeIntervalSince1970: 1_781_388_300)
         var active = account(id: "active", name: "active@example.com", fiveHourUsed: 96, weeklyUsed: 20, now: now, active: true)
@@ -108,6 +193,19 @@ final class UsageInsightsTests: XCTestCase {
             sessionID: sessionID,
             sessionTitle: sessionTitle,
             projectName: projectName
+        )
+    }
+
+    private func projectPoint(path: String, model: String, date: Date, tokens: Int, cost: String) -> UsagePoint {
+        UsagePoint(
+            service: .codex,
+            model: model,
+            date: date,
+            tokens: TokenTotals(input: tokens, cachedInput: 0, output: 0, reasoningOutput: 0, total: tokens),
+            estimatedCostUSD: Decimal(string: cost),
+            projectName: URL(fileURLWithPath: path).lastPathComponent,
+            cwd: path,
+            repositoryPath: path
         )
     }
 }

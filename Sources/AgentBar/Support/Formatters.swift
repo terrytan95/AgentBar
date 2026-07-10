@@ -75,6 +75,14 @@ enum DisplayFormatters {
         return "0.0%"
     }
 
+    static func durationString(seconds: TimeInterval) -> String {
+        let seconds = max(0, Int(seconds.rounded()))
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m \(seconds % 60)s" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+
     static func relativeString(for date: Date, language: AppLanguage? = nil) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated

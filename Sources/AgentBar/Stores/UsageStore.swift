@@ -37,12 +37,15 @@ private final class DarwinNotificationObserver {
 @MainActor
 final class UsageStore: ObservableObject {
     static let accountRemovalNotification = Notification.Name("AgentBarUsageStoreAccountRemoval")
+    private static let taskHistoryWindow: TimeInterval = 24 * 60 * 60
+    private static let maximumTaskHistoryCount = 200
 
     @Published private(set) var snapshots: [UsageService: UsageSnapshot] = [:]
     @Published private(set) var accounts: [UsageAccount] = []
     @Published private(set) var points: [UsagePoint] = [] {
         didSet { invalidateStatisticsCaches() }
     }
+    @Published private(set) var tasks: [AgentTask] = []
     @Published private(set) var quotaCapacityHistory: QuotaCapacityHistory
     @Published private(set) var isRefreshing = false
     @Published private(set) var isManualRefreshFeedbackVisible = false
@@ -61,6 +64,7 @@ final class UsageStore: ObservableObject {
 
     let settings: SettingsStore
     private let codexUsageSource: @Sendable () async -> UsageSnapshot
+    private let codexTaskReader: @Sendable () -> [AgentTask]
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let codexAccountLifecycle = CodexAccountLifecycle()
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
@@ -71,12 +75,17 @@ final class UsageStore: ObservableObject {
     private let codexAccountRecoveryLoginLauncher: @Sendable (String, String) -> Void
     private let codexAccountLoginSuccessNotifier: @Sendable (String) -> Void
     private let quotaResetNotifier: @Sendable (QuotaResetNotification) -> Void
+    private let taskCompletionNotifier: @Sendable (TaskCompletionNotification) -> Void
     private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
+    private var taskTimer: Timer?
     private var accountRemovalObserver: NSObjectProtocol?
     private var codexRecoveryLoginObserver: DarwinNotificationObserver?
     private var refreshIntervalObserver: AnyCancellable?
     private var refreshInFlight = false
+    private var taskRefreshInFlight = false
+    private var hasLoadedTaskCenter = false
+    private var lastTaskRefreshAt: Date?
     private var refreshQueued = false
     private var manualRefreshQueued = false
     private var summaryCache: UsageSummary?
@@ -92,6 +101,9 @@ final class UsageStore: ObservableObject {
         },
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot = {
             CodexUsageReader().read()
+        },
+        codexTaskReader: @escaping @Sendable () -> [AgentTask] = {
+            CodexTaskCenterReader().read()
         },
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot = {
             ClaudeUsageReader.discover(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
@@ -120,6 +132,9 @@ final class UsageStore: ObservableObject {
         quotaResetNotifier: @escaping @Sendable (QuotaResetNotification) -> Void = { notification in
             QuotaResetDesktopNotifier.notify(notification)
         },
+        taskCompletionNotifier: @escaping @Sendable (TaskCompletionNotification) -> Void = { notification in
+            TaskCompletionDesktopNotifier.notify(notification)
+        },
         quotaCapacityHistoryStore: QuotaCapacityHistoryStore = QuotaCapacityHistoryStore()
     ) {
         self.settings = settings
@@ -133,6 +148,7 @@ final class UsageStore: ObservableObject {
             }
             return snapshot
         }
+        self.codexTaskReader = codexTaskReader
         self.claudeUsageReader = claudeUsageReader
         self.codexAccountSwitcher = codexAccountSwitcher
         self.codexAccountRemover = codexAccountRemover
@@ -142,6 +158,7 @@ final class UsageStore: ObservableObject {
         self.codexAccountRecoveryLoginLauncher = codexAccountRecoveryLoginLauncher
         self.codexAccountLoginSuccessNotifier = codexAccountLoginSuccessNotifier
         self.quotaResetNotifier = quotaResetNotifier
+        self.taskCompletionNotifier = taskCompletionNotifier
         accountRemovalObserver = NotificationCenter.default.addObserver(
             forName: Self.accountRemovalNotification,
             object: nil,
@@ -157,6 +174,7 @@ final class UsageStore: ObservableObject {
             }
         }
         configureTimer()
+        configureTaskTimer()
         refreshIntervalObserver = settings.$refreshInterval
             .dropFirst()
             .removeDuplicates()
@@ -345,6 +363,7 @@ final class UsageStore: ObservableObject {
                 self.snapshots = [.codex: codex, .claudeCode: claude]
                 self.accounts = codex.accounts + claude.accounts
                 self.points = codex.points + claude.points
+                self.applyTaskCenter(codex.tasks)
                 self.recordQuotaCapacitySample()
                 self.sendQuotaResetNotifications(previousAccounts: previousAccounts, wasLoaded: wasLoaded)
                 self.hasLoadedAccountInformation = true
@@ -371,6 +390,32 @@ final class UsageStore: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: max(30, settings.refreshInterval), repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()
+            }
+        }
+    }
+
+    func configureTaskTimer() {
+        taskTimer?.invalidate()
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshTaskCenter()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        taskTimer = timer
+    }
+
+    func refreshTaskCenter() {
+        guard !taskRefreshInFlight else { return }
+        taskRefreshInFlight = true
+        let codexTaskReader = codexTaskReader
+
+        Task.detached(priority: .utility) { [weak self] in
+            let tasks = codexTaskReader()
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.taskRefreshInFlight = false
+                self.applyTaskCenter(tasks)
             }
         }
     }
@@ -520,11 +565,15 @@ final class UsageStore: ObservableObject {
     func applyTestData(
         snapshots: [UsageService: UsageSnapshot] = [:],
         accounts: [UsageAccount] = [],
-        points: [UsagePoint] = []
+        points: [UsagePoint] = [],
+        tasks: [AgentTask] = []
     ) {
         self.snapshots = snapshots
         self.accounts = accounts
         self.points = points
+        self.tasks = tasks
+        hasLoadedTaskCenter = true
+        lastTaskRefreshAt = Date()
         hasLoadedAccountInformation = true
         isRefreshing = false
         isManualRefreshFeedbackVisible = false
@@ -555,6 +604,33 @@ final class UsageStore: ObservableObject {
         ) {
             quotaResetNotifier(notification)
         }
+    }
+
+    private func applyTaskCenter(_ nextTasks: [AgentTask], now: Date = Date()) {
+        let previousTasks = tasks
+        let completedAfter = lastTaskRefreshAt ?? now
+        let historyCutoff = now.addingTimeInterval(-Self.taskHistoryWindow)
+        tasks = Array(nextTasks
+            .filter { ($0.completedAt ?? $0.lastActivityAt) >= historyCutoff }
+            .sorted { lhs, rhs in
+                let lhsDate = lhs.completedAt ?? lhs.lastActivityAt
+                let rhsDate = rhs.completedAt ?? rhs.lastActivityAt
+                return lhsDate > rhsDate
+            }
+            .prefix(Self.maximumTaskHistoryCount))
+
+        if hasLoadedTaskCenter, settings.taskCompletionNotificationsEnabled {
+            for notification in TaskCompletionNotifications.newlyCompleted(
+                previous: previousTasks,
+                current: tasks,
+                completedAfter: completedAfter,
+                language: language
+            ) {
+                taskCompletionNotifier(notification)
+            }
+        }
+        hasLoadedTaskCenter = true
+        lastTaskRefreshAt = now
     }
 
 }

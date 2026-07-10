@@ -329,6 +329,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     var status: DataSourceStatus
     var accounts: [UsageAccount]
     var points: [UsagePoint]
+    var tasks: [AgentTask] = []
     var securityNotes: [String]
     var refreshedAt: Date
     var pricingFingerprint: String
@@ -345,6 +346,7 @@ struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var sessionTitle: String? = nil
     var projectName: String? = nil
     var cwd: String? = nil
+    var repositoryPath: String? = nil
     var sourceFile: String? = nil
     var sourceLine: Int? = nil
     var reasoningEffort: String? = nil
@@ -365,6 +367,50 @@ struct UsagePoint: Codable, Equatable, Identifiable, Sendable {
     var cacheRatio: Double {
         guard tokens.input > 0 else { return 0 }
         return Double(tokens.cachedInput) / Double(tokens.input)
+    }
+}
+
+enum AgentTaskState: String, Codable, Equatable, Sendable {
+    case working
+    case waiting
+    case completed
+    case interrupted
+}
+
+struct AgentTask: Codable, Equatable, Identifiable, Sendable {
+    static let waitingAfter: TimeInterval = 90
+
+    var id: String
+    var sessionID: String
+    var title: String?
+    var projectName: String?
+    var cwd: String?
+    var repositoryPath: String? = nil
+    var startedAt: Date
+    var completedAt: Date?
+    var lastActivityAt: Date
+    var tokens: TokenTotals
+    var estimatedCostUSD: Decimal?
+    var models: [String]
+    var terminalState: AgentTaskState?
+
+    func state(at now: Date = Date()) -> AgentTaskState {
+        if let terminalState { return terminalState }
+        return now.timeIntervalSince(lastActivityAt) >= Self.waitingAfter ? .waiting : .working
+    }
+
+    func duration(at now: Date = Date()) -> TimeInterval {
+        max(0, (completedAt ?? now).timeIntervalSince(startedAt))
+    }
+
+    var displayProjectName: String {
+        if let projectName = projectName?.trimmingCharacters(in: .whitespacesAndNewlines), !projectName.isEmpty {
+            return projectName
+        }
+        if let path = repositoryPath ?? cwd {
+            return URL(fileURLWithPath: path).lastPathComponent
+        }
+        return "Unknown project"
     }
 }
 
@@ -524,6 +570,7 @@ struct CodexSessionMetrics: Codable, Equatable, Sendable {
     var eventCount: Int
     var tokenTotals: TokenTotals
     var points: [UsagePoint]
+    var tasks: [AgentTask] = []
     var latestFiveHour: UsageWindow?
     var latestWeekly: UsageWindow?
     var latestResetCredits: UsageResetCredits? = nil

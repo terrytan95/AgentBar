@@ -20,6 +20,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexSessionJsonlUsesTurnContextModelForCostBreakdown()
         try checkCodexSessionJsonlParsesResetCreditsFromRateLimitEvents()
         try checkCodexSessionJsonlCarriesSessionAndProjectMetadata()
+        try checkCodexSessionJsonlBuildsTaskLifecycle()
         try checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset()
         try await checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
         try await checkCodexUsageAPISyncerRefreshesOnlyActiveAccount()
@@ -57,6 +58,7 @@ final class UsageParsingTests: XCTestCase {
         checkRapidUsageAlertDoesNotWarnInMenuBarTitle()
         checkAccount401WarnsInMenuBarTitle()
         checkQuotaResetNotificationsDetectWindowRefreshes()
+        checkTaskCompletionNotificationsDetectNewlyFinishedTasks()
         checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta()
         checkQuotaCapacityHistoryDoesNotEstimateAcrossAccountSwitches()
         checkStatisticsBucketsAggregateExpectedRanges()
@@ -479,6 +481,34 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(metrics.points.first?.sessionID, "session-1")
         XCTAssertEqual(metrics.points.first?.sessionTitle, "Fix high CPU usage in AgentBar")
         XCTAssertEqual(metrics.points.first?.projectName, "AgentBar")
+    }
+
+    private func checkCodexSessionJsonlBuildsTaskLifecycle() throws {
+        let data = """
+        {"type":"event_msg","timestamp":"2026-07-10T07:00:00Z","payload":{"type":"task_started","turn_id":"turn-1","started_at":1783666800}}
+        {"type":"turn_context","timestamp":"2026-07-10T07:00:01Z","payload":{"cwd":"/Users/test/AgentBar","model":"gpt-5.6-terra"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:00:02Z","payload":{"type":"user_message","message":"Build the live task center"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:00:10Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":30,"reasoning_output_tokens":10,"total_tokens":140}}}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:01:00Z","payload":{"type":"task_complete","turn_id":"turn-1","completed_at":1783666860,"duration_ms":60000}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:02:00Z","payload":{"type":"task_started","turn_id":"turn-2","started_at":1783666920}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:02:01Z","payload":{"type":"user_message","message":"Set project budgets"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:02:10Z","payload":{"type":"agent_message","message":"I will implement repository budgets."}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:02:30Z","payload":{"type":"task_complete","turn_id":"turn-2","completed_at":1783666950,"duration_ms":30000}}
+        """.data(using: .utf8)!
+
+        let metrics = try CodexUsageReader.parseSessionJsonl(data: data, sessionID: "session-1")
+        let task = try XCTUnwrap(metrics.tasks.first)
+        XCTAssertEqual(metrics.tasks.count, 2)
+        XCTAssertEqual(task.id, "turn-1")
+        XCTAssertEqual(task.sessionID, "session-1")
+        XCTAssertEqual(task.projectName, "AgentBar")
+        XCTAssertEqual(task.cwd, "/Users/test/AgentBar")
+        XCTAssertEqual(task.tokens.total, 140)
+        XCTAssertEqual(task.models, ["gpt-5.6-terra"])
+        XCTAssertEqual(task.terminalState, .completed)
+        XCTAssertEqual(task.state(at: Date(timeIntervalSince1970: 1_783_666_900)), .completed)
+        XCTAssertEqual(task.duration(at: task.completedAt!), 60, accuracy: 0.001)
+        XCTAssertEqual(metrics.tasks.last?.title, "Set project budgets")
     }
 
     private func checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {
@@ -1676,6 +1706,46 @@ final class UsageParsingTests: XCTestCase {
             language: .english
         )
         XCTAssertTrue(futureAdjustment.isEmpty)
+    }
+
+    private func checkTaskCompletionNotificationsDetectNewlyFinishedTasks() {
+        let startedAt = Date(timeIntervalSince1970: 1_783_666_800)
+        let completedAt = startedAt.addingTimeInterval(75)
+        let previous = AgentTask(
+            id: "turn-1",
+            sessionID: "session-1",
+            title: "Build task center",
+            projectName: "AgentBar",
+            cwd: "/repo/AgentBar",
+            startedAt: startedAt,
+            completedAt: nil,
+            lastActivityAt: startedAt.addingTimeInterval(60),
+            tokens: TokenTotals(input: 80, cachedInput: 0, output: 20, reasoningOutput: 0, total: 100),
+            estimatedCostUSD: Decimal(string: "0.02"),
+            models: ["gpt-5.6-terra"],
+            terminalState: nil
+        )
+        var completed = previous
+        completed.completedAt = completedAt
+        completed.lastActivityAt = completedAt
+        completed.terminalState = .completed
+
+        let notifications = TaskCompletionNotifications.newlyCompleted(
+            previous: [previous],
+            current: [completed],
+            completedAfter: startedAt,
+            language: .english
+        )
+
+        XCTAssertEqual(notifications.count, 1)
+        XCTAssertEqual(notifications.first?.title, "Codex task completed")
+        XCTAssertTrue(notifications.first?.body.contains("Build task center") == true)
+        XCTAssertTrue(TaskCompletionNotifications.newlyCompleted(
+            previous: [completed],
+            current: [completed],
+            completedAfter: startedAt,
+            language: .english
+        ).isEmpty)
     }
 
     private func checkStatisticsBucketsAggregateExpectedRanges() {

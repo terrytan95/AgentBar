@@ -62,6 +62,8 @@ enum L {
 
     private static let english: [String: String] = [
         "overview": "Overview",
+        "live_tasks": "Live Tasks",
+        "project_billing": "Projects",
         "audit": "Audit",
         "statistics": "Statistics",
         "settings": "Settings",
@@ -169,6 +171,8 @@ enum L {
         "refresh_interval_subtitle": "Applies to Codex usage API sync and local data refresh.",
         "quota_reset_notifications": "Quota reset notifications",
         "quota_reset_notifications_subtitle": "Show a desktop notification when 5-hour or weekly quota refreshes.",
+        "task_completion_notifications": "Task completion notifications",
+        "task_completion_notifications_subtitle": "Show a desktop notification when a Codex task finishes.",
         "open_at_login_subtitle": "Open AgentBar at login.",
         "general": "General",
         "general_settings_subtitle": "Language and app behavior.",
@@ -337,6 +341,8 @@ enum L {
 
     private static let chinese: [String: String] = [
         "overview": "概览",
+        "live_tasks": "实时任务",
+        "project_billing": "项目账单",
         "audit": "审计",
         "statistics": "统计",
         "settings": "设置",
@@ -444,6 +450,8 @@ enum L {
         "refresh_interval_subtitle": "应用于 Codex 用量 API 同步和本地数据刷新。",
         "quota_reset_notifications": "额度刷新通知",
         "quota_reset_notifications_subtitle": "5 小时或周额度刷新时显示桌面通知。",
+        "task_completion_notifications": "任务完成通知",
+        "task_completion_notifications_subtitle": "Codex 任务完成时显示桌面通知。",
         "open_at_login_subtitle": "登录时打开 AgentBar。",
         "general": "通用",
         "general_settings_subtitle": "语言和应用行为。",

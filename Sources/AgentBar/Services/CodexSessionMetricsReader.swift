@@ -245,6 +245,21 @@ private struct CodexSessionMetricsDiskRecord: Codable {
         self.signature = signature
         self.metrics = metrics
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case path
+        case signature
+        case metrics
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        path = try container.decode(String.self, forKey: .path)
+        signature = try container.decode(CodexSessionFileSignature.self, forKey: .signature)
+        metrics = try container.decode(CodexSessionMetrics.self, forKey: .metrics)
+    }
 }
 
 private extension CodexSessionMetrics {

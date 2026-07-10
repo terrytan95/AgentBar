@@ -634,13 +634,15 @@ struct AuditView: View {
     }
 
     private func modelText(_ models: [String]) -> String {
-        let values = Array(Set(models)).sorted()
-        guard let first = values.first else { return "—" }
-        return values.count == 1 ? first : localized("mixed")
+        summarizedText(models)
     }
 
     private func effortText(_ efforts: [String]) -> String {
-        let values = Array(Set(efforts)).sorted()
+        summarizedText(efforts)
+    }
+
+    private func summarizedText(_ values: [String]) -> String {
+        let values = Array(Set(values)).sorted()
         guard let first = values.first else { return "—" }
         return values.count == 1 ? first : localized("mixed")
     }
@@ -827,23 +829,24 @@ struct AuditUsageSnapshot {
                 ? calls.reduce(TokenTotals.zero) { $0 + $1.tokens }
                 : tasks.reduce(TokenTotals.zero) { $0 + $1.tokens }
             let durationSeconds = durationSeconds(calls: calls)
-            let timedTasks = tasks.compactMap { task -> (AgentTask, Double)? in
+            let timedTasks = tasks.compactMap { task -> (task: AgentTask, durationMilliseconds: Double)? in
                 guard let duration = task.reportedDurationMilliseconds,
                       task.reportedDurationSeconds != nil
                 else { return nil }
                 return (task, duration)
             }
-            let reportedDurationMilliseconds = timedTasks.isEmpty
-                ? nil
-                : timedTasks.reduce(0) { $0 + $1.1 }
-            let timedOutputTokens = timedTasks.reduce(0) { $0 + $1.0.tokens.output }
+            let hasCompleteDurationCoverage = !tasks.isEmpty && timedTasks.count == tasks.count
+            let reportedDurationMilliseconds = hasCompleteDurationCoverage
+                ? timedTasks.reduce(0) { $0 + $1.durationMilliseconds }
+                : nil
+            let timedOutputTokens = timedTasks.reduce(0) { $0 + $1.task.tokens.output }
             let tokensPerSecond = reportedDurationMilliseconds.map { milliseconds in
                 Double(timedOutputTokens) / (milliseconds / 1_000)
             }
             let firstTokenValues = tasks.compactMap(\.validTimeToFirstTokenMilliseconds)
-            let averageFirstToken = firstTokenValues.isEmpty
-                ? nil
-                : firstTokenValues.reduce(0, +) / Double(firstTokenValues.count)
+            let averageFirstToken = !tasks.isEmpty && firstTokenValues.count == tasks.count
+                ? firstTokenValues.reduce(0, +) / Double(firstTokenValues.count)
+                : nil
             let projectName = sortedTasks.first?.projectName
                 ?? sortedCalls.first?.projectName
                 ?? "Unknown project"

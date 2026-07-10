@@ -137,59 +137,24 @@ final class AppUpdateStore: ObservableObject {
     }
 
     private func download(_ release: AppUpdateRelease) async throws -> DownloadedAppUpdate {
-        let updateDirectory = try freshUpdateDirectory(for: release.version)
-        try AppUpdateSecurity.validateDownloadURL(release.asset.downloadURL)
-        let zipURL = updateDirectory.appending(path: try AppUpdateSecurity.safeAssetFileName(release.asset.name))
-        let extractDirectory = updateDirectory.appending(path: "expanded", directoryHint: .isDirectory)
-
         let request = URLRequest(url: release.asset.downloadURL, cachePolicy: .reloadIgnoringLocalCacheData)
         let (temporaryURL, response) = try await session.download(for: request)
         try validateHTTPResponse(response)
-        try fileManager.moveItem(at: temporaryURL, to: zipURL)
-        try AppUpdateSecurity.verifyRequiredSHA256Digest(release.asset.digest, fileURL: zipURL)
-        try fileManager.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
-        try unzip(zipURL, to: extractDirectory)
-        let appURL = try findAppBundle(in: extractDirectory)
-        try AppUpdateSecurity.validateDownloadedAppBundle(appURL, expectedRoot: extractDirectory, fileManager: fileManager)
-
-        let downloadedUpdate = DownloadedAppUpdate(release: release, appURL: appURL)
+        let stager = AppUpdateStager(fileManager: fileManager, updatesRootOverride: updatesRootOverride)
+        let downloadedUpdate = try await Task.detached(priority: .utility) {
+            try stager.stage(release: release, temporaryURL: temporaryURL)
+        }.value
         defaults.set(release.version, forKey: Keys.pendingReleaseVersion)
-        defaults.set(appURL.path, forKey: Keys.pendingAppPath)
+        defaults.set(downloadedUpdate.appURL.path, forKey: Keys.pendingAppPath)
         return downloadedUpdate
-    }
-
-    private func freshUpdateDirectory(for version: String) throws -> URL {
-        let safeVersion = version.replacingOccurrences(of: "/", with: "-")
-        let root = try updatesRootDirectory()
-        let directory = root.appending(path: safeVersion, directoryHint: .isDirectory)
-        if fileManager.fileExists(atPath: directory.path) {
-            try fileManager.removeItem(at: directory)
-        }
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
-    }
-
-    private func updatesRootDirectory() throws -> URL {
-        if let updatesRootOverride {
-            try fileManager.createDirectory(at: updatesRootOverride, withIntermediateDirectories: true)
-            return updatesRootOverride
-        }
-        let appSupport = try fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let directory = appSupport.appending(path: "AgentBar/Updates", directoryHint: .isDirectory)
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
     }
 
     private func restorePendingDownload() {
         guard let version = defaults.string(forKey: Keys.pendingReleaseVersion),
               let path = defaults.string(forKey: Keys.pendingAppPath)
         else { return }
-        guard let updatesRoot = try? updatesRootDirectory() else {
+        let stager = AppUpdateStager(fileManager: fileManager, updatesRootOverride: updatesRootOverride)
+        guard let updatesRoot = try? stager.updatesRootDirectory() else {
             clearPendingDownload()
             return
         }
@@ -228,31 +193,6 @@ final class AppUpdateStore: ObservableObject {
         else {
             throw AppUpdateError.networkFailure
         }
-    }
-
-    private func unzip(_ zipURL: URL, to destinationURL: URL) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        process.arguments = ["-x", "-k", zipURL.path, destinationURL.path]
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw AppUpdateError.unzipFailed
-        }
-    }
-
-    private func findAppBundle(in directory: URL) throws -> URL {
-        guard let enumerator = fileManager.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            throw AppUpdateError.missingAppBundle
-        }
-        for case let url as URL in enumerator where url.lastPathComponent == "AgentBar.app" {
-            return url
-        }
-        throw AppUpdateError.missingAppBundle
     }
 
     private enum Keys {
@@ -312,21 +252,21 @@ enum AppUpdateTrigger {
     case automatic
 }
 
-struct AppUpdateRelease: Equatable {
+struct AppUpdateRelease: Equatable, Sendable {
     let version: String
     let name: String
     let pageURL: URL
     let asset: AppUpdateAsset
 }
 
-struct AppUpdateAsset: Equatable {
+struct AppUpdateAsset: Equatable, Sendable {
     let name: String
     let downloadURL: URL
     let size: Int
     let digest: String?
 }
 
-struct DownloadedAppUpdate: Equatable {
+struct DownloadedAppUpdate: Equatable, Sendable {
     let release: AppUpdateRelease
     let appURL: URL
 }
@@ -454,8 +394,13 @@ enum AppUpdateSecurity {
         guard expected.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil else {
             throw AppUpdateError.invalidDigest
         }
-        let data = try Data(contentsOf: fileURL)
-        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let file = try FileHandle(forReadingFrom: fileURL)
+        defer { try? file.close() }
+        var hasher = SHA256()
+        while let data = try file.read(upToCount: 1024 * 1024), !data.isEmpty {
+            hasher.update(data: data)
+        }
+        let actual = hasher.finalize().map { String(format: "%02x", $0) }.joined()
         guard actual == expected else {
             throw AppUpdateError.digestMismatch
         }
@@ -515,6 +460,79 @@ enum AppUpdateSecurity {
         guard checkStatus == errSecSuccess else {
             throw AppUpdateError.invalidCodeSignature
         }
+    }
+}
+
+// A stager is consumed by one utility task; its FileManager is never mutated or shared back into UI work.
+private struct AppUpdateStager: @unchecked Sendable {
+    var fileManager: FileManager
+    var updatesRootOverride: URL?
+
+    func stage(release: AppUpdateRelease, temporaryURL: URL) throws -> DownloadedAppUpdate {
+        let updateDirectory = try freshUpdateDirectory(for: release.version)
+        try AppUpdateSecurity.validateDownloadURL(release.asset.downloadURL)
+        let zipURL = updateDirectory.appending(path: try AppUpdateSecurity.safeAssetFileName(release.asset.name))
+        let extractDirectory = updateDirectory.appending(path: "expanded", directoryHint: .isDirectory)
+
+        try fileManager.moveItem(at: temporaryURL, to: zipURL)
+        try AppUpdateSecurity.verifyRequiredSHA256Digest(release.asset.digest, fileURL: zipURL)
+        try fileManager.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
+        try unzip(zipURL, to: extractDirectory)
+        let appURL = try findAppBundle(in: extractDirectory)
+        try AppUpdateSecurity.validateDownloadedAppBundle(appURL, expectedRoot: extractDirectory, fileManager: fileManager)
+        return DownloadedAppUpdate(release: release, appURL: appURL)
+    }
+
+    func updatesRootDirectory() throws -> URL {
+        if let updatesRootOverride {
+            try fileManager.createDirectory(at: updatesRootOverride, withIntermediateDirectories: true)
+            return updatesRootOverride
+        }
+        let appSupport = try fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let directory = appSupport.appending(path: "AgentBar/Updates", directoryHint: .isDirectory)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func freshUpdateDirectory(for version: String) throws -> URL {
+        let safeVersion = version.replacingOccurrences(of: "/", with: "-")
+        let root = try updatesRootDirectory()
+        let directory = root.appending(path: safeVersion, directoryHint: .isDirectory)
+        if fileManager.fileExists(atPath: directory.path) {
+            try fileManager.removeItem(at: directory)
+        }
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func unzip(_ zipURL: URL, to destinationURL: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-x", "-k", zipURL.path, destinationURL.path]
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw AppUpdateError.unzipFailed
+        }
+    }
+
+    private func findAppBundle(in directory: URL) throws -> URL {
+        guard let enumerator = fileManager.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            throw AppUpdateError.missingAppBundle
+        }
+        for case let url as URL in enumerator where url.lastPathComponent == "AgentBar.app" {
+            return url
+        }
+        throw AppUpdateError.missingAppBundle
     }
 }
 

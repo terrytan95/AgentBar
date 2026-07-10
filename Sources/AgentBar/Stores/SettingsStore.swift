@@ -80,6 +80,17 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(quotaResetNotificationsEnabled, forKey: Keys.quotaResetNotificationsEnabled) }
     }
 
+    @Published var taskCompletionNotificationsEnabled: Bool {
+        didSet { defaults.set(taskCompletionNotificationsEnabled, forKey: Keys.taskCompletionNotificationsEnabled) }
+    }
+
+    @Published private(set) var projectBudgets: [ProjectBudget] {
+        didSet {
+            guard let data = try? JSONEncoder().encode(projectBudgets) else { return }
+            defaults.set(data, forKey: Keys.projectBudgets)
+        }
+    }
+
     @Published var codexRotationThresholdRemainingPercent: Double {
         didSet {
             let clamped = Self.clampedRotationThreshold(codexRotationThresholdRemainingPercent)
@@ -175,6 +186,10 @@ final class SettingsStore: ObservableObject {
         showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
+        taskCompletionNotificationsEnabled = defaults.object(forKey: Keys.taskCompletionNotificationsEnabled) as? Bool ?? false
+        projectBudgets = defaults.data(forKey: Keys.projectBudgets)
+            .flatMap { try? JSONDecoder().decode([ProjectBudget].self, from: $0) }
+            ?? []
         let savedRotationThreshold = defaults.double(forKey: Keys.codexRotationThresholdRemainingPercent)
         codexRotationThresholdRemainingPercent = Self.clampedRotationThreshold(savedRotationThreshold > 0 ? savedRotationThreshold : 10)
         dailyTokenBudget = Self.clampedBudgetCount(defaults.integer(forKey: Keys.dailyTokenBudget))
@@ -218,6 +233,29 @@ final class SettingsStore: ObservableObject {
         max(300, value)
     }
 
+    func projectBudget(for id: String) -> ProjectBudget {
+        projectBudgets.first(where: { $0.id == id }) ?? ProjectBudget(id: id)
+    }
+
+    func updateProjectBudget(_ budget: ProjectBudget) {
+        let budget = ProjectBudget(
+            id: budget.id,
+            dailyTokenLimit: Self.clampedBudgetCount(budget.dailyTokenLimit),
+            weeklyTokenLimit: Self.clampedBudgetCount(budget.weeklyTokenLimit),
+            dailyCostLimitUSD: Self.clampedBudgetCost(budget.dailyCostLimitUSD),
+            weeklyCostLimitUSD: Self.clampedBudgetCost(budget.weeklyCostLimitUSD)
+        )
+        if let index = projectBudgets.firstIndex(where: { $0.id == budget.id }) {
+            if budget.isConfigured {
+                projectBudgets[index] = budget
+            } else {
+                projectBudgets.remove(at: index)
+            }
+        } else if budget.isConfigured {
+            projectBudgets.append(budget)
+        }
+    }
+
     private func applyLoginItemPreference() {
         do {
             if launchAtLogin {
@@ -246,6 +284,8 @@ final class SettingsStore: ObservableObject {
         static let showAggregatedAccountData = "showAggregatedAccountData"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
+        static let taskCompletionNotificationsEnabled = "taskCompletionNotificationsEnabled"
+        static let projectBudgets = "projectBudgets"
         static let codexRotationThresholdRemainingPercent = "codexRotationThresholdRemainingPercent"
         static let dailyTokenBudget = "dailyTokenBudget"
         static let weeklyTokenBudget = "weeklyTokenBudget"

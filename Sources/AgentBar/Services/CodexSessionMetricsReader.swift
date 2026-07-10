@@ -10,7 +10,8 @@ struct CodexSessionMetricsReader {
         root: URL,
         maximumSessionFileBytes: Int,
         maximumSessionFiles: Int,
-        cacheDirectory: URL? = nil
+        cacheDirectory: URL? = nil,
+        prunesCache: Bool = true
     ) -> CodexSessionMetrics {
         var accessIssueNote: String?
         do {
@@ -88,7 +89,7 @@ struct CodexSessionMetricsReader {
                         sourceFile: fileURL.path
                       )
                 else { continue }
-                metrics = parsedMetrics
+                metrics = RepositoryIdentityResolver.resolve(in: parsedMetrics, fileManager: fileManager)
                 if signature.size > maximumSessionFileBytes,
                    metrics.eventCount == 0,
                    metrics.latestRateLimitAt == nil {
@@ -105,7 +106,9 @@ struct CodexSessionMetricsReader {
 
             aggregate.merge(metrics)
         }
-        Self.sessionMetricsCache.retain(paths: livePaths, cacheDirectory: cacheDirectory)
+        if prunesCache {
+            Self.sessionMetricsCache.retain(paths: livePaths, cacheDirectory: cacheDirectory)
+        }
 
         aggregate.accessIssueNote = accessIssueNote
         return aggregate
@@ -238,6 +241,7 @@ private extension CodexSessionMetrics {
             tokenTotals = tokenTotals + metrics.tokenTotals
         }
         points.append(contentsOf: metrics.points)
+        tasks.append(contentsOf: metrics.tasks)
         if let latestRateLimitAt = metrics.latestRateLimitAt,
            self.latestRateLimitAt == nil || latestRateLimitAt >= (self.latestRateLimitAt ?? .distantPast) {
             latestFiveHour = metrics.latestFiveHour

@@ -6,6 +6,7 @@ struct CodexUsageReader {
     var now: @Sendable () -> Date = Date.init
     static let maximumSessionFileBytes = 10 * 1024 * 1024
     static let maximumSessionFiles = 1_000
+    static let sessionMetricsCacheDirectoryName = "AgentBar/CodexSessionMetrics-v4"
 
     init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser, now: @escaping @Sendable () -> Date = Date.init) {
         self.homeDirectory = homeDirectory
@@ -62,7 +63,7 @@ struct CodexUsageReader {
         let sessionRoot = homeDirectory.appending(path: ".codex/sessions")
         let sessionCacheDirectory = homeDirectory.standardizedFileURL == FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
             ? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first?
-                .appending(path: "AgentBar/CodexSessionMetrics-v1", directoryHint: .isDirectory)
+                .appending(path: Self.sessionMetricsCacheDirectoryName, directoryHint: .isDirectory)
             : nil
         let metrics = CodexSessionMetricsReader(fileManager: fileManager).read(
             root: sessionRoot,
@@ -117,6 +118,7 @@ struct CodexUsageReader {
             status: status,
             accounts: accounts,
             points: points,
+            tasks: metrics.tasks,
             securityNotes: notes,
             refreshedAt: now,
             pricingFingerprint: Pricing.fingerprint
@@ -211,6 +213,9 @@ struct CodexUsageReader {
         var currentModel: String?
         var currentCwd: String?
         var currentReasoningEffort: String?
+        var taskBuilders: [String: CodexTaskBuilder] = [:]
+        var taskOrder: [String] = []
+        var activeTaskID: String?
         let decoder = JSONDecoder()
         let dateParser = CodexTimestampParser()
         let compactResponseItemMarker = Data(#""type":"response_item""#.utf8)
@@ -223,6 +228,9 @@ struct CodexUsageReader {
             "turn_context",
             "session_meta",
             "user_message",
+            "task_started",
+            "task_complete",
+            "turn_aborted",
             #""cwd":"#,
             #""model":"#,
             #""reasoning_effort":"#,
@@ -243,11 +251,44 @@ struct CodexUsageReader {
             let parsedEventDate = event.parsedDate(using: dateParser)
             let eventDate = parsedEventDate ?? .distantPast
             let sessionID = event.sessionID ?? fallbackSessionID
-            currentSessionTitle = currentSessionTitle ?? payload.sessionTitleCandidate
+            let taskTitleCandidate = payload.type == "user_message" ? payload.sessionTitleCandidate : nil
+            currentSessionTitle = currentSessionTitle ?? taskTitleCandidate
             currentModel = payload.model ?? currentModel
             currentCwd = payload.cwd ?? currentCwd
             currentReasoningEffort = payload.reasoningEffort ?? currentReasoningEffort
             let projectName = payload.projectName ?? currentCwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? fallbackProjectName
+
+            if payload.type == "task_started", let turnID = payload.turnID {
+                let startedAt = epochDate(payload.startedAt) ?? parsedEventDate ?? .distantPast
+                if taskBuilders[turnID] == nil {
+                    taskOrder.append(turnID)
+                }
+                taskBuilders[turnID] = CodexTaskBuilder(
+                    id: turnID,
+                    sessionID: sessionID ?? fallbackSessionID ?? turnID,
+                    title: currentSessionTitle,
+                    projectName: projectName,
+                    cwd: currentCwd,
+                    startedAt: startedAt,
+                    completedAt: nil,
+                    lastActivityAt: startedAt,
+                    tokens: .zero,
+                    estimatedCostUSD: nil,
+                    models: [],
+                    terminalState: nil
+                )
+                activeTaskID = turnID
+            }
+
+            if let activeTaskID, var builder = taskBuilders[activeTaskID] {
+                builder.title = taskTitleCandidate ?? builder.title ?? currentSessionTitle
+                builder.cwd = currentCwd ?? builder.cwd
+                builder.projectName = projectName ?? builder.projectName
+                if let parsedEventDate {
+                    builder.lastActivityAt = max(builder.lastActivityAt, parsedEventDate)
+                }
+                taskBuilders[activeTaskID] = builder
+            }
             if let resetAt = payload.rateLimits?.primary?.resetDate ?? payload.rateLimits?.secondary?.resetDate {
                 currentCumulativeResetAt = resetAt
             }
@@ -264,13 +305,14 @@ struct CodexUsageReader {
                 }
                 eventCount += 1
                 let model = Pricing.normalize(model: firstNonEmptyOptional([info.model, currentModel]) ?? "Codex local")
+                let pointCost = Pricing.cost(model: model, tokens: pointUsage)
                 points.append(
                     UsagePoint(
                         service: .codex,
                         model: model,
                         date: eventDate,
                         tokens: pointUsage,
-                        estimatedCostUSD: Pricing.cost(model: model, tokens: pointUsage),
+                        estimatedCostUSD: pointCost,
                         sessionID: sessionID,
                         sessionTitle: currentSessionTitle,
                         projectName: projectName,
@@ -282,6 +324,27 @@ struct CodexUsageReader {
                         modelContextWindow: info.modelContextWindow
                     )
                 )
+                if let activeTaskID, var builder = taskBuilders[activeTaskID] {
+                    builder.tokens = builder.tokens + pointUsage
+                    builder.estimatedCostUSD = (builder.estimatedCostUSD ?? 0) + pointCost
+                    if !builder.models.contains(model) {
+                        builder.models.append(model)
+                    }
+                    taskBuilders[activeTaskID] = builder
+                }
+            }
+
+            if (payload.type == "task_complete" || payload.type == "turn_aborted"),
+               let turnID = payload.turnID ?? activeTaskID,
+               var builder = taskBuilders[turnID] {
+                let completedAt = epochDate(payload.completedAt) ?? parsedEventDate ?? builder.lastActivityAt
+                builder.completedAt = completedAt
+                builder.lastActivityAt = max(builder.lastActivityAt, completedAt)
+                builder.terminalState = payload.type == "turn_aborted" ? .interrupted : .completed
+                taskBuilders[turnID] = builder
+                if activeTaskID == turnID {
+                    activeTaskID = nil
+                }
             }
 
             if let parsedEventDate,
@@ -300,7 +363,8 @@ struct CodexUsageReader {
             }
         }
 
-        return CodexSessionMetrics(eventCount: eventCount, tokenTotals: latestTotal, points: points, latestFiveHour: fiveHour, latestWeekly: weekly, latestResetCredits: resetCredits, latestRateLimitAt: latestRateLimitAt)
+        let tasks = taskOrder.compactMap { taskBuilders[$0]?.task }
+        return CodexSessionMetrics(eventCount: eventCount, tokenTotals: latestTotal, points: points, tasks: tasks, latestFiveHour: fiveHour, latestWeekly: weekly, latestResetCredits: resetCredits, latestRateLimitAt: latestRateLimitAt)
     }
 
     private static func pointUsage(
@@ -709,6 +773,9 @@ private struct CodexSessionPayload: Decodable {
     var title: String?
     var model: String?
     var reasoningEffort: String?
+    var turnID: String?
+    var startedAt: Double?
+    var completedAt: Double?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -721,6 +788,9 @@ private struct CodexSessionPayload: Decodable {
         case model
         case reasoningEffort = "reasoning_effort"
         case effort
+        case turnID = "turn_id"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
     }
 
     init(from decoder: Decoder) throws {
@@ -735,6 +805,9 @@ private struct CodexSessionPayload: Decodable {
         model = try container.decodeIfPresent(String.self, forKey: .model)
         reasoningEffort = try container.decodeIfPresent(String.self, forKey: .reasoningEffort)
             ?? container.decodeIfPresent(String.self, forKey: .effort)
+        turnID = try container.decodeIfPresent(String.self, forKey: .turnID)
+        startedAt = try container.decodeIfPresent(Double.self, forKey: .startedAt)
+        completedAt = try container.decodeIfPresent(Double.self, forKey: .completedAt)
     }
 
     var projectName: String? {
@@ -753,6 +826,38 @@ private struct CodexSessionPayload: Decodable {
         case "agent_message", "token_count", "mcp_tool_call_begin", "mcp_tool_call_end": return "Codex"
         default: return nil
         }
+    }
+}
+
+private struct CodexTaskBuilder {
+    var id: String
+    var sessionID: String
+    var title: String?
+    var projectName: String?
+    var cwd: String?
+    var startedAt: Date
+    var completedAt: Date?
+    var lastActivityAt: Date
+    var tokens: TokenTotals
+    var estimatedCostUSD: Decimal?
+    var models: [String]
+    var terminalState: AgentTaskState?
+
+    var task: AgentTask {
+        AgentTask(
+            id: id,
+            sessionID: sessionID,
+            title: title,
+            projectName: projectName,
+            cwd: cwd,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            lastActivityAt: lastActivityAt,
+            tokens: tokens,
+            estimatedCostUSD: estimatedCostUSD,
+            models: models,
+            terminalState: terminalState
+        )
     }
 }
 

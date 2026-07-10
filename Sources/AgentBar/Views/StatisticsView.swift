@@ -101,6 +101,12 @@ struct StatisticsView: View {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
                 }
+                sidebarItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {
+                    setPage(tab: .usage, viewMode: .liveTasks)
+                }
+                sidebarItem(L.text("project_billing", store.language), systemImage: "folder", active: topTab == .usage && viewMode == .projects) {
+                    setPage(tab: .usage, viewMode: .projects)
+                }
                 sidebarItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
                     setPage(tab: .usage, viewMode: .resets)
                 }
@@ -159,6 +165,12 @@ struct StatisticsView: View {
             HStack(spacing: 8) {
                 topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
+                }
+                topNavigationItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {
+                    setPage(tab: .usage, viewMode: .liveTasks)
+                }
+                topNavigationItem(L.text("project_billing", store.language), systemImage: "folder", active: topTab == .usage && viewMode == .projects) {
+                    setPage(tab: .usage, viewMode: .projects)
                 }
                 topNavigationItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
                     setPage(tab: .usage, viewMode: .resets)
@@ -409,6 +421,10 @@ struct StatisticsView: View {
                 switch viewMode {
                 case .overview:
                     dashboardContent
+                case .liveTasks:
+                    LiveTaskCenterView(store: store)
+                case .projects:
+                    ProjectBillingView(store: store)
                 case .resets:
                     resetsContent
                 case .audit:
@@ -758,6 +774,9 @@ struct StatisticsView: View {
                 }
                 SettingsRow(title: L.text("quota_reset_notifications", store.language), subtitle: L.text("quota_reset_notifications_subtitle", store.language)) {
                     Toggle("", isOn: $settings.quotaResetNotificationsEnabled).labelsHidden()
+                }
+                SettingsRow(title: L.text("task_completion_notifications", store.language), subtitle: L.text("task_completion_notifications_subtitle", store.language)) {
+                    Toggle("", isOn: $settings.taskCompletionNotificationsEnabled).labelsHidden()
                 }
             }
 
@@ -1196,6 +1215,8 @@ enum DashboardTopTab: String, Hashable {
 
 private enum DashboardViewMode: Hashable {
     case overview
+    case liveTasks
+    case projects
     case resets
     case audit
 }

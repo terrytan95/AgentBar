@@ -138,7 +138,7 @@ struct LiveTaskCenterView: View {
             taskValue(L.text("task_duration", store.language), DisplayFormatters.durationString(seconds: task.duration(at: now)), width: 90)
             taskValue("Tokens", DisplayFormatters.compactTokenString(task.tokens.total, language: store.language), width: 90)
             taskValue(L.text("task_cost", store.language), DisplayFormatters.costString(task.estimatedCostUSD), width: 84)
-            taskValue(L.text("task_model", store.language), task.models.first ?? "--", width: 116)
+            taskValue(L.text("task_model", store.language), modelText(for: task), width: 164)
 
             Text(presentation.title)
                 .font(.agentBar(size: 11, weight: .bold))
@@ -163,6 +163,19 @@ struct LiveTaskCenterView: View {
                 .minimumScaleFactor(0.72)
         }
         .frame(width: width, alignment: .trailing)
+    }
+
+    private func modelText(for task: AgentTask) -> String {
+        let model = task.models.first ?? "--"
+        guard let effort = task.reasoningEffort?.trimmedNonEmpty else { return model }
+        return "\(model) · \(displayEffort(effort))"
+    }
+
+    private func displayEffort(_ effort: String) -> String {
+        switch effort.lowercased() {
+        case "xhigh": return "Extra High"
+        default: return effort.capitalized
+        }
     }
 
     private func stateIndicator(_ presentation: TaskStatePresentation) -> some View {

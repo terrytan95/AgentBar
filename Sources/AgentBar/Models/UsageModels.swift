@@ -107,7 +107,9 @@ struct UsageResetCredits: Codable, Equatable, Sendable {
         resets.enumerated().compactMap { index, reset in
             guard let expiresAt = reset.expiresAt else { return nil }
             let timestamp = DisplayFormatters.shortDateTimeString(for: expiresAt, language: language)
-            let relative = DisplayFormatters.relativeString(for: expiresAt, language: language)
+            let relative = expiresAt <= Date()
+                ? L.text("expired", language)
+                : DisplayFormatters.relativeString(for: expiresAt, language: language)
             return "\(L.text("reset", language)) \(index + 1) \(L.text("expires", language)): \(timestamp) (\(relative))"
         }
     }

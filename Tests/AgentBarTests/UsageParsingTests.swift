@@ -79,6 +79,7 @@ final class UsageParsingTests: XCTestCase {
         checkEnglishCompactTokenFormattingUsesEnglishUnits()
         checkDailyUsageBarTooltipIncludesDateAndUsageDetails()
         checkAccountMetadataShowsResetActivityAndAccountType()
+        checkExpiredResetCreditUsesExpiredLabel()
         try checkCodexAccountSwitcherCopiesSnapshotToActiveAuthAndTracksPrevious()
         try checkCodexAccountSwitcherRejectsMismatchedSnapshot()
         try checkCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails()
@@ -2044,6 +2045,16 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(account.accountTypeLine(language: .english).contains("Account type: TEAM"))
         XCTAssertTrue(account.lastActivityLine(language: .english).contains("Last activity:"))
         XCTAssertTrue(account.fiveHourWindow?.resetLine(language: .english).contains("Reset:") == true)
+    }
+
+    private func checkExpiredResetCreditUsesExpiredLabel() {
+        let credits = UsageResetCredits(
+            availableCount: 1,
+            resets: [UsageResetCredit(expiresAt: .distantPast)]
+        )
+
+        XCTAssertTrue(credits.expirationLines(language: .english)[0].hasSuffix("(Expired)"))
+        XCTAssertTrue(credits.expirationLines(language: .chinese)[0].hasSuffix("(已过期)"))
     }
 
     private func checkCodexAccountSwitcherCopiesSnapshotToActiveAuthAndTracksPrevious() throws {

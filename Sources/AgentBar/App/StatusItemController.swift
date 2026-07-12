@@ -44,7 +44,8 @@ final class StatusItemController: NSObject {
 
     private func updateButton() {
         guard let button = item?.button, let store else { return }
-        let image = AppLogo.menuBarImage().copy() as? NSImage ?? AppLogo.menuBarImage()
+        let menuBarImage = AppLogo.menuBarImage()
+        let image = menuBarImage.copy() as? NSImage ?? menuBarImage
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = true
         button.image = image

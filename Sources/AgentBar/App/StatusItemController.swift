@@ -96,19 +96,10 @@ final class StatusItemController: NSObject {
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         sender.highlight(true)
         self.popover = popover
-        refreshPopoverLayout(height: height)
-    }
-
-    private func refreshPopoverLayout(height: CGFloat) {
-        guard let popover else { return }
-        let size = NSSize(width: PopoverLayout.width, height: height)
-        popover.contentSize = size
-        popover.contentViewController?.view.needsLayout = true
-        popover.contentViewController?.view.layoutSubtreeIfNeeded()
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let popover = self.popover, popover.isShown else { return }
-            popover.contentSize = size
+            popover.contentSize = NSSize(width: PopoverLayout.width, height: height)
             popover.contentViewController?.view.layoutSubtreeIfNeeded()
         }
     }

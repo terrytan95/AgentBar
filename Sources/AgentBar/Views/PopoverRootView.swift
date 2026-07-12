@@ -106,7 +106,7 @@ struct PopoverRootView: View {
                 .padding(.vertical, 12)
             hairline
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: 10) {
                     quickSummarySection
                     accountSection
                 }

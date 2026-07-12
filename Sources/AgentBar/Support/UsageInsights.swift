@@ -243,7 +243,9 @@ enum UsageInsights {
                     id: "source-\(row.service.rawValue)",
                     kind: .dataSource,
                     title: row.service.rawValue,
-                    detail: row.note?.redactedForCredentialWords ?? row.status.label(language: language),
+                    detail: language == .chinese
+                        ? row.status.label(language: language)
+                        : (row.note?.redactedForCredentialWords ?? row.status.label(language: language)),
                     workspaceLines: [],
                     accountID: nil,
                     severity: .warning

@@ -7,6 +7,25 @@ private let settingsControlWidePickerWidth: CGFloat = 180
 private let settingsControlMediumPickerWidth: CGFloat = 140
 private let settingsControlCompactPickerWidth: CGFloat = 120
 
+private enum SettingsSection: String, CaseIterable, Identifiable {
+    case accounts
+    case menuBar
+    case usage
+    case general
+
+    var id: String { rawValue }
+
+    func title(_ language: AppLanguage) -> String {
+        let key = switch self {
+        case .accounts: "settings_section_accounts"
+        case .menuBar: "settings_section_menu_bar"
+        case .usage: "settings_section_usage"
+        case .general: "settings_section_general"
+        }
+        return L.text(key, language)
+    }
+}
+
 struct StatisticsView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject private var settings: SettingsStore
@@ -18,6 +37,8 @@ struct StatisticsView: View {
     @State private var showsAccountPopover = false
     @State private var showsServiceBreakdownPopover = false
     @State private var showsModelBreakdownPopover = false
+    @State private var settingsSection: SettingsSection = .accounts
+    @State private var showsAdvancedRefreshSettings = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -283,12 +304,23 @@ struct StatisticsView: View {
     }
 
     private var settingsHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(L.text("settings", store.language))
-                .font(.agentBar(size: 24, weight: .bold))
-            Text(L.text("general_settings_subtitle", store.language))
-                .font(.agentBar(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L.text("settings", store.language))
+                    .font(.agentBar(size: 24, weight: .bold))
+                Text(L.text("settings_page_subtitle", store.language))
+                    .font(.agentBar(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Picker("", selection: $settingsSection) {
+                ForEach(SettingsSection.allCases) { section in
+                    Text(section.title(store.language)).tag(section)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 620)
+            .accessibilityLabel(L.text("settings_navigation", store.language))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -652,28 +684,43 @@ struct StatisticsView: View {
         }
     }
 
+    @ViewBuilder
     private var settingsContent: some View {
+        switch settingsSection {
+        case .accounts:
+            accountsSettingsContent
+        case .menuBar:
+            menuBarSettingsContent
+        case .usage:
+            usageSettingsContent
+        case .general:
+            generalSettingsContent
+        }
+    }
+
+    private var accountsSettingsContent: some View {
         VStack(alignment: .leading, spacing: 18) {
-            SettingsGroup(title: L.text("accounts", store.language), subtitle: L.text("accounts_settings_subtitle", store.language)) {
+            SettingsGroup(title: L.text("account_providers", store.language), subtitle: L.text("account_providers_subtitle", store.language)) {
                 SettingsRow(title: "Codex", subtitle: "\(codexAccounts.count) \(L.text("accounts_loaded", store.language))") {
-                    Toggle("", isOn: $settings.showCodexInMenuBar).labelsHidden()
+                    Button {
+                        store.openLogin(for: .codex)
+                    } label: {
+                        Label(L.text("login_codex_terminal", store.language), systemImage: "terminal")
+                    }
+                    .pointingHandCursor()
                 }
                 SettingsRow(title: "Claude Code", subtitle: hasClaudeData ? L.text("available", store.language) : L.text("no_safe_local_source", store.language)) {
-                    Toggle("", isOn: $settings.showClaudeInMenuBar).labelsHidden()
-                }
-                SettingsRow(title: L.text("login_accounts", store.language), subtitle: L.text("login_accounts_subtitle", store.language)) {
-                    HStack {
-                        Button(L.text("login_codex", store.language)) {
-                            store.openLogin(for: .codex)
-                        }
-                        .pointingHandCursor()
-                        Button(L.text("login_claude", store.language)) {
-                            store.openLogin(for: .claudeCode)
-                        }
-                        .pointingHandCursor()
+                    Button {
+                        store.openLogin(for: .claudeCode)
+                    } label: {
+                        Label(L.text("login_claude_terminal", store.language), systemImage: "terminal")
                     }
+                    .pointingHandCursor()
                 }
-                if !codexAccounts.isEmpty {
+            }
+
+            if !codexAccounts.isEmpty {
+                SettingsGroup(title: L.text("manage_loaded_accounts", store.language), subtitle: L.text("manage_loaded_accounts_subtitle", store.language)) {
                     SettingsAccountDropdown(
                         accounts: store.sortedAccounts(codexAccounts),
                         currentAccount: currentCodexAccount,
@@ -682,6 +729,9 @@ struct StatisticsView: View {
                     )
                     .padding(12)
                 }
+            }
+
+            SettingsGroup(title: L.text("account_behavior", store.language), subtitle: L.text("account_behavior_subtitle", store.language)) {
                 SettingsRow(title: L.text("account_sort", store.language), subtitle: L.text("account_sort_subtitle", store.language)) {
                     Picker("", selection: $settings.accountSortMode) {
                         ForEach(AccountSortMode.allCases) { mode in
@@ -690,35 +740,76 @@ struct StatisticsView: View {
                     }
                     .labelsHidden()
                     .settingsControl(width: settingsControlWidePickerWidth)
+                    .accessibilityLabel(L.text("account_sort", store.language))
                 }
-                SettingsRow(title: L.text("account_data_display", store.language), subtitle: L.text("account_data_display_subtitle", store.language)) {
-                    Toggle("", isOn: $settings.showAggregatedAccountData).labelsHidden()
-                }
-                SettingsRow(title: L.text("auto_codex_rotation", store.language), subtitle: L.text("auto_codex_rotation_subtitle", store.language)) {
-                    Toggle("", isOn: $settings.autoCodexAccountRotationEnabled).labelsHidden()
-                }
-                SettingsRow(title: L.text("codex_rotation_threshold", store.language), subtitle: L.text("codex_rotation_threshold_subtitle", store.language)) {
-                    CodexRotationThresholdControl(
-                        threshold: $settings.codexRotationThresholdRemainingPercent,
-                        isEnabled: settings.autoCodexAccountRotationEnabled,
-                        language: store.language
-                    )
+                SettingsRow(title: L.text("statistics_scope", store.language), subtitle: L.text("statistics_scope_subtitle", store.language)) {
+                    Picker("", selection: $settings.showAggregatedAccountData) {
+                        Text(L.text("current_service", store.language)).tag(false)
+                        Text(L.text("all_services", store.language)).tag(true)
+                    }
+                    .labelsHidden()
                     .settingsControl(width: settingsControlWidePickerWidth)
+                    .accessibilityLabel(L.text("statistics_scope", store.language))
+                }
+                SettingsToggleRow(
+                    title: L.text("auto_codex_rotation", store.language),
+                    subtitle: L.text("auto_codex_rotation_subtitle", store.language),
+                    isOn: $settings.autoCodexAccountRotationEnabled
+                )
+                if settings.autoCodexAccountRotationEnabled {
+                    SettingsRow(title: L.text("codex_rotation_threshold", store.language), subtitle: L.text("codex_rotation_threshold_subtitle", store.language)) {
+                        CodexRotationThresholdControl(
+                            threshold: $settings.codexRotationThresholdRemainingPercent,
+                            language: store.language
+                        )
+                        .settingsControl(width: settingsControlWidePickerWidth)
+                    }
                 }
             }
 
             SettingsGroup(title: healthLocalized("account_health"), subtitle: healthLocalized("account_health_subtitle")) {
-                AccountHealthCenterPanel(
-                    health: accountHealthCenter,
-                    language: store.language,
-                    onLogin: openHealthLogin,
-                    onRemove: removeHealthAccount,
-                    onRefresh: { store.refresh(force: true, showManualFeedback: true) }
-                )
-                .padding(12)
+                if accountHealthCenter.rows.isEmpty {
+                    SettingsRow(title: L.text("healthy_status", store.language), subtitle: L.text("healthy", store.language)) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .accessibilityLabel(L.text("healthy_status", store.language))
+                    }
+                } else {
+                    AccountHealthCenterPanel(
+                        health: accountHealthCenter,
+                        language: store.language,
+                        onLogin: openHealthLogin,
+                        onRemove: removeHealthAccount,
+                        onRefresh: { store.refresh(force: true, showManualFeedback: true) }
+                    )
+                    .padding(12)
+                }
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
 
+    private var menuBarSettingsContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
             SettingsGroup(title: L.text("menu_bar", store.language), subtitle: L.text("menu_bar_settings_subtitle", store.language)) {
+                SettingsRow(title: L.text("menu_bar_preview", store.language), subtitle: L.text("menu_bar_preview_subtitle", store.language)) {
+                    Label(store.menuBarTitle, systemImage: "menubar.rectangle")
+                        .font(.agentBarMono(size: 12, weight: .semibold))
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 30)
+                        .background(.thinMaterial, in: Capsule())
+                        .accessibilityLabel("\(L.text("menu_bar_preview", store.language)): \(store.menuBarTitle)")
+                }
+                SettingsToggleRow(
+                    title: L.text("show_codex_menu_bar", store.language),
+                    subtitle: L.text("show_codex_menu_bar_subtitle", store.language),
+                    isOn: $settings.showCodexInMenuBar
+                )
+                SettingsToggleRow(
+                    title: L.text("show_claude_menu_bar", store.language),
+                    subtitle: L.text("show_claude_menu_bar_subtitle", store.language),
+                    isOn: $settings.showClaudeInMenuBar
+                )
                 SettingsRow(title: L.text("display_value", store.language), subtitle: L.text("display_value_subtitle", store.language)) {
                     Picker("", selection: $settings.menuBarDisplayMode) {
                         Text(L.text("active_account_windows", store.language)).tag(MenuBarDisplayMode.activeAccountWindows)
@@ -728,25 +819,43 @@ struct StatisticsView: View {
                     }
                     .labelsHidden()
                     .settingsControl(width: settingsControlWidePickerWidth)
+                    .accessibilityLabel(L.text("display_value", store.language))
                 }
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
 
+    private var usageSettingsContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
             SettingsGroup(title: budgetLocalized("budgets"), subtitle: budgetLocalized("budget_subtitle")) {
-                SettingsRow(title: budgetLocalized("daily_token_budget"), subtitle: budgetLocalized("daily_token_budget_subtitle")) {
-                    BudgetIntegerField(value: $settings.dailyTokenBudget, language: store.language)
-                        .settingsControl(width: settingsControlMediumPickerWidth)
+                SettingsRow(title: L.text("daily_budget", store.language), subtitle: L.text("budget_zero_disables_alerts", store.language)) {
+                    HStack(spacing: 16) {
+                        BudgetIntegerField(
+                            value: $settings.dailyTokenBudget,
+                            language: store.language,
+                            label: budgetLocalized("daily_token_budget")
+                        )
+                        BudgetCostField(
+                            value: $settings.dailyCostBudgetUSD,
+                            language: store.language,
+                            label: budgetLocalized("daily_cost_budget")
+                        )
+                    }
                 }
-                SettingsRow(title: budgetLocalized("weekly_token_budget"), subtitle: budgetLocalized("weekly_token_budget_subtitle")) {
-                    BudgetIntegerField(value: $settings.weeklyTokenBudget, language: store.language)
-                        .settingsControl(width: settingsControlMediumPickerWidth)
-                }
-                SettingsRow(title: budgetLocalized("daily_cost_budget"), subtitle: budgetLocalized("daily_cost_budget_subtitle")) {
-                    BudgetCostField(value: $settings.dailyCostBudgetUSD, language: store.language)
-                        .settingsControl(width: settingsControlMediumPickerWidth)
-                }
-                SettingsRow(title: budgetLocalized("weekly_cost_budget"), subtitle: budgetLocalized("weekly_cost_budget_subtitle")) {
-                    BudgetCostField(value: $settings.weeklyCostBudgetUSD, language: store.language)
-                        .settingsControl(width: settingsControlMediumPickerWidth)
+                SettingsRow(title: L.text("weekly_budget", store.language), subtitle: L.text("budget_zero_disables_alerts", store.language)) {
+                    HStack(spacing: 16) {
+                        BudgetIntegerField(
+                            value: $settings.weeklyTokenBudget,
+                            language: store.language,
+                            label: budgetLocalized("weekly_token_budget")
+                        )
+                        BudgetCostField(
+                            value: $settings.weeklyCostBudgetUSD,
+                            language: store.language,
+                            label: budgetLocalized("weekly_cost_budget")
+                        )
+                    }
                 }
             }
 
@@ -760,26 +869,52 @@ struct StatisticsView: View {
                     }
                     .labelsHidden()
                     .settingsControl(width: settingsControlCompactPickerWidth)
+                    .accessibilityLabel(L.text("refresh_interval", store.language))
                 }
-                SettingsRow(title: quotaCapacityLocalized("quota_capacity_frequency"), subtitle: quotaCapacityLocalized("quota_capacity_frequency_subtitle")) {
-                    Picker("", selection: $settings.quotaCapacityHistoryInterval) {
-                        Text("15m").tag(TimeInterval(900))
-                        Text("30m").tag(TimeInterval(1_800))
-                        Text("1h").tag(TimeInterval(3_600))
-                        Text("2h").tag(TimeInterval(7_200))
-                        Text("6h").tag(TimeInterval(21_600))
+                DisclosureGroup(isExpanded: $showsAdvancedRefreshSettings) {
+                    SettingsRow(title: quotaCapacityLocalized("quota_capacity_frequency"), subtitle: quotaCapacityLocalized("quota_capacity_frequency_subtitle")) {
+                        Picker("", selection: $settings.quotaCapacityHistoryInterval) {
+                            Text("15m").tag(TimeInterval(900))
+                            Text("30m").tag(TimeInterval(1_800))
+                            Text("1h").tag(TimeInterval(3_600))
+                            Text("2h").tag(TimeInterval(7_200))
+                            Text("6h").tag(TimeInterval(21_600))
+                        }
+                        .labelsHidden()
+                        .settingsControl(width: settingsControlCompactPickerWidth)
+                        .accessibilityLabel(quotaCapacityLocalized("quota_capacity_frequency"))
                     }
-                    .labelsHidden()
-                    .settingsControl(width: settingsControlCompactPickerWidth)
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L.text("advanced_refresh", store.language))
+                            .font(.agentBar(size: 13, weight: .semibold))
+                        Text(L.text("advanced_refresh_subtitle", store.language))
+                            .font(.agentBar(size: 11))
+                            .foregroundStyle(Color.primary.opacity(0.62))
+                    }
                 }
-                SettingsRow(title: L.text("quota_reset_notifications", store.language), subtitle: L.text("quota_reset_notifications_subtitle", store.language)) {
-                    Toggle("", isOn: $settings.quotaResetNotificationsEnabled).labelsHidden()
-                }
-                SettingsRow(title: L.text("task_completion_notifications", store.language), subtitle: L.text("task_completion_notifications_subtitle", store.language)) {
-                    Toggle("", isOn: $settings.taskCompletionNotificationsEnabled).labelsHidden()
-                }
+                .padding(.horizontal, settingsControlLeadingInset)
+                .padding(.vertical, 12)
             }
 
+            SettingsGroup(title: L.text("notifications", store.language), subtitle: L.text("notifications_subtitle", store.language)) {
+                SettingsToggleRow(
+                    title: L.text("quota_reset_notifications", store.language),
+                    subtitle: L.text("quota_reset_notifications_subtitle", store.language),
+                    isOn: $settings.quotaResetNotificationsEnabled
+                )
+                SettingsToggleRow(
+                    title: L.text("task_completion_notifications", store.language),
+                    subtitle: L.text("task_completion_notifications_subtitle", store.language),
+                    isOn: $settings.taskCompletionNotificationsEnabled
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var generalSettingsContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
             SettingsGroup(title: L.text("general", store.language), subtitle: L.text("general_settings_subtitle", store.language)) {
                 SettingsRow(title: L.text("language", store.language), subtitle: L.text("language_subtitle", store.language)) {
                     Picker("", selection: $settings.language) {
@@ -789,14 +924,22 @@ struct StatisticsView: View {
                     }
                     .labelsHidden()
                     .settingsControl(width: settingsControlMediumPickerWidth)
+                    .accessibilityLabel(L.text("language", store.language))
                 }
-                SettingsRow(title: L.text("dark_theme", store.language), subtitle: L.text("dark_theme_subtitle", store.language)) {
-                    Toggle("", isOn: $settings.useDarkAppearance)
-                        .labelsHidden()
+                SettingsRow(title: L.text("appearance", store.language), subtitle: L.text("appearance_subtitle", store.language)) {
+                    Picker("", selection: $settings.useDarkAppearance) {
+                        Text(L.text("follow_system", store.language)).tag(false)
+                        Text(L.text("dark_theme", store.language)).tag(true)
+                    }
+                    .labelsHidden()
+                    .settingsControl(width: settingsControlMediumPickerWidth)
+                    .accessibilityLabel(L.text("appearance", store.language))
                 }
-                SettingsRow(title: L.text("login_item", store.language), subtitle: settings.loginItemMessage ?? L.text("open_at_login_subtitle", store.language)) {
-                    Toggle("", isOn: $settings.launchAtLogin).labelsHidden()
-                }
+                SettingsToggleRow(
+                    title: L.text("login_item", store.language),
+                    subtitle: settings.loginItemMessage ?? L.text("open_at_login_subtitle", store.language),
+                    isOn: $settings.launchAtLogin
+                )
             }
 
             SettingsGroup(title: L.text("software_update", store.language), subtitle: L.text("updates_daily_check", store.language)) {
@@ -3447,6 +3590,9 @@ private struct SettingsAccountDropdown: View {
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
+            .accessibilityLabel(L.text("manage_loaded_accounts", language))
+            .accessibilityValue(currentAccount?.displayName ?? "--")
+            .help(L.text("manage_loaded_accounts_subtitle", language))
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 6) {
@@ -3562,7 +3708,7 @@ private struct SettingsGroup<Content: View>: View {
                     .font(.agentBar(size: 15, weight: .bold))
                 Text(subtitle)
                     .font(.agentBar(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.primary.opacity(0.62))
             }
             VStack(spacing: 0) {
                 content()
@@ -3586,23 +3732,49 @@ private struct SettingsRow<Content: View>: View {
                     .font(.agentBar(size: 13, weight: .semibold))
                 Text(subtitle)
                     .font(.agentBar(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .foregroundStyle(Color.primary.opacity(0.62))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
             control()
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, settingsControlLeadingInset)
-        .padding(.trailing, settingsControlTrailingInset)
-        .padding(.vertical, 12)
+        .settingsRowStyle()
+    }
+}
+
+private struct SettingsToggleRow: View {
+    var title: String
+    var subtitle: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.agentBar(size: 13, weight: .semibold))
+                Text(subtitle)
+                    .font(.agentBar(size: 11))
+                    .foregroundStyle(Color.primary.opacity(0.62))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch)
+        .accessibilityRepresentation {
+            Toggle(title, isOn: $isOn)
+                .accessibilityHint(subtitle)
+        }
+        .settingsRowStyle()
     }
 }
 
 private struct BudgetIntegerField: View {
     @Binding var value: Int
     var language: AppLanguage
+    var label: String
 
     var body: some View {
         HStack(spacing: 6) {
@@ -3610,6 +3782,7 @@ private struct BudgetIntegerField: View {
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 90)
+                .accessibilityLabel(label)
             Text(L.text("tokens", language))
                 .font(.agentBar(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
@@ -3619,7 +3792,6 @@ private struct BudgetIntegerField: View {
 
 private struct CodexRotationThresholdControl: View {
     @Binding var threshold: Double
-    var isEnabled: Bool
     var language: AppLanguage
 
     var body: some View {
@@ -3639,7 +3811,6 @@ private struct CodexRotationThresholdControl: View {
             Stepper("", value: $threshold, in: 1...100, step: 1)
                 .labelsHidden()
         }
-        .disabled(!isEnabled)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L.text("codex_rotation_threshold", language))
     }
@@ -3648,6 +3819,7 @@ private struct CodexRotationThresholdControl: View {
 private struct BudgetCostField: View {
     @Binding var value: Double
     var language: AppLanguage
+    var label: String
 
     var body: some View {
         HStack(spacing: 6) {
@@ -3658,11 +3830,26 @@ private struct BudgetCostField: View {
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 86)
+                .accessibilityLabel(label)
         }
     }
 }
 
 private extension View {
+    func settingsRowStyle() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, settingsControlLeadingInset)
+            .padding(.trailing, settingsControlTrailingInset)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.06))
+                    .frame(height: 1)
+                    .padding(.leading, settingsControlLeadingInset)
+            }
+    }
+
     func settingsControl(width: CGFloat) -> some View {
         frame(width: width, alignment: .trailing)
             .fixedSize(horizontal: true, vertical: false)

@@ -612,21 +612,23 @@ struct UsageWindowGauge: View {
     var language: AppLanguage
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(DisplayFormatters.percentString(window?.remainingPercent))
-                    .monospacedDigit()
+        if let window {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(title)
+                    Spacer()
+                    Text(DisplayFormatters.percentString(window.remainingPercent))
+                        .monospacedDigit()
+                }
+                .font(.caption2)
+                ProgressView(value: window.remainingPercent / 100)
+                    .tint(tint)
+                Text(window.resetLine(language: language))
+                    .font(.agentBar(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
-            .font(.caption2)
-            ProgressView(value: (window?.remainingPercent ?? 0) / 100)
-                .tint(tint)
-            Text(window?.resetLine(language: language) ?? L.text("reset_time_unknown", language))
-                .font(.agentBar(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
         }
     }
 

@@ -206,18 +206,23 @@ final class UsageStore: ObservableObject {
         guard let account = activeAccount else {
             return "\(DisplayFormatters.percentString(lowestRemaining)) \(L.text("remaining", language))"
         }
-        let fiveHour = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
-        let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
-        return "5H \(fiveHour) \(L.text("remaining", language)) · WK \(weekly) \(L.text("remaining", language))"
+        return accountWindowTitles(account)
+            .map { "\($0) \(L.text("remaining", language))" }
+            .joined(separator: " · ")
     }
 
     private var activeAccountWindowTitle: String {
         guard let account = activeAccount else {
             return DisplayFormatters.percentString(lowestRemaining)
         }
-        let fiveHour = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
-        let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
-        return "5H \(fiveHour)  WK \(weekly)"
+        return accountWindowTitles(account).joined(separator: "  ")
+    }
+
+    private func accountWindowTitles(_ account: UsageAccount) -> [String] {
+        [
+            account.fiveHourWindow.map { "5H \(DisplayFormatters.percentString($0.remainingPercent))" },
+            account.weeklyWindow.map { "WK \(DisplayFormatters.percentString($0.remainingPercent))" }
+        ].compactMap { $0 }
     }
 
     var lowestRemaining: Double? {
@@ -239,6 +244,18 @@ final class UsageStore: ObservableObject {
 
     var activeAccount: UsageAccount? {
         accounts.first(where: \.isActive) ?? accounts.first
+    }
+
+    private static func accountsForDisplay(_ accounts: [UsageAccount]) -> [UsageAccount] {
+        let activeCodex = accounts.first { $0.service == .codex && $0.isActive }
+            ?? accounts.first { $0.service == .codex }
+        guard activeCodex?.fiveHourWindow == nil, activeCodex?.weeklyWindow != nil else { return accounts }
+        return accounts.map { account in
+            guard account.service == .codex else { return account }
+            var account = account
+            account.fiveHourWindow = nil
+            return account
+        }
     }
 
     var usageDataDisplayPoints: [UsagePoint] {
@@ -336,7 +353,7 @@ final class UsageStore: ObservableObject {
             let previousAccounts = self.accounts
             let wasLoaded = self.hasLoadedAccountInformation
             self.snapshots = result.snapshots
-            self.accounts = result.accounts
+            self.accounts = Self.accountsForDisplay(result.accounts)
             self.points = result.points
             self.applyTaskCenter(result.tasks, updatesAuditHistory: true)
             self.recordQuotaCapacitySample()
@@ -539,7 +556,7 @@ final class UsageStore: ObservableObject {
         tasks: [AgentTask] = []
     ) {
         self.snapshots = snapshots
-        self.accounts = accounts
+        self.accounts = Self.accountsForDisplay(accounts)
         self.points = points
         self.tasks = tasks
         self.auditTasks = tasks

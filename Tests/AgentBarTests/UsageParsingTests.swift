@@ -7,6 +7,7 @@ final class UsageParsingTests: XCTestCase {
     @MainActor
     func testUsageParsingCoverage() async throws {
         try checkCodexRegistryParsesMultipleAccountsWithoutSecrets()
+        try checkCodexRegistryDetectsWeeklyOnlyLimit()
         try checkCodexRegistryParsesMultipleWorkspacesForOneAccount()
         try checkCodexRegistrySharesWorkspaceNamesAcrossAccountRecords()
         checkAccountsWithSameIdentityGroupForDisplayWithoutMergingWorkspaceRows()
@@ -37,6 +38,7 @@ final class UsageParsingTests: XCTestCase {
         checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized()
         checkPopoverHeightPreferenceIsClampedWhenLoadedAndSaved()
         try checkCodexReadPrefersRegistryUsageOverLocalSessionRateLimits()
+        try checkCodexReadDoesNotRestoreRemovedFiveHourLimitFromSessions()
         try checkCodexReadUsesNewestRateLimitEventAcrossSessionFiles()
         try checkCodexReadDoesNotInventLastActivityForAccountsMissingUsageTimestamp()
         try checkCodexSessionMetricsCacheInvalidatesWhenFileChanges()
@@ -142,6 +144,29 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(snapshot.accounts[1].workspaceName, "Personal")
         XCTAssertFalse(snapshot.accounts[1].isActive)
         XCTAssertFalse(snapshot.securityNotes.joined(separator: " ").localizedCaseInsensitiveContains("token"))
+    }
+
+    private func checkCodexRegistryDetectsWeeklyOnlyLimit() throws {
+        let registry = """
+        {
+          "schema_version": 3,
+          "active_account_key": "acct-weekly-only",
+          "accounts": [
+            {
+              "account_key": "acct-weekly-only",
+              "last_usage_at": 1783934177,
+              "last_usage": {
+                "primary": {"used_percent": 5, "window_minutes": 10080, "resets_at": 1784538977}
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let account = try XCTUnwrap(CodexUsageReader.parseRegistry(data: registry, now: Date()).accounts.first)
+
+        XCTAssertNil(account.fiveHourWindow)
+        XCTAssertEqual(account.weeklyWindow?.usedPercent, 5)
     }
 
     private func checkCodexRegistryParsesMultipleWorkspacesForOneAccount() throws {
@@ -1094,6 +1119,35 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(inactive.weeklyWindow?.usedPercent, 30)
     }
 
+    private func checkCodexReadDoesNotRestoreRemovedFiveHourLimitFromSessions() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let sessionDir = temp.appending(path: ".codex/sessions/2026/07")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "active",
+          "accounts": [{
+            "account_key": "active",
+            "last_usage": {
+              "primary": {"used_percent": 5, "window_minutes": 10080, "resets_at": 1784538977}
+            }
+          }]
+        }
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        try """
+        {"type":"event_msg","timestamp":"2026-07-13T06:00:00.000Z","payload":{"rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":1783936800},"secondary":{"used_percent":34,"window_minutes":10080,"resets_at":1784538977}}}}
+        """.data(using: .utf8)!.write(to: sessionDir.appending(path: "current.jsonl"))
+
+        let account = try XCTUnwrap(codexReader(homeDirectory: temp).read().accounts.first)
+
+        XCTAssertNil(account.fiveHourWindow)
+        XCTAssertEqual(account.weeklyWindow?.usedPercent, 5)
+    }
+
     private func checkCodexReadUsesNewestRateLimitEventAcrossSessionFiles() throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -1511,6 +1565,16 @@ final class UsageParsingTests: XCTestCase {
         ])
 
         XCTAssertEqual(store.popoverHeaderQuotaTitle, "5H 99% remaining · WK 92% remaining")
+
+        var weeklyOnly = testAccount(id: "weekly-only", name: "weekly@example.com", fiveHourUsed: 0, weeklyUsed: 5, now: now)
+        weeklyOnly.fiveHourWindow = nil
+        weeklyOnly.isActive = true
+        let staleInactive = testAccount(id: "stale", name: "stale@example.com", fiveHourUsed: 20, weeklyUsed: 10, now: now)
+        store.applyTestData(accounts: [staleInactive, weeklyOnly])
+
+        XCTAssertEqual(store.menuBarTitle, "WK 95%")
+        XCTAssertEqual(store.popoverHeaderQuotaTitle, "WK 95% remaining")
+        XCTAssertTrue(store.accounts.allSatisfy { $0.fiveHourWindow == nil })
     }
 
     @MainActor

@@ -110,14 +110,17 @@ enum UsageInsights {
     ) -> QuotaPressureInsight {
         let active = accounts.first(where: { $0.service == .codex && $0.isActive })
             ?? accounts.first(where: { $0.service == .codex })
+        let comparesFiveHour = active?.fiveHourWindow != nil
         let bestAlternative = accounts
             .filter { $0.service == .codex && $0.id != active?.id }
             .filter { !$0.needsLogin }
             .max { lhs, rhs in
-                let lhsFiveHour = lhs.fiveHourWindow?.remainingPercent ?? -1
-                let rhsFiveHour = rhs.fiveHourWindow?.remainingPercent ?? -1
-                if lhsFiveHour != rhsFiveHour {
-                    return lhsFiveHour < rhsFiveHour
+                if comparesFiveHour {
+                    let lhsFiveHour = lhs.fiveHourWindow?.remainingPercent ?? -1
+                    let rhsFiveHour = rhs.fiveHourWindow?.remainingPercent ?? -1
+                    if lhsFiveHour != rhsFiveHour {
+                        return lhsFiveHour < rhsFiveHour
+                    }
                 }
                 return (lhs.weeklyWindow?.remainingPercent ?? -1) < (rhs.weeklyWindow?.remainingPercent ?? -1)
             }
@@ -283,10 +286,13 @@ enum UsageInsights {
 
     private static func switchReason(active: UsageAccount?, recommended: UsageAccount?) -> String? {
         guard let active, let recommended else { return nil }
-        let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
-        let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
         let activeWeekly = DisplayFormatters.percentString(active.weeklyWindow?.remainingPercent)
         let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
+        guard active.fiveHourWindow != nil else {
+            return "active weekly \(activeWeekly); \(recommended.displayName) weekly \(recommendedWeekly)"
+        }
+        let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
+        let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
         let reset = recommended.fiveHourWindow?.resetsAt.map { ", resets \(DisplayFormatters.relativeString(for: $0, language: .english))" } ?? ""
         return "active 5H \(activeFive), weekly \(activeWeekly); \(recommended.displayName) 5H \(recommendedFive), weekly \(recommendedWeekly)\(reset)"
     }

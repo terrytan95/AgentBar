@@ -11,13 +11,14 @@ enum SmokeReporter {
         let summary = UsageStatistics.summarize(points: points, range: .all)
         let menuStore = UsageStore(settings: settings)
         menuStore.applyTestData(snapshots: [.codex: codex, .claudeCode: claude], accounts: accounts, points: points)
+        let displayedAccounts = menuStore.accounts
 
         var lines: [String] = []
         lines.append("AgentBar smoke report")
         lines.append("Generated: \(ISO8601DateFormatter().string(from: Date()))")
         lines.append("Menu bar title: \(menuStore.menuBarTitle)")
-        lines.append("Popover account rows: \(accounts.count)")
-        lines.append("Active account: \(accounts.first(where: \.isActive)?.displayName ?? "N/A")")
+        lines.append("Popover account rows: \(displayedAccounts.count)")
+        lines.append("Active account: \(displayedAccounts.first(where: \.isActive)?.displayName ?? "N/A")")
         lines.append("Statistics total tokens: \(DisplayFormatters.tokenString(summary.totalTokens))")
         lines.append("Statistics total cost: \(summary.estimatedCostUSD.map { DisplayFormatters.costString($0) } ?? "No cost data")")
         lines.append("Pricing fingerprint: \(summary.pricingFingerprint)")
@@ -44,11 +45,13 @@ enum SmokeReporter {
             lines.append("- \(note.redactedForCredentialWords)")
         }
         lines.append("Accounts:")
-        for account in accounts {
-            let fiveHour = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
-            let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
+        for account in displayedAccounts {
+            let quotaWindows = [
+                account.fiveHourWindow.map { "5h \(DisplayFormatters.percentString($0.remainingPercent))" },
+                account.weeklyWindow.map { "weekly \(DisplayFormatters.percentString($0.remainingPercent))" }
+            ].compactMap { $0 }.joined(separator: " | ")
             let username = account.username ?? "N/A"
-            lines.append("- \(account.service.rawValue) | \(account.displayName) | \(username) | active \(account.isActive) | 5h \(fiveHour) | weekly \(weekly) | \(account.status.rawValue)")
+            lines.append("- \(account.service.rawValue) | \(account.displayName) | \(username) | active \(account.isActive) | \(quotaWindows) | \(account.status.rawValue)")
         }
 
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

@@ -88,13 +88,15 @@ struct CodexUsageReader {
                     activeAccountActivatedAt: activeAccountActivatedAt,
                     latestRateLimitAt: metrics.latestRateLimitAt
                 )
+                let canUseSessionQuotaWindows = canUseSessionRateLimitsForActiveAccount &&
+                    account.fiveHourWindow == nil && account.weeklyWindow == nil
                 if account.fiveHourWindow == nil,
-                   canUseSessionRateLimitsForActiveAccount,
+                   canUseSessionQuotaWindows,
                    let latestFiveHour = metrics.latestFiveHour {
                     account.fiveHourWindow = latestFiveHour
                 }
                 if account.weeklyWindow == nil,
-                   canUseSessionRateLimitsForActiveAccount,
+                   canUseSessionQuotaWindows,
                    let latestWeekly = metrics.latestWeekly {
                     account.weeklyWindow = latestWeekly
                 }
@@ -144,12 +146,10 @@ struct CodexUsageReader {
             let workspaces = raw.usageWorkspaces.resolvingNames(with: workspaceNamesByID)
             let workspaceName = workspaces.first?.name
             let workspaceID = workspaces.first?.workspaceID
-            let primary = raw.lastUsage?.primary.map {
-                UsageWindow(kind: .fiveHour, usedPercent: $0.usedPercent, windowMinutes: $0.windowMinutes, resetsAt: epochDate($0.resetsAt))
-            }
-            let secondary = raw.lastUsage?.secondary.map {
-                UsageWindow(kind: .weekly, usedPercent: $0.usedPercent, windowMinutes: $0.windowMinutes, resetsAt: epochDate($0.resetsAt))
-            }
+            let quotaWindows = CodexRateWindow.usageWindows(
+                primary: raw.lastUsage?.primary,
+                secondary: raw.lastUsage?.secondary
+            )
             let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
             let loginWarning: UsageAccountLoginWarning? =
                 raw.hasTokenBackedQuotaWarning ? .quotaUnavailable :
@@ -166,8 +166,8 @@ struct CodexUsageReader {
                 plan: raw.plan ?? raw.lastUsage?.planType,
                 sourceDescription: "Local Codex account registry",
                 status: .live,
-                fiveHourWindow: primary,
-                weeklyWindow: secondary,
+                fiveHourWindow: quotaWindows.fiveHour,
+                weeklyWindow: quotaWindows.weekly,
                 resetCredits: resetCredits,
                 tokens: .zero,
                 estimatedCostUSD: nil,
@@ -374,11 +374,13 @@ struct CodexUsageReader {
             if let parsedEventDate,
                payload.rateLimits != nil || payload.resetCredits != nil,
                latestRateLimitAt == nil || parsedEventDate >= (latestRateLimitAt ?? .distantPast) {
-                if let primary = payload.rateLimits?.primary {
-                    fiveHour = UsageWindow(kind: .fiveHour, usedPercent: primary.usedPercent, windowMinutes: primary.windowMinutes, resetsAt: epochDate(primary.resetsAt))
-                }
-                if let secondary = payload.rateLimits?.secondary {
-                    weekly = UsageWindow(kind: .weekly, usedPercent: secondary.usedPercent, windowMinutes: secondary.windowMinutes, resetsAt: epochDate(secondary.resetsAt))
+                if let rateLimits = payload.rateLimits {
+                    let quotaWindows = CodexRateWindow.usageWindows(
+                        primary: rateLimits.primary,
+                        secondary: rateLimits.secondary
+                    )
+                    fiveHour = quotaWindows.fiveHour
+                    weekly = quotaWindows.weekly
                 }
                 if let sessionResetCredits = payload.resetCredits {
                     resetCredits = sessionResetCredits.toUsageResetCredits()
@@ -751,6 +753,26 @@ private struct CodexRateWindow: Decodable {
 
     var resetDate: Date? {
         epochDate(resetsAt)
+    }
+
+    static func usageWindows(
+        primary: CodexRateWindow?,
+        secondary: CodexRateWindow?
+    ) -> (fiveHour: UsageWindow?, weekly: UsageWindow?) {
+        let windows = [primary, secondary].compactMap { $0 }
+        return (
+            windows.first { $0.windowMinutes < 24 * 60 }?.usageWindow(kind: .fiveHour),
+            windows.first { $0.windowMinutes >= 24 * 60 }?.usageWindow(kind: .weekly)
+        )
+    }
+
+    private func usageWindow(kind: UsageWindow.Kind) -> UsageWindow {
+        UsageWindow(
+            kind: kind,
+            usedPercent: usedPercent,
+            windowMinutes: windowMinutes,
+            resetsAt: resetDate
+        )
     }
 }
 

@@ -567,7 +567,11 @@ struct StatisticsView: View {
                 title: quotaCapacityLocalized("quota_capacity_history"),
                 helpText: quotaCapacityLocalized("quota_capacity_history_tooltip")
             ) {
-                QuotaCapacityHistoryPanel(history: store.quotaCapacityHistory, language: store.language)
+                QuotaCapacityHistoryPanel(
+                    history: store.quotaCapacityHistory,
+                    showsFiveHour: store.activeAccount?.fiveHourWindow != nil,
+                    language: store.language
+                )
             }
 
             HStack(alignment: .top, spacing: 14) {
@@ -665,8 +669,12 @@ struct StatisticsView: View {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: proxy.size.width < 820 ? 2 : 4), spacing: 14) {
                     SummaryChip(title: L.text("resets", store.language), value: "\(totalResetCreditsCount)", color: .green, systemImage: "checkmark")
                     SummaryChip(title: L.text("next_expiry", store.language), value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry), systemImage: "clock")
-                    SummaryChip(title: L.text("five_hour_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.fiveHourWindow?.remainingPercent), color: quotaMeterColor(store.activeAccount?.fiveHourWindow?.remainingPercent), progress: store.activeAccount?.fiveHourWindow?.remainingPercent)
-                    SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(store.activeAccount?.weeklyWindow?.remainingPercent), color: quotaMeterColor(store.activeAccount?.weeklyWindow?.remainingPercent), progress: store.activeAccount?.weeklyWindow?.remainingPercent)
+                    if let fiveHour = store.activeAccount?.fiveHourWindow {
+                        SummaryChip(title: L.text("five_hour_left", store.language), value: DisplayFormatters.percentString(fiveHour.remainingPercent), color: quotaMeterColor(fiveHour.remainingPercent), progress: fiveHour.remainingPercent)
+                    }
+                    if let weekly = store.activeAccount?.weeklyWindow {
+                        SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(weekly.remainingPercent), color: quotaMeterColor(weekly.remainingPercent), progress: weekly.remainingPercent)
+                    }
                 }
             }
             .frame(height: 78)
@@ -2446,11 +2454,13 @@ private struct CurrentLimitSummaryStrip: View {
                 value: summary.mostConstrainedAccount?.displayNameWithWorkspace(language: language) ?? "--",
                 color: AgentBarPalette.quotaColor(remaining: summary.mostConstrainedAccount?.mostConstrainedRemainingPercent)
             )
-            MiniSummaryChip(
-                title: localized("lowest_5h"),
-                value: DisplayFormatters.percentString(summary.lowestFiveHourRemaining),
-                color: AgentBarPalette.quotaColor(remaining: summary.lowestFiveHourRemaining)
-            )
+            if let fiveHour = summary.lowestFiveHourRemaining {
+                MiniSummaryChip(
+                    title: localized("lowest_5h"),
+                    value: DisplayFormatters.percentString(fiveHour),
+                    color: AgentBarPalette.quotaColor(remaining: fiveHour)
+                )
+            }
             MiniSummaryChip(
                 title: localized("lowest_weekly"),
                 value: DisplayFormatters.percentString(summary.lowestWeeklyRemaining),
@@ -2589,11 +2599,15 @@ private struct QuotaPressurePanel: View {
 
     private var detailLine: String {
         let active = pressure.activeAccount?.displayName ?? "--"
-        let projected = pressure.projectedFiveHourExhaustion.map { DisplayFormatters.relativeString(for: $0, language: language) }
-        let rotation = pressure.shouldTriggerRotation ? localized("rotation_ready") : localized("rotation_standby")
         if pressure.recommendationReason != nil, pressure.severity != .ok {
             return recommendationReason
         }
+        guard pressure.activeAccount?.fiveHourWindow != nil else {
+            let weekly = DisplayFormatters.percentString(pressure.activeAccount?.weeklyWindow?.remainingPercent)
+            return "\(active) · \(localized("weekly")) \(weekly) \(localized("remaining"))"
+        }
+        let projected = pressure.projectedFiveHourExhaustion.map { DisplayFormatters.relativeString(for: $0, language: language) }
+        let rotation = pressure.shouldTriggerRotation ? localized("rotation_ready") : localized("rotation_standby")
         if let projected {
             return "\(active) · \(localized("five_hour_exhausts")) \(projected) · \(rotation)"
         }
@@ -2604,10 +2618,18 @@ private struct QuotaPressurePanel: View {
         guard let active = pressure.activeAccount, let recommended = pressure.recommendedAccount else {
             return pressure.recommendationReason ?? ""
         }
-        let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
         let activeWeekly = DisplayFormatters.percentString(active.weeklyWindow?.remainingPercent)
-        let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
         let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
+        guard active.fiveHourWindow != nil else {
+            switch language {
+            case .chinese:
+                return "当前本周 \(activeWeekly)；\(recommended.displayName) 本周 \(recommendedWeekly)"
+            case .english:
+                return pressure.recommendationReason ?? "active weekly \(activeWeekly); \(recommended.displayName) weekly \(recommendedWeekly)"
+            }
+        }
+        let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
+        let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
         switch language {
         case .chinese:
             return "当前 5H \(activeFive)，本周 \(activeWeekly)；\(recommended.displayName) 5H \(recommendedFive)，本周 \(recommendedWeekly)"
@@ -2633,9 +2655,13 @@ private struct QuotaPressureDetailsPopover: View {
                 .foregroundStyle(tint)
             detailRow(localized("active_account"), accountText(pressure.activeAccount))
             detailRow(localized("recommended_account"), accountText(pressure.recommendedAccount))
-            detailRow("5H", pressure.projectedFiveHourExhaustion.map(exhaustionText) ?? localized("not_projected"))
+            if showsFiveHour {
+                detailRow("5H", pressure.projectedFiveHourExhaustion.map(exhaustionText) ?? localized("not_projected"))
+            }
             detailRow(localized("weekly"), pressure.projectedWeeklyExhaustion.map(exhaustionText) ?? localized("not_projected"))
-            detailRow(localized("rotation"), pressure.shouldTriggerRotation ? localized("will_trigger") : localized("standby"))
+            if showsFiveHour {
+                detailRow(localized("rotation"), pressure.shouldTriggerRotation ? localized("will_trigger") : localized("standby"))
+            }
             if let reason = pressure.recommendationReason, !reason.isEmpty {
                 Text(reason)
                     .font(.agentBar(size: 11, weight: .semibold))
@@ -2663,9 +2689,16 @@ private struct QuotaPressureDetailsPopover: View {
 
     private func accountText(_ account: UsageAccount?) -> String {
         guard let account else { return "--" }
-        let five = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
         let weekly = DisplayFormatters.percentString(account.weeklyWindow?.remainingPercent)
+        guard showsFiveHour else {
+            return "\(account.displayNameWithWorkspace(language: language)) · \(localized("weekly")) \(weekly)"
+        }
+        let five = DisplayFormatters.percentString(account.fiveHourWindow?.remainingPercent)
         return "\(account.displayNameWithWorkspace(language: language)) · 5H \(five) · \(localized("weekly")) \(weekly)"
+    }
+
+    private var showsFiveHour: Bool {
+        pressure.activeAccount?.fiveHourWindow != nil
     }
 
     private func exhaustionText(_ date: Date) -> String {
@@ -2679,6 +2712,7 @@ private struct QuotaPressureDetailsPopover: View {
 
 private struct QuotaCapacityHistoryPanel: View {
     var history: QuotaCapacityHistory
+    var showsFiveHour: Bool
     var language: AppLanguage
 
     private var chartSamples: [QuotaCapacitySample] {
@@ -2686,14 +2720,16 @@ private struct QuotaCapacityHistoryPanel: View {
     }
 
     var body: some View {
-        if chartSamples.contains(where: { $0.estimatedFiveHourTotalTokens != nil || $0.estimatedWeeklyTotalTokens != nil }) {
+        if chartSamples.contains(where: { (showsFiveHour && $0.estimatedFiveHourTotalTokens != nil) || $0.estimatedWeeklyTotalTokens != nil }) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
-                    SummaryChip(
-                        title: "5H",
-                        value: tokenText(history.latestEstimate?.estimatedFiveHourTotalTokens),
-                        color: AgentBarPalette.primary
-                    )
+                    if showsFiveHour {
+                        SummaryChip(
+                            title: "5H",
+                            value: tokenText(history.latestEstimate?.estimatedFiveHourTotalTokens),
+                            color: AgentBarPalette.primary
+                        )
+                    }
                     SummaryChip(
                         title: localized("weekly"),
                         value: tokenText(history.latestEstimate?.estimatedWeeklyTotalTokens),
@@ -2706,12 +2742,14 @@ private struct QuotaCapacityHistoryPanel: View {
                     )
                 }
 
-                QuotaCapacityLineChart(samples: chartSamples, language: language)
+                QuotaCapacityLineChart(samples: chartSamples, showsFiveHour: showsFiveHour, language: language)
                     .frame(height: 188)
 
                 HStack(spacing: 14) {
                     Spacer()
-                    LegendItem(title: "5H", color: AgentBarPalette.primary)
+                    if showsFiveHour {
+                        LegendItem(title: "5H", color: AgentBarPalette.primary)
+                    }
                     LegendItem(title: localized("weekly"), color: AgentBarPalette.tertiary)
                 }
             }
@@ -2731,6 +2769,7 @@ private struct QuotaCapacityHistoryPanel: View {
 
 private struct QuotaCapacityLineChart: View {
     var samples: [QuotaCapacitySample]
+    var showsFiveHour: Bool
     var language: AppLanguage
     @State private var hoveredSampleID: Date?
     @State private var hoverLocation: CGPoint?
@@ -2739,7 +2778,9 @@ private struct QuotaCapacityLineChart: View {
     private let calloutSize = CGSize(width: 218, height: 94)
 
     private var maxValue: Int {
-        max(1, samples.flatMap { [$0.estimatedFiveHourTotalTokens, $0.estimatedWeeklyTotalTokens].compactMap { $0 } }.max() ?? 1)
+        max(1, samples.flatMap { sample in
+            [showsFiveHour ? sample.estimatedFiveHourTotalTokens : nil, sample.estimatedWeeklyTotalTokens].compactMap { $0 }
+        }.max() ?? 1)
     }
 
     var body: some View {
@@ -2772,7 +2813,9 @@ private struct QuotaCapacityLineChart: View {
                         }
                         .opacity(0.45)
 
-                        line(for: \.estimatedFiveHourTotalTokens, maximumValue: maximumValue, color: AgentBarPalette.primary, in: plotSize)
+                        if showsFiveHour {
+                            line(for: \.estimatedFiveHourTotalTokens, maximumValue: maximumValue, color: AgentBarPalette.primary, in: plotSize)
+                        }
                         line(for: \.estimatedWeeklyTotalTokens, maximumValue: maximumValue, color: AgentBarPalette.tertiary, in: plotSize)
                     }
                     .frame(width: plotSize.width, height: plotSize.height)
@@ -2795,7 +2838,7 @@ private struct QuotaCapacityLineChart: View {
                                 calloutSize: calloutSize,
                                 plotSize: hoverPlotSize
                             )
-                            QuotaCapacityHoverCallout(sample: hoveredSample, language: language)
+                            QuotaCapacityHoverCallout(sample: hoveredSample, showsFiveHour: showsFiveHour, language: language)
                                 .frame(width: calloutSize.width, height: calloutSize.height)
                                 .position(tooltipPosition)
                                 .allowsHitTesting(false)
@@ -2867,13 +2910,16 @@ private struct QuotaCapacityLineChart: View {
 
 private struct QuotaCapacityHoverCallout: View {
     var sample: QuotaCapacitySample
+    var showsFiveHour: Bool
     var language: AppLanguage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dateText(sample.capturedAt))
                 .font(.agentBar(size: 11, weight: .bold))
-            metricRow("5H", value: sample.estimatedFiveHourTotalTokens, color: AgentBarPalette.primary)
+            if showsFiveHour {
+                metricRow("5H", value: sample.estimatedFiveHourTotalTokens, color: AgentBarPalette.primary)
+            }
             metricRow(localized("weekly"), value: sample.estimatedWeeklyTotalTokens, color: AgentBarPalette.tertiary)
             Divider()
             HStack {
@@ -3278,8 +3324,12 @@ private struct SidebarAccountPopover: View {
                 ForEach(account.workspaceLines(language: language, limit: 8), id: \.self) { line in
                     infoRow(L.text("workspace", language), line.replacingOccurrences(of: "\(L.text("workspace", language)): ", with: ""))
                 }
-                infoRow("5H", windowText(account.fiveHourWindow))
-                infoRow(language == .chinese ? "本周" : "Weekly", windowText(account.weeklyWindow))
+                if let fiveHour = account.fiveHourWindow {
+                    infoRow("5H", windowText(fiveHour))
+                }
+                if let weekly = account.weeklyWindow {
+                    infoRow(language == .chinese ? "本周" : "Weekly", windowText(weekly))
+                }
                 if let resetCredits = account.resetCredits {
                     infoRow(L.text("resets", language), resetCredits.summaryLine(language: language))
                 }
@@ -3311,8 +3361,7 @@ private struct SidebarAccountPopover: View {
         }
     }
 
-    private func windowText(_ window: UsageWindow?) -> String {
-        guard let window else { return "--" }
+    private func windowText(_ window: UsageWindow) -> String {
         let reset = window.resetsAt.map { DisplayFormatters.relativeString(for: $0, language: language) } ?? "--"
         return "\(DisplayFormatters.percentString(window.remainingPercent)) · \(reset)"
     }

@@ -64,9 +64,8 @@ final class UsageStore: ObservableObject {
     }
 
     let settings: SettingsStore
-    private let codexUsageSource: @Sendable () async -> UsageSnapshot
+    private let refreshLifecycle: UsageRefreshLifecycle
     private let codexTaskReader: @Sendable () -> [AgentTask]
-    private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let codexAccountLifecycle = CodexAccountLifecycle()
     private let codexAccountSwitcher: @Sendable (String) throws -> Void
     private let codexAccountRemover: @Sendable (String) throws -> Void
@@ -83,12 +82,9 @@ final class UsageStore: ObservableObject {
     private var accountRemovalObserver: NSObjectProtocol?
     private var codexRecoveryLoginObserver: DarwinNotificationObserver?
     private var refreshIntervalObserver: AnyCancellable?
-    private var refreshInFlight = false
     private var taskRefreshInFlight = false
     private var hasLoadedTaskCenter = false
     private var lastTaskRefreshAt: Date?
-    private var refreshQueued = false
-    private var manualRefreshQueued = false
     private var summaryCache: UsageSummary?
     private var periodChangeCache: UsagePeriodChange?
     private var selectedRangePointsCache: [UsagePoint]?
@@ -141,16 +137,12 @@ final class UsageStore: ObservableObject {
         self.settings = settings
         self.quotaCapacityHistoryStore = quotaCapacityHistoryStore
         quotaCapacityHistory = quotaCapacityHistoryStore.load()
-        self.codexUsageSource = {
-            let syncResult = await codexUsageSynchronizer()
-            var snapshot = codexUsageReader()
-            if let note = syncResult.note {
-                snapshot.securityNotes.append(note)
-            }
-            return snapshot
-        }
+        refreshLifecycle = UsageRefreshLifecycle(
+            codexUsageSynchronizer: codexUsageSynchronizer,
+            codexUsageReader: codexUsageReader,
+            claudeUsageReader: claudeUsageReader
+        )
         self.codexTaskReader = codexTaskReader
-        self.claudeUsageReader = claudeUsageReader
         self.codexAccountSwitcher = codexAccountSwitcher
         self.codexAccountRemover = codexAccountRemover
         self.automaticCodexRestarter = automaticCodexRestarter
@@ -337,53 +329,30 @@ final class UsageStore: ObservableObject {
         if showManualFeedback {
             isManualRefreshFeedbackVisible = true
         }
-
-        if refreshInFlight {
-            if force {
-                refreshQueued = true
-                if showManualFeedback {
-                    manualRefreshQueued = true
-                }
+        let started = refreshLifecycle.refresh(
+            force: force
+        ) { [weak self] result, isFinal in
+            guard let self else { return }
+            let previousAccounts = self.accounts
+            let wasLoaded = self.hasLoadedAccountInformation
+            self.snapshots = result.snapshots
+            self.accounts = result.accounts
+            self.points = result.points
+            self.applyTaskCenter(result.tasks, updatesAuditHistory: true)
+            self.recordQuotaCapacitySample()
+            self.sendQuotaResetNotifications(previousAccounts: previousAccounts, wasLoaded: wasLoaded)
+            self.hasLoadedAccountInformation = true
+            guard isFinal else { return }
+            self.isRefreshing = false
+            self.isManualRefreshFeedbackVisible = false
+            if self.retryPendingCodexSwitchRecovery() {
+                return
             }
-            return
+            self.evaluateAutomaticCodexRotation()
         }
-        refreshInFlight = true
+        guard started else { return }
         isRefreshing = true
         lastError = nil
-        let codexUsageSource = codexUsageSource
-        let claudeUsageReader = claudeUsageReader
-
-        Task.detached(priority: .utility) { [weak self] in
-            let codex = await codexUsageSource()
-            let claude = claudeUsageReader()
-
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                let previousAccounts = self.accounts
-                let wasLoaded = self.hasLoadedAccountInformation
-                self.snapshots = [.codex: codex, .claudeCode: claude]
-                self.accounts = codex.accounts + claude.accounts
-                self.points = codex.points + claude.points
-                self.applyTaskCenter(codex.tasks, updatesAuditHistory: true)
-                self.recordQuotaCapacitySample()
-                self.sendQuotaResetNotifications(previousAccounts: previousAccounts, wasLoaded: wasLoaded)
-                self.hasLoadedAccountInformation = true
-                self.isRefreshing = false
-                self.refreshInFlight = false
-                if self.refreshQueued {
-                    let queuedShowsManualFeedback = self.manualRefreshQueued
-                    self.refreshQueued = false
-                    self.manualRefreshQueued = false
-                    self.refresh(force: true, showManualFeedback: queuedShowsManualFeedback)
-                } else {
-                    self.isManualRefreshFeedbackVisible = false
-                    if self.retryPendingCodexSwitchRecovery() {
-                        return
-                    }
-                    self.evaluateAutomaticCodexRotation()
-                }
-            }
-        }
     }
 
     func configureTimer() {
@@ -579,9 +548,7 @@ final class UsageStore: ObservableObject {
         hasLoadedAccountInformation = true
         isRefreshing = false
         isManualRefreshFeedbackVisible = false
-        refreshInFlight = false
-        refreshQueued = false
-        manualRefreshQueued = false
+        refreshLifecycle.reset()
     }
 
     func recordQuotaCapacitySample(now: Date = Date()) {

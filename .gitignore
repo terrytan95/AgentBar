@@ -10,3 +10,5 @@ tmp/
 **/.DS_Store
 *.xcuserdata/
 DerivedData/
+.codex/config.toml
+paseo.json

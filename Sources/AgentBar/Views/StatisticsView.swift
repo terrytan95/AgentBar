@@ -320,6 +320,7 @@ struct StatisticsView: View {
             .labelsHidden()
             .pickerStyle(.segmented)
             .frame(maxWidth: 620)
+            .frame(maxWidth: .infinity)
             .accessibilityLabel(L.text("settings_navigation", store.language))
         }
         .frame(maxWidth: .infinity, alignment: .leading)

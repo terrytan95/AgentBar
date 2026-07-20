@@ -124,8 +124,7 @@ struct ProjectBillingView: View {
                 } label: {
                     projectListRow(project)
                 }
-                .buttonStyle(.plain)
-                .pointingHandCursor()
+                .tactilePlainButton(pressedScale: 1)
                 Divider()
             }
         }

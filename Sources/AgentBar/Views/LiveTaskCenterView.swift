@@ -2,6 +2,15 @@ import SwiftUI
 
 struct LiveTaskCenterView: View {
     @ObservedObject var store: UsageStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var taskChangeAnimation: Animation {
+        .timingCurve(0.22, 1, 0.36, 1, duration: AgentBarDesign.durationNormal)
+    }
+
+    private var taskChangeTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top))
+    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
@@ -12,6 +21,11 @@ struct LiveTaskCenterView: View {
             let recentTasks = store.tasks.filter { task in
                 let state = task.state(at: timeline.date)
                 return state == .completed || state == .interrupted
+            }
+            let activeTaskIDs = activeTasks.map(\.id)
+            let recentTaskIDs = recentTasks.map(\.id)
+            let taskStateSignature = store.tasks.map {
+                "\($0.id):\($0.state(at: timeline.date).rawValue)"
             }
 
             VStack(alignment: .leading, spacing: 16) {
@@ -27,6 +41,7 @@ struct LiveTaskCenterView: View {
                             tasks: activeTasks,
                             now: timeline.date
                         )
+                        .transition(taskChangeTransition)
                     }
                     if !recentTasks.isEmpty {
                         taskSection(
@@ -34,10 +49,14 @@ struct LiveTaskCenterView: View {
                             tasks: Array(recentTasks.prefix(20)),
                             now: timeline.date
                         )
+                        .transition(taskChangeTransition)
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            .animation(taskChangeAnimation, value: activeTaskIDs)
+            .animation(taskChangeAnimation, value: recentTaskIDs)
+            .animation(taskChangeAnimation, value: taskStateSignature)
         }
     }
 
@@ -106,6 +125,7 @@ struct LiveTaskCenterView: View {
 
             ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
                 taskRow(task, now: now)
+                    .transition(taskChangeTransition)
                 if index < tasks.count - 1 { Divider() }
             }
         }

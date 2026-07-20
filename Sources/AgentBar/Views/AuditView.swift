@@ -18,11 +18,20 @@ struct AuditView: View {
     @State private var sortColumn: AuditSortColumn = .time
     @State private var sortAscending = false
     @State private var kpiGridColumns = 6
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let pageSize = 20
     nonisolated private static let kpiCardCount = 6
     nonisolated private static let kpiCardHeight: CGFloat = 96
     nonisolated private static let kpiGridSpacing: CGFloat = 12
+
+    private var disclosureAnimation: Animation {
+        .timingCurve(0.22, 1, 0.36, 1, duration: AgentBarDesign.durationNormal)
+    }
+
+    private var disclosureTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top))
+    }
 
     private var snapshot: AuditUsageSnapshot {
         AuditUsageSnapshot.make(
@@ -280,6 +289,7 @@ struct AuditView: View {
                 taskRow(task, threadTitle: snapshot.sessionTitle(for: task), nested: false)
                 if selectedTaskID == task.id {
                     taskDetail(task: task, threadTitle: snapshot.sessionTitle(for: task))
+                        .transition(disclosureTransition)
                 }
                 Divider()
             }
@@ -292,12 +302,16 @@ struct AuditView: View {
             ForEach(page(snapshot.threadRows, index: clampedPage(threadsPage, total: snapshot.threadRows.count))) { thread in
                 threadRow(thread)
                 if expandedThreadID == thread.id {
-                    ForEach(thread.tasks.prefix(20)) { task in
-                        taskRow(task, threadTitle: thread.title, nested: true)
-                        if selectedTaskID == task.id {
-                            taskDetail(task: task, threadTitle: thread.title)
+                    Group {
+                        ForEach(thread.tasks.prefix(20)) { task in
+                            taskRow(task, threadTitle: thread.title, nested: true)
+                            if selectedTaskID == task.id {
+                                taskDetail(task: task, threadTitle: thread.title)
+                                    .transition(disclosureTransition)
+                            }
                         }
                     }
+                    .transition(disclosureTransition)
                 }
                 Divider()
             }
@@ -307,7 +321,9 @@ struct AuditView: View {
 
     private func taskRow(_ task: AgentTask, threadTitle: String, nested: Bool) -> some View {
         Button {
-            selectedTaskID = task.id
+            withAnimation(disclosureAnimation) {
+                selectedTaskID = task.id
+            }
         } label: {
             HStack(spacing: 8) {
                 column(dateText(task.auditDate), width: 108, alignment: .leading)
@@ -328,14 +344,15 @@ struct AuditView: View {
             .background(selectedTaskID == task.id ? AgentBarPalette.primary.opacity(0.10) : Color.clear)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
     }
 
     private func threadRow(_ thread: AuditThreadRow) -> some View {
         Button {
-            expandedThreadID = expandedThreadID == thread.id ? nil : thread.id
-            selectedTaskID = thread.tasks.first?.id
+            withAnimation(disclosureAnimation) {
+                expandedThreadID = expandedThreadID == thread.id ? nil : thread.id
+                selectedTaskID = thread.tasks.first?.id
+            }
         } label: {
             HStack(spacing: 8) {
                 column(dateText(thread.latest), width: 108, alignment: .leading)
@@ -368,8 +385,7 @@ struct AuditView: View {
             .padding(.vertical, 11)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
     }
 
     private func column(_ text: String, width: CGFloat? = nil, alignment: Alignment = .trailing, strong: Bool = false, pill: Bool = false) -> some View {
@@ -408,8 +424,7 @@ struct AuditView: View {
             .frame(width: width, height: 18, alignment: alignment)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
     }
 
     private func sortThreadHeader(_ text: String) -> some View {
@@ -428,8 +443,7 @@ struct AuditView: View {
             .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
     }
 
     private func taskDetail(task: AgentTask, threadTitle: String) -> some View {

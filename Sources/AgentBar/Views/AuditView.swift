@@ -328,8 +328,7 @@ struct AuditView: View {
             .background(selectedTaskID == task.id ? AgentBarPalette.primary.opacity(0.10) : Color.clear)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
     }
 
     private func threadRow(_ thread: AuditThreadRow) -> some View {
@@ -368,8 +367,7 @@ struct AuditView: View {
             .padding(.vertical, 11)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
     }
 
     private func column(_ text: String, width: CGFloat? = nil, alignment: Alignment = .trailing, strong: Bool = false, pill: Bool = false) -> some View {
@@ -408,8 +406,7 @@ struct AuditView: View {
             .frame(width: width, height: 18, alignment: alignment)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
     }
 
     private func sortThreadHeader(_ text: String) -> some View {
@@ -428,8 +425,7 @@ struct AuditView: View {
             .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
     }
 
     private func taskDetail(task: AgentTask, threadTitle: String) -> some View {

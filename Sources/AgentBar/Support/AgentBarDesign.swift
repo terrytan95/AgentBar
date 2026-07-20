@@ -161,11 +161,13 @@ private struct AgentBarPanelModifier: ViewModifier {
 }
 
 private struct AgentBarPressButtonStyle: ButtonStyle {
+    var pressedScale: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? pressedScale : 1)
+            .opacity(configuration.isPressed ? 0.86 : 1)
             .animation(
                 AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion, duration: AgentBarDesign.durationFast),
                 value: configuration.isPressed
@@ -178,8 +180,8 @@ extension View {
         modifier(AgentBarPanelModifier(cornerRadius: cornerRadius))
     }
 
-    func tactilePlainButton(enabled isEnabled: Bool = true) -> some View {
-        buttonStyle(AgentBarPressButtonStyle())
+    func tactilePlainButton(enabled isEnabled: Bool = true, pressedScale: CGFloat = 0.98) -> some View {
+        buttonStyle(AgentBarPressButtonStyle(pressedScale: pressedScale))
             .pointingHandCursor(enabled: isEnabled)
     }
 }

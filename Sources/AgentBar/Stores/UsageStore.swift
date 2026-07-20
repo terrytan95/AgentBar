@@ -43,7 +43,10 @@ final class UsageStore: ObservableObject {
     @Published private(set) var snapshots: [UsageService: UsageSnapshot] = [:]
     @Published private(set) var accounts: [UsageAccount] = []
     @Published private(set) var points: [UsagePoint] = [] {
-        didSet { invalidateStatisticsCaches() }
+        didSet {
+            invalidateStatisticsCaches()
+            yearActivityBarsCache = nil
+        }
     }
     @Published private(set) var tasks: [AgentTask] = []
     @Published private(set) var auditTasks: [AgentTask] = []
@@ -82,6 +85,7 @@ final class UsageStore: ObservableObject {
     private var accountRemovalObserver: NSObjectProtocol?
     private var codexRecoveryLoginObserver: DarwinNotificationObserver?
     private var refreshIntervalObserver: AnyCancellable?
+    private var statisticsScopeObserver: AnyCancellable?
     private var taskRefreshInFlight = false
     private var hasLoadedTaskCenter = false
     private var lastTaskRefreshAt: Date?
@@ -174,6 +178,16 @@ final class UsageStore: ObservableObject {
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
                     self?.configureTimer()
+                }
+            }
+        statisticsScopeObserver = settings.$showAggregatedAccountData
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    invalidateStatisticsCaches()
+                    objectWillChange.send()
                 }
             }
         Task { @MainActor in
@@ -288,7 +302,7 @@ final class UsageStore: ObservableObject {
 
     private var selectedRangeProjection: UsageRangeProjection {
         if let selectedRangeProjectionCache { return selectedRangeProjectionCache }
-        let projection = UsageRangeProjection(points: points, range: selectedRange, customStart: customStart, customEnd: customEnd)
+        let projection = UsageRangeProjection(points: usageDataDisplayPoints, range: selectedRange, customStart: customStart, customEnd: customEnd)
         selectedRangeProjectionCache = projection
         return projection
     }
@@ -470,7 +484,6 @@ final class UsageStore: ObservableObject {
         periodChangeCache = nil
         selectedRangePointsCache = nil
         selectedRangeProjectionCache = nil
-        yearActivityBarsCache = nil
     }
 
     private func switchCodexAccount(

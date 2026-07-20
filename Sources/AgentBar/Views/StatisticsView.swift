@@ -986,11 +986,11 @@ struct StatisticsView: View {
     }
 
     private var summary: UsageSummary {
-        usageRangeProjection.summary
+        store.summary
     }
 
     private var periodChange: UsagePeriodChange {
-        usageRangeProjection.periodChange
+        store.periodChange
     }
 
     private var filteredPoints: [UsagePoint] {
@@ -998,20 +998,11 @@ struct StatisticsView: View {
     }
 
     private var selectedRangePoints: [UsagePoint] {
-        usageRangeProjection.rangePoints
+        store.selectedRangePoints
     }
 
     private var usageDataDisplayPoints: [UsagePoint] {
         store.usageDataDisplayPoints
-    }
-
-    private var usageRangeProjection: UsageRangeProjection {
-        UsageRangeProjection(
-            points: usageDataDisplayPoints,
-            range: store.selectedRange,
-            customStart: store.customStart,
-            customEnd: store.customEnd
-        )
     }
 
     private var codexAccounts: [UsageAccount] {
@@ -1036,11 +1027,10 @@ struct StatisticsView: View {
     }
 
     private var displayBars: [DailyUsageBar] {
-        let projection = usageRangeProjection
         if displayBarsAreHourly {
-            return UsageStatistics.hourlyBars(points: projection.rangePoints, range: projection.range, now: projection.now, calendar: projection.calendar)
+            return UsageStatistics.hourlyBars(points: selectedRangePoints, range: store.selectedRange)
         }
-        let bars = projection.summary.dailyBars
+        let bars = summary.dailyBars
         guard !bars.isEmpty else { return [] }
         return Array(bars.suffix(24))
     }

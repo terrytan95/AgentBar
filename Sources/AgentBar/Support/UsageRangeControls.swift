@@ -11,7 +11,12 @@ struct UsageRangeControls: View {
             Text(L.text("interval", language))
                 .font(.agentBar(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
-            Picker("", selection: $range) {
+            Picker("", selection: Binding(
+                get: { range },
+                set: { newRange in
+                    DispatchQueue.main.async { range = newRange }
+                }
+            )) {
                 ForEach(UsageRange.allCases) { range in
                     Text(range.dashboardLabel(language)).tag(range)
                 }

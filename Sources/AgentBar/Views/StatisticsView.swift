@@ -226,8 +226,7 @@ struct StatisticsView: View {
                 .frame(width: 30, height: 30)
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton()
         .background(AgentBarPalette.primary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .help(L.text(helpKey, store.language))
     }
@@ -275,8 +274,7 @@ struct StatisticsView: View {
             .frame(maxWidth: .infinity, minHeight: 54, maxHeight: 54)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .tactilePlainButton(pressedScale: 1)
         .agentBarPanel(cornerRadius: 10)
         .popover(isPresented: $showsAccountPopover, arrowEdge: .bottom) {
             SidebarAccountPopover(account: account, language: store.language)
@@ -1545,7 +1543,7 @@ private struct Panel<Content: View>: View {
                             .font(.agentBar(size: 12, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .tactilePlainButton()
                     .popover(isPresented: $showsHelpPopover, arrowEdge: .top) {
                         Text(helpText)
                             .font(.agentBar(size: 12, weight: .semibold))
@@ -2991,9 +2989,8 @@ private struct TopUsagePanel: View {
                     } label: {
                         topRow(row, color: color, showsLastUsedAt: showsLastUsedAt, isSelected: isSelectable && selectedSessionLabel == row.label)
                     }
-                    .buttonStyle(.plain)
+                    .tactilePlainButton(enabled: isSelectable, pressedScale: 1)
                     .disabled(!isSelectable)
-                    .pointingHandCursor(enabled: isSelectable)
                 }
             }
         }
@@ -3628,8 +3625,7 @@ private struct SettingsAccountDropdown: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
+            .tactilePlainButton(pressedScale: 1)
             .accessibilityLabel(L.text("manage_loaded_accounts", language))
             .accessibilityValue(currentAccount?.displayName ?? "--")
             .help(L.text("manage_loaded_accounts_subtitle", language))

@@ -97,7 +97,19 @@ struct PopoverRootView: View {
     @ObservedObject var store: UsageStore
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var isConfirmingQuit = false
+
+    private var stateSwapAnimation: Animation {
+        .timingCurve(0.22, 1, 0.36, 1, duration: AgentBarDesign.durationNormal)
+    }
+
+    private func stateSwapTransition(anchor: UnitPoint) -> AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .scale(scale: 0.97, anchor: anchor))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -119,7 +131,11 @@ struct PopoverRootView: View {
             footer
                 .padding(.horizontal, PopoverLayout.horizontalInset)
                 .frame(height: 62)
-                .background(.ultraThinMaterial)
+                .background(
+                    reduceTransparency
+                        ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
+                        : AnyShapeStyle(.ultraThinMaterial)
+                )
         }
         .background(popoverBackground)
         .preferredColorScheme(store.settings.useDarkAppearance ? .dark : .light)
@@ -129,16 +145,21 @@ struct PopoverRootView: View {
         }
     }
 
+    @ViewBuilder
     private var popoverBackground: some View {
-        LinearGradient(
-            colors: [
-                AgentBarDesign.panelHighlight,
-                AgentBarDesign.appBackground,
-                AgentBarPalette.primary.opacity(0.08)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        if reduceTransparency {
+            Color(nsColor: .windowBackgroundColor)
+        } else {
+            LinearGradient(
+                colors: [
+                    AgentBarDesign.panelHighlight,
+                    AgentBarDesign.appBackground,
+                    AgentBarPalette.primary.opacity(0.08)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
     }
 
     private var hairline: some View {
@@ -199,23 +220,29 @@ struct PopoverRootView: View {
     }
 
     private var accountSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let isLoading = store.isLoadingAccountInformation && store.accounts.isEmpty
+        return VStack(alignment: .leading, spacing: 8) {
             Text(L.text("accounts", store.language))
                 .font(.agentBar(size: 13, weight: .bold))
-            if store.isLoadingAccountInformation && store.accounts.isEmpty {
-                PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
-            } else {
-                ForEach(store.accountDisplayGroups()) { group in
-                    PopoverAccountDisplayGroupView(
-                        group: group,
-                        language: store.language,
-                        switchingAccountID: store.switchingAccountID,
-                        onSwitch: store.switchActiveAccount,
-                        onLogin: { account in store.openLogin(for: account) },
-                        onRemove: store.removeAccount
-                    )
+            Group {
+                if isLoading {
+                    PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
+                        .transition(stateSwapTransition(anchor: .top))
+                } else {
+                    ForEach(store.accountDisplayGroups()) { group in
+                        PopoverAccountDisplayGroupView(
+                            group: group,
+                            language: store.language,
+                            switchingAccountID: store.switchingAccountID,
+                            onSwitch: store.switchActiveAccount,
+                            onLogin: { account in store.openLogin(for: account) },
+                            onRemove: store.removeAccount
+                        )
+                    }
+                    .transition(stateSwapTransition(anchor: .top))
                 }
             }
+            .animation(stateSwapAnimation, value: isLoading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -258,11 +285,14 @@ struct PopoverRootView: View {
         Group {
             if isConfirmingQuit {
                 quitConfirmation
+                    .transition(stateSwapTransition(anchor: .trailing))
             } else {
                 footerActions
+                    .transition(stateSwapTransition(anchor: .trailing))
             }
         }
         .padding(.vertical, 8)
+        .animation(stateSwapAnimation, value: isConfirmingQuit)
     }
 
     private var footerActions: some View {

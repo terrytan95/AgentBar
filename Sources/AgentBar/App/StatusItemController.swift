@@ -19,7 +19,7 @@ final class StatusItemController: NSObject {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             item.button?.target = self
             item.button?.action = #selector(togglePopover(_:))
-            item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            item.button?.sendAction(on: [.leftMouseDown, .rightMouseDown])
             self.item = item
         }
 
@@ -85,7 +85,7 @@ final class StatusItemController: NSObject {
             }
         )
 
-        popover.animates = true
+        popover.animates = false
         popover.behavior = .transient
         popover.delegate = self
         popover.contentSize = NSSize(
@@ -93,9 +93,9 @@ final class StatusItemController: NSObject {
             height: height
         )
         popover.contentViewController = NSHostingController(rootView: content)
+        self.popover = popover
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         sender.highlight(true)
-        self.popover = popover
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let popover = self.popover, popover.isShown else { return }

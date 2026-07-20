@@ -521,11 +521,16 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-07-10T07:02:01Z","payload":{"type":"user_message","message":"Set project budgets"}}
         {"type":"event_msg","timestamp":"2026-07-10T07:02:10Z","payload":{"type":"agent_message","message":"I will implement repository budgets."}}
         {"type":"event_msg","timestamp":"2026-07-10T07:02:30Z","payload":{"type":"task_complete","turn_id":"turn-2","completed_at":1783666950,"duration_ms":30000}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:03:00Z","payload":{"type":"task_started","turn_id":"turn-3","started_at":1783666980}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:03:01Z","payload":{"type":"user_message","message":"Run every plan"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:04:00Z","payload":{"type":"task_started","turn_id":"turn-4","started_at":1783667040}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:04:01Z","payload":{"type":"user_message","message":"Continue"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:04:20Z","payload":{"type":"agent_message","message":"Still working."}}
         """.data(using: .utf8)!
 
         let metrics = try CodexUsageReader.parseSessionJsonl(data: data, sessionID: "session-1")
         let task = try XCTUnwrap(metrics.tasks.first)
-        XCTAssertEqual(metrics.tasks.count, 2)
+        XCTAssertEqual(metrics.tasks.count, 4)
         XCTAssertEqual(task.id, "turn-1")
         XCTAssertEqual(task.sessionID, "session-1")
         XCTAssertEqual(task.projectName, "AgentBar")
@@ -535,7 +540,13 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(task.terminalState, .completed)
         XCTAssertEqual(task.state(at: Date(timeIntervalSince1970: 1_783_666_900)), .completed)
         XCTAssertEqual(task.duration(at: task.completedAt!), 60, accuracy: 0.001)
-        XCTAssertEqual(metrics.tasks.last?.title, "Set project budgets")
+        XCTAssertEqual(metrics.tasks[2].terminalState, .interrupted)
+        XCTAssertEqual(metrics.tasks[2].completedAt, Date(timeIntervalSince1970: 1_783_667_040))
+        let currentTask = try XCTUnwrap(metrics.tasks.last)
+        XCTAssertEqual(currentTask.title, "Continue")
+        XCTAssertEqual(currentTask.state(at: Date(timeIntervalSince1970: 1_783_667_400)), .waiting)
+        XCTAssertEqual(currentTask.state(at: Date(timeIntervalSince1970: 1_783_668_960)), .interrupted)
+        XCTAssertEqual(currentTask.duration(at: Date(timeIntervalSince1970: 1_783_668_960)), 20, accuracy: 0.001)
     }
 
     private func checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {

@@ -271,6 +271,16 @@ struct CodexUsageReader {
 
             if payload.type == "task_started", let turnID = payload.turnID {
                 let startedAt = epochDate(payload.startedAt) ?? parsedEventDate ?? .distantPast
+                if let previousTaskID = activeTaskID,
+                   previousTaskID != turnID,
+                   var previousBuilder = taskBuilders[previousTaskID],
+                   previousBuilder.terminalState == nil {
+                    let interruptedAt = max(previousBuilder.lastActivityAt, startedAt)
+                    previousBuilder.completedAt = interruptedAt
+                    previousBuilder.lastActivityAt = interruptedAt
+                    previousBuilder.terminalState = .interrupted
+                    taskBuilders[previousTaskID] = previousBuilder
+                }
                 if taskBuilders[turnID] == nil {
                     taskOrder.append(turnID)
                 }

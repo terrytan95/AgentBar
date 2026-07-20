@@ -383,6 +383,7 @@ enum AgentTaskState: String, Codable, Equatable, Sendable {
 
 struct AgentTask: Codable, Equatable, Identifiable, Sendable {
     static let waitingAfter: TimeInterval = 5 * 60
+    static let interruptedAfter: TimeInterval = 30 * 60
 
     var id: String
     var sessionID: String
@@ -433,11 +434,14 @@ struct AgentTask: Codable, Equatable, Identifiable, Sendable {
 
     func state(at now: Date = Date()) -> AgentTaskState {
         if let terminalState { return terminalState }
-        return now.timeIntervalSince(lastActivityAt) >= Self.waitingAfter ? .waiting : .working
+        let idleTime = now.timeIntervalSince(lastActivityAt)
+        if idleTime >= Self.interruptedAfter { return .interrupted }
+        return idleTime >= Self.waitingAfter ? .waiting : .working
     }
 
     func duration(at now: Date = Date()) -> TimeInterval {
-        max(0, (completedAt ?? now).timeIntervalSince(startedAt))
+        let end = completedAt ?? (state(at: now) == .interrupted ? lastActivityAt : now)
+        return max(0, end.timeIntervalSince(startedAt))
     }
 
     func displayProjectName(language: AppLanguage) -> String {

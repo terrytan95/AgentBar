@@ -12,3 +12,4 @@ tmp/
 DerivedData/
 .codex/config.toml
 paseo.json
+.foglamp/

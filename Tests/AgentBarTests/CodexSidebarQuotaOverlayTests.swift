@@ -69,18 +69,32 @@ final class CodexSidebarQuotaOverlayTests: XCTestCase {
 
     func testAccountMenuBoundsSelectsBottomSidebarPopup() {
         let codexBounds = CGRect(x: 100, y: 80, width: 1_200, height: 800)
-        let expectedMenu = CGRect(x: 100, y: 540, width: 360, height: 260)
+        let menuContent = CGRect(x: 100, y: 540, width: 360, height: 260)
+        let expectedMenu = CGRect(x: 100, y: 476, width: 360, height: 324)
 
         let menu = CodexSidebarQuotaOverlayController.accountMenuBounds(
             candidates: [
                 CGRect(x: 500, y: 500, width: 300, height: 250),
                 CGRect(x: 100, y: 120, width: 360, height: 300),
-                expectedMenu
+                menuContent
             ],
             codexBounds: codexBounds
         )
 
         XCTAssertEqual(menu, expectedMenu)
+    }
+
+    func testAccountMenuBoundsIncludesUnreportedPopupChrome() {
+        let codexBounds = CGRect(x: 96, y: 0, width: 1_200, height: 720)
+        let visibleMenu = CGRect(x: 114, y: 257, width: 529, height: 375)
+
+        let menu = CodexSidebarQuotaOverlayController.accountMenuBounds(
+            candidates: [CGRect(x: 114, y: 321, width: 529, height: 311)],
+            codexBounds: codexBounds,
+            sidebarWidth: 560
+        )
+
+        XCTAssertEqual(menu, visibleMenu)
     }
 
     func testPanelFrameHidesForSmallCodexWindow() {

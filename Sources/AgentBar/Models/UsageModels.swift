@@ -149,6 +149,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var fiveHourWindow: UsageWindow?
     var weeklyWindow: UsageWindow?
     var resetCredits: UsageResetCredits? = nil
+    var credentialExpiresAt: Date? = nil
     var tokens: TokenTotals
     var estimatedCostUSD: Decimal?
     var lastUpdated: Date?

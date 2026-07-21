@@ -22,12 +22,13 @@ struct CodexUsageReader {
         var activeAccountActivatedAt: Date?
         var accessIssueNote: String?
         var notes = [
-            "AgentBar reads the local Codex registry and usage JSONL; auth snapshots are read only for usage API refresh."
+            "AgentBar reads local Codex auth snapshots only for account identity and credential expiry; token contents are not retained."
         ]
         let activeAuthData = try? Data(contentsOf: storage.activeAuthURL)
         let activeAuthInfo = CodexAuthSnapshotInfo(
             modifiedAt: (try? fileManager.attributesOfItem(atPath: storage.activeAuthURL.path))?[.modificationDate] as? Date,
-            identity: activeAuthData.flatMap(CodexAccountStorage.chatGPTAuthIdentity)
+            identity: activeAuthData.flatMap(CodexAccountStorage.chatGPTAuthIdentity),
+            credentialExpiresAt: activeAuthData.flatMap(CodexAccountStorage.accessTokenExpiration)
         )
 
         do {
@@ -39,10 +40,11 @@ struct CodexUsageReader {
                 authSnapshotInfo: { accountKey in
                     let authURL = storage.accountAuthURL(for: accountKey)
                     guard let attributes = try? fileManager.attributesOfItem(atPath: authURL.path) else { return nil }
-                    let identity = (try? Data(contentsOf: authURL)).flatMap(CodexAccountStorage.chatGPTAuthIdentity)
+                    let authData = try? Data(contentsOf: authURL)
                     return CodexAuthSnapshotInfo(
                         modifiedAt: attributes[.modificationDate] as? Date,
-                        identity: identity
+                        identity: authData.flatMap(CodexAccountStorage.chatGPTAuthIdentity),
+                        credentialExpiresAt: authData.flatMap(CodexAccountStorage.accessTokenExpiration)
                     )
                 }
             ) {
@@ -151,9 +153,11 @@ struct CodexUsageReader {
                 secondary: raw.lastUsage?.secondary
             )
             let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
+            let savedAuthInfo = authSnapshotInfo?(raw.accountKey)
+            let matchingActiveAuthInfo = raw.matchesAuthIdentity(activeAuthInfo?.identity) ? activeAuthInfo : nil
             let loginWarning: UsageAccountLoginWarning? =
                 raw.hasTokenBackedQuotaWarning ? .quotaUnavailable :
-                raw.hasForcedLogoutWarning(authSnapshotInfo: authSnapshotInfo?(raw.accountKey), activeAuthInfo: activeAuthInfo) ? .forcedLogout :
+                raw.hasForcedLogoutWarning(authSnapshotInfo: savedAuthInfo, activeAuthInfo: activeAuthInfo) ? .forcedLogout :
                 raw.lastUsage?.hasUnreadableResetWarning == true ? .unreadableReset :
                 nil
 
@@ -169,6 +173,7 @@ struct CodexUsageReader {
                 fiveHourWindow: quotaWindows.fiveHour,
                 weeklyWindow: quotaWindows.weekly,
                 resetCredits: resetCredits,
+                credentialExpiresAt: (matchingActiveAuthInfo ?? savedAuthInfo)?.credentialExpiresAt,
                 tokens: .zero,
                 estimatedCostUSD: nil,
                 lastUpdated: epochDate(raw.lastUsageAt),
@@ -601,6 +606,7 @@ private struct CodexRegistryAccount: Decodable {
 private struct CodexAuthSnapshotInfo {
     var modifiedAt: Date?
     var identity: CodexAuthIdentity?
+    var credentialExpiresAt: Date? = nil
 }
 
 private extension Array where Element == CodexRegistryAccount {

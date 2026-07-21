@@ -33,6 +33,7 @@ final class UsageParsingTests: XCTestCase {
         checkCodexRecoveryLoginCommandSnapshotsAuthAfterLogin()
         try checkCodexAccessTokenUpdaterMarksTokenBackedSnapshot()
         checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
+        try checkCodexAccessTokenExpiryParsing()
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
         await checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
         checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized()
@@ -959,6 +960,19 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(storage.accountAuthURL(for: "user-a::org").path, "/tmp/agentbar-codex-home/.codex/accounts/dXNlci1hOjpvcmc.auth.json")
         XCTAssertEqual(storage.accountAuthURL(for: "plain-account").path, "/tmp/agentbar-codex-home/.codex/accounts/plain-account.auth.json")
         XCTAssertTrue(storage.recoveryLoginCommand(accountID: "user-a::org").contains("dXNlci1hOjpvcmc.auth.json"))
+    }
+
+    private func checkCodexAccessTokenExpiryParsing() throws {
+        let expiry = Date(timeIntervalSince1970: 1_800_000_000)
+        let accessToken = "\(base64URL(#"{"alg":"none"}"#)).\(base64URL(#"{"exp":1800000000}"#))."
+        let authData = try XCTUnwrap(
+            #"{"auth_mode":"chatgpt","tokens":{"access_token":"\#(accessToken)","account_id":"acct"}}"#
+                .data(using: .utf8)
+        )
+
+        XCTAssertEqual(CodexAccountStorage.accessTokenExpiration(from: authData), expiry)
+        XCTAssertNil(CodexAccountStorage.accessTokenExpiration(from: Data(#"{"auth_mode":"apikey","OPENAI_API_KEY":"secret"}"#.utf8)))
+        XCTAssertNil(CodexAccountStorage.accessTokenExpiration(from: Data(#"{"tokens":{"access_token":"malformed"}}"#.utf8)))
     }
 
     @MainActor

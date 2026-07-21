@@ -55,7 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        StatusItemController.shared.show(settings: settings, store: store ?? UsageStore(settings: settings))
+        let store = store ?? UsageStore(settings: settings)
+        StatusItemController.shared.show(settings: settings, store: store)
+        CodexSidebarQuotaOverlayController.shared.start(settings: settings, store: store)
         AppUpdateStore.shared.startAutomaticChecks()
 
         NSLog("AgentBar launched with menu bar status item")
@@ -67,6 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, shouldRestoreApplicationState coder: NSCoder) -> Bool {
         false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        CodexSidebarQuotaOverlayController.shared.stop()
     }
 
     private func smokeReportURL() -> URL? {

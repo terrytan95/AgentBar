@@ -22,6 +22,24 @@ final class CodexSidebarQuotaOverlayTests: XCTestCase {
         XCTAssertEqual(state.credentialState(at: expiry), .expired(expiry))
     }
 
+    func testPanelFrameUsesCodexBottomLeftInsets() {
+        let frame = CodexSidebarQuotaOverlayController.panelFrame(
+            codexBounds: CGRect(x: 100, y: 80, width: 1_200, height: 800),
+            contentHeight: 180,
+            mainScreenMaxY: 1_440
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 112, y: 634, width: 280, height: 180))
+    }
+
+    func testPanelFrameHidesForSmallCodexWindow() {
+        XCTAssertNil(CodexSidebarQuotaOverlayController.panelFrame(
+            codexBounds: CGRect(x: 0, y: 0, width: 719, height: 800),
+            contentHeight: 180,
+            mainScreenMaxY: 1_440
+        ))
+    }
+
     private func window(_ kind: UsageWindow.Kind) -> UsageWindow {
         UsageWindow(
             kind: kind,

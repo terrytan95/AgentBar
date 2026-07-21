@@ -90,11 +90,21 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
 
     nonisolated static func panelFrame(
         codexBounds: CGRect,
+        sidebarWidth: CGFloat? = nil,
+        accountMenuBounds: CGRect? = nil,
         contentHeight: CGFloat,
         mainScreenMaxY: CGFloat
     ) -> CGRect? {
         guard codexBounds.width >= 720, codexBounds.height >= 520 else { return nil }
-        let sidebarWidth = inferredSidebarWidth(forCodexWindowWidth: codexBounds.width)
+        let sidebarWidth = sidebarWidth ?? inferredSidebarWidth(forCodexWindowWidth: codexBounds.width)
+        if let accountMenuBounds {
+            return CGRect(
+                x: codexBounds.minX + 12,
+                y: mainScreenMaxY - accountMenuBounds.minY + 12,
+                width: sidebarWidth - 24,
+                height: contentHeight
+            )
+        }
         let appKitWindowMinY = mainScreenMaxY - codexBounds.maxY
         return CGRect(
             x: codexBounds.minX + 12,
@@ -104,8 +114,54 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         )
     }
 
+    nonisolated static func accountMenuBounds(
+        candidates: [CGRect],
+        codexBounds: CGRect,
+        sidebarWidth: CGFloat? = nil
+    ) -> CGRect? {
+        let sidebarWidth = sidebarWidth ?? inferredSidebarWidth(forCodexWindowWidth: codexBounds.width)
+        let minimumMenuBottom = codexBounds.maxY - 160
+        let maximumMenuHeight = codexBounds.height * 0.65
+
+        return candidates
+            .filter { candidate in
+                candidate.width >= 160
+                    && candidate.width <= sidebarWidth + 24
+                    && candidate.height >= 80
+                    && candidate.height <= maximumMenuHeight
+                    && candidate.minX >= codexBounds.minX - 8
+                    && candidate.maxX <= codexBounds.minX + sidebarWidth + 8
+                    && candidate.maxY >= minimumMenuBottom
+                    && candidate.minY < codexBounds.maxY - 80
+            }
+            .max { lhs, rhs in
+                lhs.width * lhs.height < rhs.width * rhs.height
+            }
+    }
+
+    nonisolated static func sidebarWidth(
+        candidates: [CGRect],
+        codexBounds: CGRect
+    ) -> CGFloat? {
+        // ponytail: infer from edge-aligned AX groups until Codex exposes its sidebar splitter directly.
+        let maximumWidth = min(codexBounds.width * 0.5, 500)
+        return candidates
+            .filter { candidate in
+                abs(candidate.minX - codexBounds.minX) <= 4
+                    && candidate.width >= 220
+                    && candidate.width <= maximumWidth
+                    && candidate.height >= 36
+                    && candidate.minY >= codexBounds.minY
+                    && candidate.maxY <= codexBounds.maxY
+                    && (candidate.minY <= codexBounds.minY + 120
+                        || candidate.maxY >= codexBounds.maxY - 8)
+            }
+            .map(\.width)
+            .max()
+    }
+
     nonisolated static func inferredSidebarWidth(forCodexWindowWidth width: CGFloat) -> CGFloat {
-        // ponytail: Codex exposes only full-window AX geometry; use its responsive sidebar ratio until it exposes a splitter width.
+        // ponytail: responsive fallback for Codex builds that omit sidebar child geometry.
         min(max(width * 0.35, 240), 360)
     }
 
@@ -199,7 +255,11 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         [
             kAXFocusedWindowChangedNotification,
+            kAXFocusedUIElementChangedNotification,
             kAXMainWindowChangedNotification,
+            kAXLayoutChangedNotification,
+            kAXMenuOpenedNotification,
+            kAXMenuClosedNotification,
             kAXWindowCreatedNotification
         ].forEach { notification in
             AXObserverAddNotification(observer, applicationElement, notification as CFString, refcon)
@@ -215,7 +275,8 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     private func refreshFocusedWindowObservation() {
         guard let observer = accessibilityObserver,
               let application = accessibilityApplication,
-              let rawWindow = accessibilityAttribute(application, kAXFocusedWindowAttribute as CFString),
+              let rawWindow = accessibilityAttribute(application, kAXMainWindowAttribute as CFString)
+                ?? accessibilityAttribute(application, kAXFocusedWindowAttribute as CFString),
               CFGetTypeID(rawWindow) == AXUIElementGetTypeID()
         else {
             accessibilityWindow = nil
@@ -236,6 +297,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             kAXResizedNotification,
             kAXWindowMiniaturizedNotification,
             kAXWindowDeminiaturizedNotification,
+            kAXLayoutChangedNotification,
             kAXUIElementDestroyedNotification
         ].forEach { notification in
             AXObserverAddNotification(observer, window, notification as CFString, refcon)
@@ -257,11 +319,22 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             return
         }
 
-        hostingView.frame.size.width = Self.inferredSidebarWidth(forCodexWindowWidth: size.width) - 24
+        let codexBounds = CGRect(origin: position, size: size)
+        let candidates = accessibilityCandidateBounds(in: window)
+        let sidebarWidth = Self.sidebarWidth(candidates: candidates, codexBounds: codexBounds)
+            ?? Self.inferredSidebarWidth(forCodexWindowWidth: size.width)
+        let accountMenuBounds = Self.accountMenuBounds(
+            candidates: candidates,
+            codexBounds: codexBounds,
+            sidebarWidth: sidebarWidth
+        )
+        hostingView.frame.size.width = sidebarWidth - 24
         hostingView.layoutSubtreeIfNeeded()
         let contentHeight = max(1, ceil(hostingView.fittingSize.height))
         guard let frame = Self.panelFrame(
-            codexBounds: CGRect(origin: position, size: size),
+            codexBounds: codexBounds,
+            sidebarWidth: sidebarWidth,
+            accountMenuBounds: accountMenuBounds,
             contentHeight: contentHeight,
             mainScreenMaxY: mainScreenMaxY
         ) else {
@@ -278,7 +351,11 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         if let observer = accessibilityObserver, let application = accessibilityApplication {
             [
                 kAXFocusedWindowChangedNotification,
+                kAXFocusedUIElementChangedNotification,
                 kAXMainWindowChangedNotification,
+                kAXLayoutChangedNotification,
+                kAXMenuOpenedNotification,
+                kAXMenuClosedNotification,
                 kAXWindowCreatedNotification
             ].forEach { notification in
                 AXObserverRemoveNotification(observer, application, notification as CFString)
@@ -298,6 +375,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             kAXResizedNotification,
             kAXWindowMiniaturizedNotification,
             kAXWindowDeminiaturizedNotification,
+            kAXLayoutChangedNotification,
             kAXUIElementDestroyedNotification
         ].forEach { notification in
             AXObserverRemoveNotification(observer, window, notification as CFString)
@@ -328,5 +406,55 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         guard AXValueGetType(value) == .cgSize else { return nil }
         var size = CGSize.zero
         return AXValueGetValue(value, .cgSize, &size) ? size : nil
+    }
+
+    private func accessibilityCandidateBounds(in mainWindow: AXUIElement) -> [CGRect] {
+        var candidates: [CGRect] = []
+
+        if let application = accessibilityApplication,
+           let windows = accessibilityAttribute(application, kAXWindowsAttribute as CFString) as? [AXUIElement] {
+            for window in windows where !CFEqual(window, mainWindow) {
+                if let position = accessibilityPoint(window, kAXPositionAttribute as CFString),
+                   let size = accessibilitySize(window, kAXSizeAttribute as CFString) {
+                    candidates.append(CGRect(origin: position, size: size))
+                }
+            }
+        }
+
+        var inspectedElementCount = 0
+        collectCandidateBounds(
+            from: mainWindow,
+            depth: 0,
+            inspectedElementCount: &inspectedElementCount,
+            candidates: &candidates
+        )
+        return candidates
+    }
+
+    private func collectCandidateBounds(
+        from element: AXUIElement,
+        depth: Int,
+        inspectedElementCount: inout Int,
+        candidates: inout [CGRect]
+    ) {
+        guard depth < 32, inspectedElementCount < 8_000 else { return }
+        inspectedElementCount += 1
+
+        if let position = accessibilityPoint(element, kAXPositionAttribute as CFString),
+           let size = accessibilitySize(element, kAXSizeAttribute as CFString) {
+            candidates.append(CGRect(origin: position, size: size))
+        }
+
+        guard let children = accessibilityAttribute(element, kAXChildrenAttribute as CFString) as? [AXUIElement] else {
+            return
+        }
+        for child in children {
+            collectCandidateBounds(
+                from: child,
+                depth: depth + 1,
+                inspectedElementCount: &inspectedElementCount,
+                candidates: &candidates
+            )
+        }
     }
 }

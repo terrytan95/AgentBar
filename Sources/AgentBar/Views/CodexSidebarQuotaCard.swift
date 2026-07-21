@@ -54,14 +54,7 @@ struct CodexSidebarQuotaCard: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                CodexSidebarMaterialView()
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.8)
-            }
+            .modifier(CodexSidebarGlassSurface())
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -163,13 +156,30 @@ struct CodexSidebarQuotaCard: View {
     }
 }
 
+private struct CodexSidebarGlassSurface: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+        } else {
+            content
+                .background { CodexSidebarMaterialView() }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.8)
+                }
+        }
+    }
+}
+
 struct CodexSidebarMaterialView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = .sidebar
         view.blendingMode = .behindWindow
         view.state = .active
-        view.alphaValue = 0.78
         return view
     }
 

@@ -94,13 +94,19 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         mainScreenMaxY: CGFloat
     ) -> CGRect? {
         guard codexBounds.width >= 720, codexBounds.height >= 520 else { return nil }
+        let sidebarWidth = inferredSidebarWidth(forCodexWindowWidth: codexBounds.width)
         let appKitWindowMinY = mainScreenMaxY - codexBounds.maxY
         return CGRect(
             x: codexBounds.minX + 12,
-            y: appKitWindowMinY + 74,
-            width: 280,
+            y: appKitWindowMinY + 86,
+            width: sidebarWidth - 24,
             height: contentHeight
         )
+    }
+
+    nonisolated static func inferredSidebarWidth(forCodexWindowWidth width: CGFloat) -> CGFloat {
+        // ponytail: Codex exposes only full-window AX geometry; use its responsive sidebar ratio until it exposes a splitter width.
+        min(max(width * 0.35, 240), 360)
     }
 
     func handleAccessibilityChange() {
@@ -109,8 +115,16 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     }
 
     private func configurePanel(store: UsageStore) {
-        let hostingView = NSHostingView(rootView: CodexSidebarQuotaCard(store: store))
+        let card = CodexSidebarQuotaCard(store: store) { [weak self] in
+            Task { @MainActor in
+                await Task.yield()
+                self?.refreshPanelFrame()
+            }
+        }
+        let hostingView = NSHostingView(rootView: card)
         hostingView.frame = CGRect(x: 0, y: 0, width: 280, height: 1)
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
 
         let panel = NSPanel(
             contentRect: .zero,
@@ -121,7 +135,8 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
-        panel.ignoresMouseEvents = true
+        panel.ignoresMouseEvents = false
+        panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.level = .floating
@@ -242,7 +257,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             return
         }
 
-        hostingView.frame.size.width = 280
+        hostingView.frame.size.width = Self.inferredSidebarWidth(forCodexWindowWidth: size.width) - 24
         hostingView.layoutSubtreeIfNeeded()
         let contentHeight = max(1, ceil(hostingView.fittingSize.height))
         guard let frame = Self.panelFrame(

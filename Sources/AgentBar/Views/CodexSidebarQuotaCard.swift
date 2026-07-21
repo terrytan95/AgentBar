@@ -26,6 +26,9 @@ struct CodexSidebarQuotaCardState: Equatable {
 
 struct CodexSidebarQuotaCard: View {
     @ObservedObject var store: UsageStore
+    var onContentSizeChange: () -> Void = {}
+
+    @State private var isResetCreditsExpanded = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
@@ -41,11 +44,8 @@ struct CodexSidebarQuotaCard: View {
                     }
                 }
 
-                if let resetCredits = state.account?.resetCredits {
-                    let lines = resetCredits.expirationLines(language: store.language)
-                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                        metadataLine(line, systemImage: "arrow.counterclockwise.circle")
-                    }
+                if let resetCredits = state.account?.resetCredits, resetCredits.hasAvailableCredits {
+                    resetCreditsSection(resetCredits)
                 }
 
                 if let credentialState = state.credentialState(at: timeline.date) {
@@ -53,7 +53,7 @@ struct CodexSidebarQuotaCard: View {
                 }
             }
             .padding(12)
-            .frame(width: 280, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 CodexSidebarMaterialView()
             }
@@ -62,7 +62,6 @@ struct CodexSidebarQuotaCard: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.8)
             }
-            .shadow(color: .black.opacity(0.20), radius: 8, y: 3)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -124,6 +123,31 @@ struct CodexSidebarQuotaCard: View {
         return metadataLine("\(title): \(timestamp) (\(relative))", systemImage: "key.horizontal", color: color)
     }
 
+    private func resetCreditsSection(_ resetCredits: UsageResetCredits) -> some View {
+        let lines = resetCredits.expirationLines(language: store.language)
+        return DisclosureGroup(isExpanded: $isResetCreditsExpanded) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    metadataLine(line, systemImage: "arrow.counterclockwise.circle")
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            HStack(spacing: 6) {
+                Label(L.text("reset_credits", store.language), systemImage: "arrow.counterclockwise.circle")
+                Spacer(minLength: 8)
+                Text("\(resetCredits.visibleCount)")
+                    .monospacedDigit()
+            }
+            .font(.agentBar(size: 9, weight: .medium))
+            .foregroundStyle(.secondary)
+        }
+        .tint(.secondary)
+        .onChange(of: isResetCreditsExpanded) { _, _ in
+            onContentSizeChange()
+        }
+    }
+
     private func metadataLine(_ text: String, systemImage: String, color: Color = .secondary) -> some View {
         Label(text, systemImage: systemImage)
             .font(.agentBar(size: 9, weight: .medium))
@@ -145,6 +169,7 @@ struct CodexSidebarMaterialView: NSViewRepresentable {
         view.material = .sidebar
         view.blendingMode = .behindWindow
         view.state = .active
+        view.alphaValue = 0.78
         return view
     }
 

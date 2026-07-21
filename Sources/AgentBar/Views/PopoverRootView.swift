@@ -573,6 +573,13 @@ struct AccountRowView: View {
                     .background(.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
             }
 
+            if account.service == .codex {
+                Label(accessTokenExpiryText, systemImage: "key.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(accessTokenExpiryColor)
+                    .lineLimit(1)
+            }
+
             HStack(spacing: 10) {
                 UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
                 UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
@@ -633,6 +640,25 @@ struct AccountRowView: View {
     private var lastActivitySummary: String {
         guard let lastUpdated = account.lastUpdated else { return "\(L.text("last_activity", language)): --" }
         return "\(L.text("last_activity", language)): \(DisplayFormatters.relativeString(for: lastUpdated, language: language))"
+    }
+
+    private var accessTokenExpiryText: String {
+        guard let expiry = account.accessTokenExpiresAt else {
+            return "\(L.text("access_token_expiry", language)): \(L.text("expiry_date_unavailable", language))"
+        }
+        let date = DisplayFormatters.shortDateTimeString(for: expiry, language: language)
+        let status = expiry <= Date()
+            ? L.text("expired", language)
+            : DisplayFormatters.relativeString(for: expiry, language: language)
+        return "\(L.text("access_token_expiry", language)): \(date) · \(status)"
+    }
+
+    private var accessTokenExpiryColor: Color {
+        guard let expiry = account.accessTokenExpiresAt else { return .secondary }
+        let remaining = expiry.timeIntervalSinceNow
+        if remaining <= 0 { return .red }
+        if remaining <= AccessTokenExpiryReminderPlanner.warningInterval { return .orange }
+        return .secondary
     }
 }
 

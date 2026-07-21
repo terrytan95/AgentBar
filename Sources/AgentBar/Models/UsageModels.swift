@@ -157,6 +157,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var workspaceName: String? = nil
     var workspaceID: String? = nil
     var workspaces: [UsageWorkspace] = []
+    var accessTokenExpiresAt: Date? = nil
 
     var mostConstrainedRemainingPercent: Double? {
         [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]

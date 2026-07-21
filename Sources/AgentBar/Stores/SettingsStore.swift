@@ -84,6 +84,10 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(taskCompletionNotificationsEnabled, forKey: Keys.taskCompletionNotificationsEnabled) }
     }
 
+    @Published var accessTokenExpiryNotificationsEnabled: Bool {
+        didSet { defaults.set(accessTokenExpiryNotificationsEnabled, forKey: Keys.accessTokenExpiryNotificationsEnabled) }
+    }
+
     @Published private(set) var projectBudgets: [ProjectBudget] {
         didSet {
             guard let data = try? JSONEncoder().encode(projectBudgets) else { return }
@@ -187,6 +191,7 @@ final class SettingsStore: ObservableObject {
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
         taskCompletionNotificationsEnabled = defaults.object(forKey: Keys.taskCompletionNotificationsEnabled) as? Bool ?? false
+        accessTokenExpiryNotificationsEnabled = defaults.object(forKey: Keys.accessTokenExpiryNotificationsEnabled) as? Bool ?? false
         projectBudgets = defaults.data(forKey: Keys.projectBudgets)
             .flatMap { try? JSONDecoder().decode([ProjectBudget].self, from: $0) }
             ?? []
@@ -285,6 +290,7 @@ final class SettingsStore: ObservableObject {
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
         static let taskCompletionNotificationsEnabled = "taskCompletionNotificationsEnabled"
+        static let accessTokenExpiryNotificationsEnabled = "accessTokenExpiryNotificationsEnabled"
         static let projectBudgets = "projectBudgets"
         static let codexRotationThresholdRemainingPercent = "codexRotationThresholdRemainingPercent"
         static let dailyTokenBudget = "dailyTokenBudget"

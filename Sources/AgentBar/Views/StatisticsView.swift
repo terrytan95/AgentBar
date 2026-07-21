@@ -915,6 +915,11 @@ struct StatisticsView: View {
                     subtitle: L.text("task_completion_notifications_subtitle", store.language),
                     isOn: $settings.taskCompletionNotificationsEnabled
                 )
+                SettingsToggleRow(
+                    title: L.text("access_token_expiry_notifications", store.language),
+                    subtitle: L.text("access_token_expiry_notifications_subtitle", store.language),
+                    isOn: $settings.accessTokenExpiryNotificationsEnabled
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

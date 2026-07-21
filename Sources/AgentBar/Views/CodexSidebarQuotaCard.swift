@@ -83,9 +83,17 @@ struct CodexSidebarQuotaCard: View {
             }
             .font(.agentBar(size: 11, weight: .medium))
 
-            ProgressView(value: window.remainingPercent / 100)
-                .progressViewStyle(.linear)
-                .tint(progressColor(window.remainingPercent))
+            GeometryReader { geometry in
+                let progress = min(max(window.remainingPercent / 100, 0), 1)
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.10))
+                    Capsule()
+                        .fill(progressColor(window.remainingPercent))
+                        .frame(width: geometry.size.width * progress)
+                }
+            }
+            .frame(height: 8)
 
             Text(window.resetLine(language: store.language))
                 .font(.agentBar(size: 9, weight: .medium))

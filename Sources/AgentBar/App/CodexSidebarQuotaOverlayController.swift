@@ -181,6 +181,11 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         hostingView.frame = CGRect(x: 0, y: 0, width: 280, height: 1)
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingView.layer?.cornerRadius = 12
+        hostingView.layer?.cornerCurve = .continuous
+        hostingView.layer?.masksToBounds = true
+        hostingView.layer?.borderWidth = 0
+        hostingView.layer?.shadowOpacity = 0
 
         let panel = NSPanel(
             contentRect: .zero,

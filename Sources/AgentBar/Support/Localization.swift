@@ -522,7 +522,7 @@ enum L {
         "reset_time_unknown": "重置时间未知",
         "reset": "重置",
         "resets": "重置",
-        "reset_credits": "充值次数",
+        "reset_credits": "重置次数",
         "reset_available": "次重置可用",
         "resets_available": "次重置可用",
         "expires": "过期",

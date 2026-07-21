@@ -118,26 +118,38 @@ struct CodexSidebarQuotaCard: View {
 
     private func resetCreditsSection(_ resetCredits: UsageResetCredits) -> some View {
         let lines = resetCredits.expirationLines(language: store.language)
-        return DisclosureGroup(isExpanded: $isResetCreditsExpanded) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    metadataLine(line, systemImage: "arrow.counterclockwise.circle")
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                isResetCreditsExpanded.toggle()
+                onContentSizeChange()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isResetCreditsExpanded ? "chevron.down" : "chevron.right")
+                        .font(.agentBar(size: 9, weight: .semibold))
+                        .frame(width: 10)
+                        .accessibilityHidden(true)
+                    Label(L.text("reset_credits", store.language), systemImage: "arrow.counterclockwise.circle")
+                    Spacer(minLength: 8)
+                    Text("\(resetCredits.visibleCount)")
+                        .monospacedDigit()
                 }
+                .font(.agentBar(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(.top, 4)
-        } label: {
-            HStack(spacing: 6) {
-                Label(L.text("reset_credits", store.language), systemImage: "arrow.counterclockwise.circle")
-                Spacer(minLength: 8)
-                Text("\(resetCredits.visibleCount)")
-                    .monospacedDigit()
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(L.text("reset_credits", store.language)), \(resetCredits.visibleCount)")
+
+            if isResetCreditsExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        metadataLine(line, systemImage: "arrow.counterclockwise.circle")
+                    }
+                }
+                .padding(.top, 4)
+                .padding(.leading, 16)
             }
-            .font(.agentBar(size: 9, weight: .medium))
-            .foregroundStyle(.secondary)
-        }
-        .tint(.secondary)
-        .onChange(of: isResetCreditsExpanded) { _, _ in
-            onContentSizeChange()
         }
     }
 
@@ -162,14 +174,11 @@ private struct CodexSidebarGlassSurface: ViewModifier {
         if #available(macOS 26.0, *) {
             content
                 .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         } else {
             content
                 .background { CodexSidebarMaterialView() }
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.8)
-                }
         }
     }
 }

@@ -22,7 +22,7 @@ struct CodexUsageReader {
         var activeAccountActivatedAt: Date?
         var accessIssueNote: String?
         var notes = [
-            "AgentBar reads the local Codex registry and usage JSONL; auth snapshots are read only for usage API refresh."
+            "AgentBar reads local Codex auth snapshots only for account identity and credential expiry; token contents are not retained."
         ]
         let activeAuthData = try? Data(contentsOf: storage.activeAuthURL)
         let activeAuthInfo = CodexAuthSnapshotInfo(

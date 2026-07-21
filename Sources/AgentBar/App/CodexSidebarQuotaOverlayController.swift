@@ -123,7 +123,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         let minimumMenuBottom = codexBounds.maxY - 160
         let maximumMenuHeight = codexBounds.height * 0.65
 
-        return candidates
+        let menu = candidates
             .filter { candidate in
                 candidate.width >= 160
                     && candidate.width <= sidebarWidth + 24
@@ -137,6 +137,16 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             .max { lhs, rhs in
                 lhs.width * lhs.height < rhs.width * rhs.height
             }
+        guard let menu, menu.height < codexBounds.height * 0.5 else { return menu }
+
+        // ponytail: Codex AX omits the popup's 64pt header chrome; remove this when it exposes the full frame.
+        let topInset = min(64, menu.minY - codexBounds.minY)
+        return CGRect(
+            x: menu.minX,
+            y: menu.minY - topInset,
+            width: menu.width,
+            height: menu.height + topInset
+        )
     }
 
     nonisolated static func sidebarWidth(

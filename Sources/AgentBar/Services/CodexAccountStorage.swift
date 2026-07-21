@@ -102,6 +102,17 @@ struct CodexAccountStorage {
         return CodexAuthIdentity(accountID: accountID, email: email)
     }
 
+    static func accessTokenExpiration(from authData: Data) -> Date? {
+        guard let root = try? JSONSerialization.jsonObject(with: authData) as? [String: Any],
+              firstNonEmptyString([root["OPENAI_API_KEY"]]) == nil,
+              firstNonEmptyString([root["auth_mode"]])?.localizedCaseInsensitiveCompare("apikey") != .orderedSame
+        else { return nil }
+        let tokens = root["tokens"] as? [String: Any]
+        guard let expiration = jwtPayload(firstNonEmptyString([tokens?["access_token"], root["access_token"]]))?["exp"] as? NSNumber
+        else { return nil }
+        return Date(timeIntervalSince1970: expiration.doubleValue)
+    }
+
     func writeRegistry(_ registry: [String: Any]) throws {
         let permissions = try? fileManager.attributesOfItem(atPath: registryURL.path)[.posixPermissions]
         let output = try JSONSerialization.data(withJSONObject: registry, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])

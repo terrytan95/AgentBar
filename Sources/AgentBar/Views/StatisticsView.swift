@@ -30,6 +30,7 @@ struct StatisticsView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject private var settings: SettingsStore
     @ObservedObject private var updates: AppUpdateStore
+    @ObservedObject private var codexOverlay = CodexSidebarQuotaOverlayController.shared
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
     @State private var showsSidebarNavigation = true
@@ -827,6 +828,33 @@ struct StatisticsView: View {
                     .labelsHidden()
                     .settingsControl(width: settingsControlWidePickerWidth)
                     .accessibilityLabel(L.text("display_value", store.language))
+                }
+            }
+
+            SettingsGroup(title: L.text("codex_sidebar", store.language), subtitle: L.text("codex_sidebar_settings_subtitle", store.language)) {
+                SettingsToggleRow(
+                    title: L.text("codex_sidebar_quota", store.language),
+                    subtitle: L.text("codex_sidebar_quota_subtitle", store.language),
+                    isOn: $settings.showCodexSidebarQuotaOverlay
+                )
+                .onChange(of: settings.showCodexSidebarQuotaOverlay) { _, enabled in
+                    if enabled {
+                        codexOverlay.requestAccessibilityPermission()
+                    }
+                }
+
+                if settings.showCodexSidebarQuotaOverlay && !codexOverlay.hasAccessibilityPermission {
+                    SettingsRow(
+                        title: L.text("accessibility_permission_required", store.language),
+                        subtitle: L.text("accessibility_permission_subtitle", store.language)
+                    ) {
+                        Button {
+                            codexOverlay.openAccessibilitySettings()
+                        } label: {
+                            Label(L.text("open_system_settings", store.language), systemImage: "gear")
+                        }
+                        .pointingHandCursor()
+                    }
                 }
             }
         }

@@ -37,6 +37,7 @@ final class UsageParsingTests: XCTestCase {
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
         await checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
         checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized()
+        checkCodexSidebarQuotaOverlaySettingPersists()
         checkPopoverHeightPreferenceIsClampedWhenLoadedAndSaved()
         try checkCodexReadPrefersRegistryUsageOverLocalSessionRateLimits()
         try checkCodexReadDoesNotRestoreRemovedFiveHourLimitFromSessions()
@@ -409,8 +410,10 @@ final class UsageParsingTests: XCTestCase {
           ]
         }
         """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        let credentialExpiry = Date(timeIntervalSince1970: 1_800_000_000)
+        let accessToken = "\(base64URL(#"{"alg":"none"}"#)).\(base64URL(#"{"exp":1800000000}"#))."
         try """
-        {"auth_mode":"chatgpt","tokens":{"access_token":"current-token","account_id":"chatgpt-b"}}
+        {"auth_mode":"chatgpt","tokens":{"access_token":"\(accessToken)","account_id":"chatgpt-b"}}
         """.data(using: .utf8)!.write(to: temp.appending(path: ".codex/auth.json"))
         try """
         {"auth_mode":"chatgpt","tokens":{"access_token":"wrong-token","account_id":"chatgpt-b"}}
@@ -422,6 +425,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-a" }).isActive)
         XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-a" }?.loginWarning, .forcedLogout)
         XCTAssertTrue(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-b" }).isActive)
+        XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-b" }?.credentialExpiresAt, credentialExpiry)
     }
 
     private func checkCodexReadUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs() throws {
@@ -1074,6 +1078,19 @@ final class UsageParsingTests: XCTestCase {
         let reloaded = SettingsStore(defaults: defaults)
         XCTAssertTrue(reloaded.useDarkAppearance)
         XCTAssertEqual(L.text("dark_theme", .chinese), "深色主题")
+    }
+
+    @MainActor
+    private func checkCodexSidebarQuotaOverlaySettingPersists() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let initial = SettingsStore(defaults: defaults)
+        XCTAssertFalse(initial.showCodexSidebarQuotaOverlay)
+
+        initial.showCodexSidebarQuotaOverlay = true
+        XCTAssertTrue(SettingsStore(defaults: defaults).showCodexSidebarQuotaOverlay)
     }
 
     @MainActor

@@ -56,6 +56,10 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(showCodexInMenuBar, forKey: Keys.showCodexInMenuBar) }
     }
 
+    @Published var showCodexSidebarQuotaOverlay: Bool {
+        didSet { defaults.set(showCodexSidebarQuotaOverlay, forKey: Keys.showCodexSidebarQuotaOverlay) }
+    }
+
     @Published var showClaudeInMenuBar: Bool {
         didSet { defaults.set(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
     }
@@ -184,6 +188,7 @@ final class SettingsStore: ObservableObject {
         }
         menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .activeAccountWindows
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
+        showCodexSidebarQuotaOverlay = defaults.object(forKey: Keys.showCodexSidebarQuotaOverlay) as? Bool ?? false
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
@@ -282,6 +287,7 @@ final class SettingsStore: ObservableObject {
         static let launchAtLogin = "launchAtLogin"
         static let menuBarDisplayMode = "menuBarDisplayMode"
         static let showCodexInMenuBar = "showCodexInMenuBar"
+        static let showCodexSidebarQuotaOverlay = "showCodexSidebarQuotaOverlay"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"

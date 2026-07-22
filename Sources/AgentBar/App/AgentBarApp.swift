@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 @main
@@ -18,8 +19,6 @@ struct AgentBarApp: App {
         WindowGroup("AgentBar", id: "statistics") {
             StatisticsView(store: store)
                 .frame(minWidth: 1180, minHeight: 760)
-                .preferredColorScheme(settings.useDarkAppearance ? .dark : .light)
-                .animation(nil, value: settings.useDarkAppearance)
         }
         .defaultSize(width: 1480, height: 940)
         .commandsRemoved()
@@ -38,6 +37,7 @@ struct AgentBarApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings = SettingsStore.shared
     private var store: UsageStore?
+    private var appearanceCancellable: AnyCancellable?
 
     func configure(settings: SettingsStore, store: UsageStore) {
         self.settings = settings
@@ -46,6 +46,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        appearanceCancellable = settings.$useDarkAppearance
+            .removeDuplicates()
+            .sink { useDarkAppearance in
+                NSApp.appearance = useDarkAppearance ? NSAppearance(named: .darkAqua) : nil
+            }
 
         if let reportURL = smokeReportURL() {
             Task { @MainActor in

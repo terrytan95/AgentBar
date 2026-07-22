@@ -138,8 +138,6 @@ struct PopoverRootView: View {
                 )
         }
         .background(popoverBackground)
-        .preferredColorScheme(store.settings.useDarkAppearance ? .dark : .light)
-        .animation(nil, value: store.settings.useDarkAppearance)
         .onDisappear {
             isConfirmingQuit = false
         }
@@ -362,12 +360,9 @@ private enum AgentBarWindowPresenter {
             return
         }
 
-        let settings = store.settings
         let controller = NSHostingController(
             rootView: StatisticsView(store: store, initialTab: initialTab)
                 .frame(minWidth: 1180, minHeight: 760)
-                .preferredColorScheme(settings.useDarkAppearance ? .dark : .light)
-                .animation(nil, value: settings.useDarkAppearance)
         )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1480, height: 940),

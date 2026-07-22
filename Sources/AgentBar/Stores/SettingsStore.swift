@@ -60,6 +60,14 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(showCodexSidebarQuotaOverlay, forKey: Keys.showCodexSidebarQuotaOverlay) }
     }
 
+    @Published var codexSidebarQuotaOverlayIndependent: Bool {
+        didSet { defaults.set(codexSidebarQuotaOverlayIndependent, forKey: Keys.codexSidebarQuotaOverlayIndependent) }
+    }
+
+    @Published var didCompleteQuotaWidgetOnboarding: Bool {
+        didSet { defaults.set(didCompleteQuotaWidgetOnboarding, forKey: Keys.didCompleteQuotaWidgetOnboarding) }
+    }
+
     @Published var showClaudeInMenuBar: Bool {
         didSet { defaults.set(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
     }
@@ -189,6 +197,8 @@ final class SettingsStore: ObservableObject {
         menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .activeAccountWindows
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showCodexSidebarQuotaOverlay = defaults.object(forKey: Keys.showCodexSidebarQuotaOverlay) as? Bool ?? false
+        codexSidebarQuotaOverlayIndependent = defaults.object(forKey: Keys.codexSidebarQuotaOverlayIndependent) as? Bool ?? false
+        didCompleteQuotaWidgetOnboarding = defaults.bool(forKey: Keys.didCompleteQuotaWidgetOnboarding)
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
@@ -288,6 +298,8 @@ final class SettingsStore: ObservableObject {
         static let menuBarDisplayMode = "menuBarDisplayMode"
         static let showCodexInMenuBar = "showCodexInMenuBar"
         static let showCodexSidebarQuotaOverlay = "showCodexSidebarQuotaOverlay"
+        static let codexSidebarQuotaOverlayIndependent = "codexSidebarQuotaOverlayIndependent"
+        static let didCompleteQuotaWidgetOnboarding = "didCompleteQuotaWidgetOnboarding"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"

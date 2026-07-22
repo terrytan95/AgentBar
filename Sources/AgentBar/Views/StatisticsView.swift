@@ -31,6 +31,7 @@ struct StatisticsView: View {
     @ObservedObject private var settings: SettingsStore
     @ObservedObject private var updates: AppUpdateStore
     @ObservedObject private var codexOverlay = CodexSidebarQuotaOverlayController.shared
+    @ObservedObject private var quotaWidgetHotKey = QuotaWidgetHotKeyController.shared
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
     @State private var showsSidebarNavigation = true
@@ -852,6 +853,23 @@ struct StatisticsView: View {
                     if enabled && !settings.codexSidebarQuotaOverlayIndependent {
                         codexOverlay.requestAccessibilityPermission()
                     }
+                }
+
+                SettingsRow(
+                    title: L.text("quota_widget_shortcut", store.language),
+                    subtitle: L.text(
+                        quotaWidgetHotKey.registrationFailed
+                            ? "quota_widget_shortcut_conflict"
+                            : "quota_widget_shortcut_subtitle",
+                        store.language
+                    )
+                ) {
+                    QuotaWidgetHotKeyRecorder(
+                        hotKey: $settings.quotaWidgetHotKey,
+                        emptyText: L.text("quota_widget_shortcut_set", store.language),
+                        recordingText: L.text("quota_widget_shortcut_recording", store.language)
+                    )
+                    .frame(width: 150, height: 30)
                 }
 
                 SettingsToggleRow(

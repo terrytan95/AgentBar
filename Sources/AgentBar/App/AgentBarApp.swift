@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let store = store ?? UsageStore(settings: settings)
         StatusItemController.shared.show(settings: settings, store: store)
         CodexSidebarQuotaOverlayController.shared.start(settings: settings, store: store)
+        QuotaWidgetHotKeyController.shared.start(settings: settings)
         AppUpdateStore.shared.startAutomaticChecks()
 
         NSLog("AgentBar launched with menu bar status item")
@@ -72,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        QuotaWidgetHotKeyController.shared.stop()
         CodexSidebarQuotaOverlayController.shared.stop()
     }
 

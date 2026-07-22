@@ -64,6 +64,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(codexSidebarQuotaOverlayIndependent, forKey: Keys.codexSidebarQuotaOverlayIndependent) }
     }
 
+    @Published var quotaWidgetHotKey: QuotaWidgetHotKey? {
+        didSet {
+            defaults.set(try? JSONEncoder().encode(quotaWidgetHotKey), forKey: Keys.quotaWidgetHotKey)
+        }
+    }
+
     @Published var didCompleteQuotaWidgetOnboarding: Bool {
         didSet { defaults.set(didCompleteQuotaWidgetOnboarding, forKey: Keys.didCompleteQuotaWidgetOnboarding) }
     }
@@ -198,6 +204,8 @@ final class SettingsStore: ObservableObject {
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showCodexSidebarQuotaOverlay = defaults.object(forKey: Keys.showCodexSidebarQuotaOverlay) as? Bool ?? false
         codexSidebarQuotaOverlayIndependent = defaults.object(forKey: Keys.codexSidebarQuotaOverlayIndependent) as? Bool ?? false
+        quotaWidgetHotKey = defaults.data(forKey: Keys.quotaWidgetHotKey)
+            .flatMap { try? JSONDecoder().decode(QuotaWidgetHotKey.self, from: $0) }
         didCompleteQuotaWidgetOnboarding = defaults.bool(forKey: Keys.didCompleteQuotaWidgetOnboarding)
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
@@ -299,6 +307,7 @@ final class SettingsStore: ObservableObject {
         static let showCodexInMenuBar = "showCodexInMenuBar"
         static let showCodexSidebarQuotaOverlay = "showCodexSidebarQuotaOverlay"
         static let codexSidebarQuotaOverlayIndependent = "codexSidebarQuotaOverlayIndependent"
+        static let quotaWidgetHotKey = "quotaWidgetHotKey"
         static let didCompleteQuotaWidgetOnboarding = "didCompleteQuotaWidgetOnboarding"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"

@@ -33,6 +33,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     private var panel: NSPanel?
     private var hostingView: NSHostingView<CodexSidebarQuotaCard>?
     private var panelMoveObserver: NSObjectProtocol?
+    private var panelResizeObserver: NSObjectProtocol?
     private var frameRefreshTimer: Timer?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var cancellables = Set<AnyCancellable>()
@@ -98,6 +99,10 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             NotificationCenter.default.removeObserver(panelMoveObserver)
         }
         panelMoveObserver = nil
+        if let panelResizeObserver {
+            NotificationCenter.default.removeObserver(panelResizeObserver)
+        }
+        panelResizeObserver = nil
         frameRefreshTimer?.invalidate()
         frameRefreshTimer = nil
         cancellables.removeAll()
@@ -279,7 +284,17 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         ) { [weak self, weak panel] _ in
             Task { @MainActor in
                 guard self?.settings?.codexSidebarQuotaOverlayIndependent == true else { return }
-                panel?.saveFrame(usingName: "CodexQuotaOverlayIndependent")
+                panel?.saveFrame(usingName: "CodexQuotaOverlayIndependentResizable")
+            }
+        }
+        panelResizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didEndLiveResizeNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self, weak panel] _ in
+            Task { @MainActor in
+                guard self?.settings?.codexSidebarQuotaOverlayIndependent == true else { return }
+                panel?.saveFrame(usingName: "CodexQuotaOverlayIndependentResizable")
             }
         }
 
@@ -406,6 +421,9 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             refreshIndependentPanelFrame()
             return
         }
+        panel?.styleMask.remove(.resizable)
+        panel?.contentMinSize = .zero
+        panel?.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         guard settings?.showCodexSidebarQuotaOverlay == true,
               NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Self.codexBundleIdentifier,
               let window = accessibilityWindow,
@@ -474,14 +492,17 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
 
         let enteringIndependentMode = !panel.isMovableByWindowBackground
         panel.isMovableByWindowBackground = true
+        panel.styleMask.insert(.resizable)
         if enteringIndependentMode {
-            _ = panel.setFrameUsingName("CodexQuotaOverlayIndependent")
+            _ = panel.setFrameUsingName("CodexQuotaOverlayIndependentResizable")
         }
 
-        let width: CGFloat = 280
+        let width = min(max(panel.frame.width > 1 ? panel.frame.width : 264, 220), 420)
         hostingView.frame.size.width = width
         hostingView.layoutSubtreeIfNeeded()
         let height = max(1, ceil(hostingView.fittingSize.height))
+        panel.contentMinSize = NSSize(width: 220, height: height)
+        panel.contentMaxSize = NSSize(width: 420, height: height)
         var frame = panel.frame
         if frame.width <= 1 || frame.height <= 1 {
             let visibleFrame = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1_440, height: 900)

@@ -1138,9 +1138,16 @@ final class UsageParsingTests: XCTestCase {
 
         let initial = SettingsStore(defaults: defaults)
         XCTAssertFalse(initial.showCodexSidebarQuotaOverlay)
+        XCTAssertFalse(initial.codexSidebarQuotaOverlayIndependent)
+        XCTAssertFalse(initial.didCompleteQuotaWidgetOnboarding)
 
         initial.showCodexSidebarQuotaOverlay = true
-        XCTAssertTrue(SettingsStore(defaults: defaults).showCodexSidebarQuotaOverlay)
+        initial.codexSidebarQuotaOverlayIndependent = true
+        initial.didCompleteQuotaWidgetOnboarding = true
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertTrue(reloaded.showCodexSidebarQuotaOverlay)
+        XCTAssertTrue(reloaded.codexSidebarQuotaOverlayIndependent)
+        XCTAssertTrue(reloaded.didCompleteQuotaWidgetOnboarding)
     }
 
     @MainActor

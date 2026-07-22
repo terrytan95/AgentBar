@@ -22,6 +22,36 @@ final class CodexSidebarQuotaOverlayTests: XCTestCase {
         XCTAssertEqual(state.credentialState(at: expiry), .expired(expiry))
     }
 
+    func testIndependentOverlayDoesNotRequireCodexOrAccessibility() {
+        XCTAssertTrue(CodexSidebarQuotaOverlayController.shouldShowOverlay(
+            enabled: true,
+            independent: true,
+            hasAccessibilityPermission: false,
+            isCodexFrontmost: false
+        ))
+        XCTAssertFalse(CodexSidebarQuotaOverlayController.shouldShowOverlay(
+            enabled: false,
+            independent: true,
+            hasAccessibilityPermission: true,
+            isCodexFrontmost: true
+        ))
+    }
+
+    func testAttachedOverlayRequiresCodexAndAccessibility() {
+        XCTAssertFalse(CodexSidebarQuotaOverlayController.shouldShowOverlay(
+            enabled: true,
+            independent: false,
+            hasAccessibilityPermission: false,
+            isCodexFrontmost: true
+        ))
+        XCTAssertTrue(CodexSidebarQuotaOverlayController.shouldShowOverlay(
+            enabled: true,
+            independent: false,
+            hasAccessibilityPermission: true,
+            isCodexFrontmost: true
+        ))
+    }
+
     func testPanelFrameTracksSidebarWidthAndUsesEqualMargins() {
         let frame = CodexSidebarQuotaOverlayController.panelFrame(
             codexBounds: CGRect(x: 100, y: 80, width: 1_200, height: 800),
@@ -38,6 +68,24 @@ final class CodexSidebarQuotaOverlayTests: XCTestCase {
             mainScreenMaxY: 1_440
         )
         XCTAssertEqual(narrowerFrame?.width, 256)
+    }
+
+    func testCoordinateConversionUsesDisplayContainingCodex() {
+        let coordinateMaxY = CodexSidebarQuotaOverlayController.appKitCoordinateMaxY(
+            for: CGRect(x: 1_600, y: 200, width: 1_200, height: 800),
+            displays: [
+                CodexDisplayGeometry(
+                    accessibilityFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900),
+                    appKitFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+                ),
+                CodexDisplayGeometry(
+                    accessibilityFrame: CGRect(x: 1_440, y: 150, width: 1_920, height: 1_080),
+                    appKitFrame: CGRect(x: 1_440, y: -480, width: 1_920, height: 1_080)
+                )
+            ]
+        )
+
+        XCTAssertEqual(coordinateMaxY, 750)
     }
 
     func testSidebarWidthUsesLeftEdgeAccessibilityGeometry() {

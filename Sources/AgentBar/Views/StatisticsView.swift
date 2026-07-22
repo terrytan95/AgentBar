@@ -38,6 +38,7 @@ struct StatisticsView: View {
     @State private var showsAccountPopover = false
     @State private var showsServiceBreakdownPopover = false
     @State private var showsModelBreakdownPopover = false
+    @State private var showsQuotaWidgetOnboarding = false
     @State private var settingsSection: SettingsSection = .accounts
     @State private var showsAdvancedRefreshSettings = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -78,6 +79,9 @@ struct StatisticsView: View {
             if let tab = DashboardNavigation.consumePendingTab() {
                 setTopTab(tab)
             }
+            if !settings.didCompleteQuotaWidgetOnboarding {
+                showsQuotaWidgetOnboarding = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: DashboardNavigation.tabRequestNotification)) { notification in
             guard let rawValue = notification.userInfo?["tab"] as? String,
@@ -85,6 +89,13 @@ struct StatisticsView: View {
             else { return }
             setTopTab(tab)
             _ = DashboardNavigation.consumePendingTab()
+        }
+        .sheet(isPresented: $showsQuotaWidgetOnboarding) {
+            QuotaWidgetOnboardingView(
+                settings: settings,
+                overlay: codexOverlay,
+                language: store.language
+            )
         }
     }
 
@@ -838,12 +849,26 @@ struct StatisticsView: View {
                     isOn: $settings.showCodexSidebarQuotaOverlay
                 )
                 .onChange(of: settings.showCodexSidebarQuotaOverlay) { _, enabled in
-                    if enabled {
+                    if enabled && !settings.codexSidebarQuotaOverlayIndependent {
                         codexOverlay.requestAccessibilityPermission()
                     }
                 }
 
-                if settings.showCodexSidebarQuotaOverlay && !codexOverlay.hasAccessibilityPermission {
+                SettingsToggleRow(
+                    title: L.text("codex_sidebar_independent", store.language),
+                    subtitle: L.text("codex_sidebar_independent_subtitle", store.language),
+                    isOn: $settings.codexSidebarQuotaOverlayIndependent
+                )
+                .disabled(!settings.showCodexSidebarQuotaOverlay)
+                .onChange(of: settings.codexSidebarQuotaOverlayIndependent) { _, independent in
+                    if !independent && settings.showCodexSidebarQuotaOverlay {
+                        codexOverlay.requestAccessibilityPermission()
+                    }
+                }
+
+                if settings.showCodexSidebarQuotaOverlay
+                    && !settings.codexSidebarQuotaOverlayIndependent
+                    && !codexOverlay.hasAccessibilityPermission {
                     SettingsRow(
                         title: L.text("accessibility_permission_required", store.language),
                         subtitle: L.text("accessibility_permission_subtitle", store.language)
@@ -855,6 +880,18 @@ struct StatisticsView: View {
                         }
                         .pointingHandCursor()
                     }
+                }
+
+                SettingsRow(
+                    title: L.text("quota_onboarding_reopen", store.language),
+                    subtitle: L.text("quota_onboarding_reopen_subtitle", store.language)
+                ) {
+                    Button {
+                        showsQuotaWidgetOnboarding = true
+                    } label: {
+                        Label(L.text("quota_onboarding_open", store.language), systemImage: "questionmark.circle")
+                    }
+                    .pointingHandCursor()
                 }
             }
         }

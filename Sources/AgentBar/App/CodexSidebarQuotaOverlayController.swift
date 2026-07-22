@@ -3,6 +3,11 @@ import ApplicationServices
 import Combine
 import SwiftUI
 
+struct CodexDisplayGeometry {
+    var accessibilityFrame: CGRect
+    var appKitFrame: CGRect
+}
+
 private func codexSidebarQuotaAXCallback(
     observer: AXObserver,
     element: AXUIElement,
@@ -27,12 +32,16 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     private weak var store: UsageStore?
     private var panel: NSPanel?
     private var hostingView: NSHostingView<CodexSidebarQuotaCard>?
+    private var panelMoveObserver: NSObjectProtocol?
+    private var frameRefreshTimer: Timer?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var cancellables = Set<AnyCancellable>()
     private var accessibilityObserver: AXObserver?
     private var accessibilityApplication: AXUIElement?
     private var accessibilityWindow: AXUIElement?
     private var codexProcessIdentifier: pid_t?
+    private var lastCodexBounds: CGRect?
+    private var framePollCount = 0
     private var isStarted = false
 
     func start(settings: SettingsStore, store: UsageStore) {
@@ -52,6 +61,15 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             }
             .store(in: &cancellables)
 
+        settings.$codexSidebarQuotaOverlayIndependent
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.refreshVisibility()
+                }
+            }
+            .store(in: &cancellables)
+
         store.objectWillChange
             .sink { [weak self] _ in
                 Task { @MainActor in
@@ -61,12 +79,27 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             }
             .store(in: &cancellables)
 
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard self?.settings?.codexSidebarQuotaOverlayIndependent == false else { return }
+                self?.pollAttachedPanelFrame()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        frameRefreshTimer = timer
+
         refreshVisibility()
     }
 
     func stop() {
         workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         workspaceObservers.removeAll()
+        if let panelMoveObserver {
+            NotificationCenter.default.removeObserver(panelMoveObserver)
+        }
+        panelMoveObserver = nil
+        frameRefreshTimer?.invalidate()
+        frameRefreshTimer = nil
         cancellables.removeAll()
         clearAccessibilityObservation()
         panel?.orderOut(nil)
@@ -78,6 +111,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     }
 
     func requestAccessibilityPermission() {
+        guard settings?.codexSidebarQuotaOverlayIndependent != true else { return }
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         hasAccessibilityPermission = AXIsProcessTrustedWithOptions(options)
         refreshVisibility()
@@ -86,6 +120,15 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     func openAccessibilitySettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    nonisolated static func shouldShowOverlay(
+        enabled: Bool,
+        independent: Bool,
+        hasAccessibilityPermission: Bool,
+        isCodexFrontmost: Bool
+    ) -> Bool {
+        enabled && (independent || (hasAccessibilityPermission && isCodexFrontmost))
     }
 
     nonisolated static func panelFrame(
@@ -112,6 +155,21 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             width: sidebarWidth - 24,
             height: contentHeight
         )
+    }
+
+    nonisolated static func appKitCoordinateMaxY(
+        for codexBounds: CGRect,
+        displays: [CodexDisplayGeometry]
+    ) -> CGFloat? {
+        var best: (display: CodexDisplayGeometry, area: CGFloat)?
+        for display in displays {
+            let intersection = display.accessibilityFrame.intersection(codexBounds)
+            let area: CGFloat = intersection.isNull ? 0 : intersection.width * intersection.height
+            if area > (best?.area ?? 0) {
+                best = (display, area)
+            }
+        }
+        return best.map { $0.display.appKitFrame.maxY + $0.display.accessibilityFrame.minY }
     }
 
     nonisolated static func accountMenuBounds(
@@ -213,6 +271,17 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.contentView = hostingView
+        panel.isMovableByWindowBackground = false
+        panelMoveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self, weak panel] _ in
+            Task { @MainActor in
+                guard self?.settings?.codexSidebarQuotaOverlayIndependent == true else { return }
+                panel?.saveFrame(usingName: "CodexQuotaOverlayIndependent")
+            }
+        }
 
         self.hostingView = hostingView
         self.panel = panel
@@ -236,16 +305,29 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
 
     private func refreshVisibility() {
         hasAccessibilityPermission = AXIsProcessTrusted()
-        guard settings?.showCodexSidebarQuotaOverlay == true,
-              hasAccessibilityPermission,
-              let application = NSWorkspace.shared.frontmostApplication,
-              application.bundleIdentifier == Self.codexBundleIdentifier
-        else {
+        let enabled = settings?.showCodexSidebarQuotaOverlay == true
+        let independent = settings?.codexSidebarQuotaOverlayIndependent == true
+        let application = NSWorkspace.shared.frontmostApplication
+        let isCodexFrontmost = application?.bundleIdentifier == Self.codexBundleIdentifier
+        guard Self.shouldShowOverlay(
+            enabled: enabled,
+            independent: independent,
+            hasAccessibilityPermission: hasAccessibilityPermission,
+            isCodexFrontmost: isCodexFrontmost
+        ) else {
             panel?.orderOut(nil)
             clearAccessibilityObservation()
             return
         }
 
+        if independent {
+            clearAccessibilityObservation()
+            refreshIndependentPanelFrame()
+            return
+        }
+
+        guard let application else { return }
+        panel?.isMovableByWindowBackground = false
         attach(to: application)
         refreshPanelFrame()
     }
@@ -320,6 +402,10 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     }
 
     private func refreshPanelFrame() {
+        if settings?.codexSidebarQuotaOverlayIndependent == true {
+            refreshIndependentPanelFrame()
+            return
+        }
         guard settings?.showCodexSidebarQuotaOverlay == true,
               NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Self.codexBundleIdentifier,
               let window = accessibilityWindow,
@@ -327,14 +413,18 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
               let position = accessibilityPoint(window, kAXPositionAttribute as CFString),
               let size = accessibilitySize(window, kAXSizeAttribute as CFString),
               let hostingView,
-              let panel,
-              let mainScreenMaxY = NSScreen.screens.first?.frame.maxY
+              let panel
         else {
             panel?.orderOut(nil)
             return
         }
 
         let codexBounds = CGRect(origin: position, size: size)
+        lastCodexBounds = codexBounds
+        guard let mainScreenMaxY = appKitCoordinateMaxY(for: codexBounds) else {
+            panel.orderOut(nil)
+            return
+        }
         let candidates = accessibilityCandidateBounds(in: window)
         let sidebarWidth = Self.sidebarWidth(candidates: candidates, codexBounds: codexBounds)
             ?? Self.inferredSidebarWidth(forCodexWindowWidth: size.width)
@@ -361,6 +451,62 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         panel.orderFrontRegardless()
     }
 
+    private func pollAttachedPanelFrame() {
+        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Self.codexBundleIdentifier,
+              let window = accessibilityWindow,
+              let position = accessibilityPoint(window, kAXPositionAttribute as CFString),
+              let size = accessibilitySize(window, kAXSizeAttribute as CFString)
+        else { return }
+        framePollCount += 1
+        if CGRect(origin: position, size: size) != lastCodexBounds || framePollCount.isMultiple(of: 4) {
+            refreshPanelFrame()
+        }
+    }
+
+    private func refreshIndependentPanelFrame() {
+        guard settings?.showCodexSidebarQuotaOverlay == true,
+              let hostingView,
+              let panel
+        else {
+            panel?.orderOut(nil)
+            return
+        }
+
+        let enteringIndependentMode = !panel.isMovableByWindowBackground
+        panel.isMovableByWindowBackground = true
+        if enteringIndependentMode {
+            _ = panel.setFrameUsingName("CodexQuotaOverlayIndependent")
+        }
+
+        let width: CGFloat = 280
+        hostingView.frame.size.width = width
+        hostingView.layoutSubtreeIfNeeded()
+        let height = max(1, ceil(hostingView.fittingSize.height))
+        var frame = panel.frame
+        if frame.width <= 1 || frame.height <= 1 {
+            let visibleFrame = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1_440, height: 900)
+            frame = CGRect(x: visibleFrame.maxX - width - 24, y: visibleFrame.maxY - height - 24, width: width, height: height)
+        } else {
+            frame.origin.y = frame.maxY - height
+            frame.size = CGSize(width: width, height: height)
+        }
+        panel.setFrame(frame, display: true)
+        panel.orderFrontRegardless()
+    }
+
+    private func appKitCoordinateMaxY(for codexBounds: CGRect) -> CGFloat? {
+        let displays = NSScreen.screens.compactMap { screen -> CodexDisplayGeometry? in
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                return nil
+            }
+            return CodexDisplayGeometry(
+                accessibilityFrame: CGDisplayBounds(CGDirectDisplayID(number.uint32Value)),
+                appKitFrame: screen.frame
+            )
+        }
+        return Self.appKitCoordinateMaxY(for: codexBounds, displays: displays)
+    }
+
     private func clearAccessibilityObservation() {
         removeWindowNotifications()
         if let observer = accessibilityObserver, let application = accessibilityApplication {
@@ -381,6 +527,8 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         accessibilityApplication = nil
         accessibilityObserver = nil
         codexProcessIdentifier = nil
+        lastCodexBounds = nil
+        framePollCount = 0
     }
 
     private func removeWindowNotifications() {

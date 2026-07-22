@@ -5,13 +5,44 @@ MODE="${1:-run}"
 APP_NAME="AgentBar"
 BUNDLE_ID="com.terrytan.AgentBar"
 MIN_SYSTEM_VERSION="14.0"
-APP_VERSION="2.2.24"
-APP_BUILD="209"
+APP_VERSION="2.3.0"
+APP_BUILD="210"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 RUN_DIST_DIR="${AGENTBAR_RUN_DIST_DIR:-${TMPDIR:-/tmp}/AgentBar}"
 BUILD_SCRATCH_DIR="${AGENTBAR_BUILD_DIR:-${TMPDIR:-/tmp}/AgentBar-build}"
+CODESIGN_IDENTITY="${AGENTBAR_CODESIGN_IDENTITY:-}"
+
+if [ -z "$CODESIGN_IDENTITY" ] && command -v security >/dev/null 2>&1; then
+  CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+    | sed -nE 's/.*"(Developer ID Application: [^"]+)".*/\1/p' \
+    | sed -n '1p')"
+fi
+if [ -z "$CODESIGN_IDENTITY" ] && command -v security >/dev/null 2>&1; then
+  CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+    | sed -nE 's/.*"(AgentBar Local Code Signing)".*/\1/p' \
+    | sed -n '1p')"
+fi
+if [ -z "$CODESIGN_IDENTITY" ] \
+  && [ "$MODE" != "--package" ] \
+  && [ "$MODE" != "package" ] \
+  && command -v security >/dev/null 2>&1; then
+  CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+    | sed -nE 's/^[[:space:]]*[0-9]+\) [0-9A-F]+ "([^"]+)".*/\1/p' \
+    | sed -n '1p')"
+fi
+if [ -z "$CODESIGN_IDENTITY" ]; then
+  CODESIGN_IDENTITY="-"
+fi
+
+if { [ "$MODE" = "--package" ] || [ "$MODE" = "package" ]; } \
+  && [ "$CODESIGN_IDENTITY" = "-" ] \
+  && [ "${AGENTBAR_ALLOW_ADHOC_PACKAGE:-0}" != "1" ]; then
+  echo "error: packaging requires a stable code-signing identity so macOS can preserve Accessibility permission across updates." >&2
+  echo "Install a Developer ID or AgentBar local signing certificate, or set AGENTBAR_CODESIGN_IDENTITY. Use AGENTBAR_ALLOW_ADHOC_PACKAGE=1 only for throwaway local builds." >&2
+  exit 1
+fi
 
 if [ "$MODE" = "--package" ] || [ "$MODE" = "package" ]; then
   APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
@@ -87,7 +118,14 @@ cat >"$INFO_PLIST" <<PLIST
 PLIST
 
 if command -v codesign >/dev/null 2>&1; then
-  codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null 2>&1 || true
+  if [ "$CODESIGN_IDENTITY" = "-" ]; then
+    echo "warning: ad-hoc signing changes app identity on every build; Accessibility permission will not survive replacement." >&2
+    codesign --force --deep --sign - "$APP_BUNDLE"
+  elif [[ "$CODESIGN_IDENTITY" == "Developer ID Application:"* ]]; then
+    codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
+  else
+    codesign --force --deep --options runtime --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
+  fi
 fi
 
 open_app() {

@@ -683,7 +683,6 @@ final class UsageParsingTests: XCTestCase {
         try """
         {"auth_mode":"chatgpt","tokens":{"access_token":"other-token","account_id":"other-chatgpt-id"}}
         """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-b.auth.json"))
-
         let requestRecorder = UsageAPIRequestRecorder()
         let syncer = CodexUsageAPISyncer(
             homeDirectory: temp,

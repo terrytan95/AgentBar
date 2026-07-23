@@ -82,7 +82,6 @@ final class UsageStore: ObservableObject {
     private let accessTokenExpiryReminderReconciler: @MainActor @Sendable ([UsageAccount], Bool, AppLanguage) -> Void
     private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
-    private var taskTimer: Timer?
     private var accountRemovalObserver: NSObjectProtocol?
     private var codexRecoveryLoginObserver: DarwinNotificationObserver?
     private var refreshIntervalObserver: AnyCancellable?
@@ -177,7 +176,6 @@ final class UsageStore: ObservableObject {
             }
         }
         configureTimer()
-        configureTaskTimer()
         refreshIntervalObserver = settings.$refreshInterval
             .dropFirst()
             .removeDuplicates()
@@ -415,17 +413,6 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    func configureTaskTimer() {
-        taskTimer?.invalidate()
-        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshTaskCenter()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        taskTimer = timer
-    }
-
     func refreshTaskCenter() {
         guard !taskRefreshInFlight else { return }
         taskRefreshInFlight = true
@@ -643,7 +630,7 @@ final class UsageStore: ObservableObject {
         let previousTasks = tasks
         let completedAfter = lastTaskRefreshAt ?? now
         let historyCutoff = now.addingTimeInterval(-Self.taskHistoryWindow)
-        tasks = Array(nextTasks
+        let currentTasks = Array(nextTasks
             .filter { ($0.completedAt ?? $0.lastActivityAt) >= historyCutoff }
             .sorted { lhs, rhs in
                 let lhsDate = lhs.completedAt ?? lhs.lastActivityAt
@@ -651,11 +638,14 @@ final class UsageStore: ObservableObject {
                 return lhsDate > rhsDate
             }
             .prefix(Self.maximumTaskHistoryCount))
+        if tasks != currentTasks {
+            tasks = currentTasks
+        }
 
         if hasLoadedTaskCenter, settings.taskCompletionNotificationsEnabled {
             for notification in TaskCompletionNotifications.newlyCompleted(
                 previous: previousTasks,
-                current: tasks,
+                current: currentTasks,
                 completedAfter: completedAfter,
                 language: language
             ) {

@@ -56,6 +56,24 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(showCodexInMenuBar, forKey: Keys.showCodexInMenuBar) }
     }
 
+    @Published var showCodexSidebarQuotaOverlay: Bool {
+        didSet { defaults.set(showCodexSidebarQuotaOverlay, forKey: Keys.showCodexSidebarQuotaOverlay) }
+    }
+
+    @Published var codexSidebarQuotaOverlayIndependent: Bool {
+        didSet { defaults.set(codexSidebarQuotaOverlayIndependent, forKey: Keys.codexSidebarQuotaOverlayIndependent) }
+    }
+
+    @Published var quotaWidgetHotKey: QuotaWidgetHotKey? {
+        didSet {
+            defaults.set(try? JSONEncoder().encode(quotaWidgetHotKey), forKey: Keys.quotaWidgetHotKey)
+        }
+    }
+
+    @Published var didCompleteQuotaWidgetOnboarding: Bool {
+        didSet { defaults.set(didCompleteQuotaWidgetOnboarding, forKey: Keys.didCompleteQuotaWidgetOnboarding) }
+    }
+
     @Published var showClaudeInMenuBar: Bool {
         didSet { defaults.set(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
     }
@@ -82,6 +100,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var taskCompletionNotificationsEnabled: Bool {
         didSet { defaults.set(taskCompletionNotificationsEnabled, forKey: Keys.taskCompletionNotificationsEnabled) }
+    }
+
+    @Published var accessTokenExpiryNotificationsEnabled: Bool {
+        didSet { defaults.set(accessTokenExpiryNotificationsEnabled, forKey: Keys.accessTokenExpiryNotificationsEnabled) }
     }
 
     @Published private(set) var projectBudgets: [ProjectBudget] {
@@ -180,6 +202,11 @@ final class SettingsStore: ObservableObject {
         }
         menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .activeAccountWindows
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
+        showCodexSidebarQuotaOverlay = defaults.object(forKey: Keys.showCodexSidebarQuotaOverlay) as? Bool ?? false
+        codexSidebarQuotaOverlayIndependent = defaults.object(forKey: Keys.codexSidebarQuotaOverlayIndependent) as? Bool ?? false
+        quotaWidgetHotKey = defaults.data(forKey: Keys.quotaWidgetHotKey)
+            .flatMap { try? JSONDecoder().decode(QuotaWidgetHotKey.self, from: $0) }
+        didCompleteQuotaWidgetOnboarding = defaults.bool(forKey: Keys.didCompleteQuotaWidgetOnboarding)
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
@@ -187,6 +214,7 @@ final class SettingsStore: ObservableObject {
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
         taskCompletionNotificationsEnabled = defaults.object(forKey: Keys.taskCompletionNotificationsEnabled) as? Bool ?? false
+        accessTokenExpiryNotificationsEnabled = defaults.object(forKey: Keys.accessTokenExpiryNotificationsEnabled) as? Bool ?? false
         projectBudgets = defaults.data(forKey: Keys.projectBudgets)
             .flatMap { try? JSONDecoder().decode([ProjectBudget].self, from: $0) }
             ?? []
@@ -277,6 +305,10 @@ final class SettingsStore: ObservableObject {
         static let launchAtLogin = "launchAtLogin"
         static let menuBarDisplayMode = "menuBarDisplayMode"
         static let showCodexInMenuBar = "showCodexInMenuBar"
+        static let showCodexSidebarQuotaOverlay = "showCodexSidebarQuotaOverlay"
+        static let codexSidebarQuotaOverlayIndependent = "codexSidebarQuotaOverlayIndependent"
+        static let quotaWidgetHotKey = "quotaWidgetHotKey"
+        static let didCompleteQuotaWidgetOnboarding = "didCompleteQuotaWidgetOnboarding"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"
@@ -285,6 +317,7 @@ final class SettingsStore: ObservableObject {
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
         static let taskCompletionNotificationsEnabled = "taskCompletionNotificationsEnabled"
+        static let accessTokenExpiryNotificationsEnabled = "accessTokenExpiryNotificationsEnabled"
         static let projectBudgets = "projectBudgets"
         static let codexRotationThresholdRemainingPercent = "codexRotationThresholdRemainingPercent"
         static let dailyTokenBudget = "dailyTokenBudget"

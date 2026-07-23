@@ -22,12 +22,13 @@ struct CodexUsageReader {
         var activeAccountActivatedAt: Date?
         var accessIssueNote: String?
         var notes = [
-            "AgentBar reads the local Codex registry and usage JSONL; auth snapshots are read only for usage API refresh."
+            "AgentBar reads local Codex auth snapshots only for account identity and credential expiry; token contents are not retained."
         ]
         let activeAuthData = try? Data(contentsOf: storage.activeAuthURL)
         let activeAuthInfo = CodexAuthSnapshotInfo(
             modifiedAt: (try? fileManager.attributesOfItem(atPath: storage.activeAuthURL.path))?[.modificationDate] as? Date,
-            identity: activeAuthData.flatMap(CodexAccountStorage.chatGPTAuthIdentity)
+            identity: activeAuthData.flatMap(CodexAccountStorage.chatGPTAuthIdentity),
+            accessTokenExpiresAt: activeAuthData.flatMap(CodexAccountStorage.accessTokenExpiration)
         )
 
         do {
@@ -39,10 +40,11 @@ struct CodexUsageReader {
                 authSnapshotInfo: { accountKey in
                     let authURL = storage.accountAuthURL(for: accountKey)
                     guard let attributes = try? fileManager.attributesOfItem(atPath: authURL.path) else { return nil }
-                    let identity = (try? Data(contentsOf: authURL)).flatMap(CodexAccountStorage.chatGPTAuthIdentity)
+                    let authData = try? Data(contentsOf: authURL)
                     return CodexAuthSnapshotInfo(
                         modifiedAt: attributes[.modificationDate] as? Date,
-                        identity: identity
+                        identity: authData.flatMap(CodexAccountStorage.chatGPTAuthIdentity),
+                        accessTokenExpiresAt: authData.flatMap(CodexAccountStorage.accessTokenExpiration)
                     )
                 }
             ) {
@@ -141,6 +143,11 @@ struct CodexUsageReader {
         let activeAccountKey = registry.accounts.accountKey(matching: activeAuthInfo?.identity) ?? registry.activeAccountKey
         let workspaceNamesByID = registry.accounts.workspaceNamesByID
         let accounts = registry.accounts.map { raw in
+            let savedAuthInfo = authSnapshotInfo?(raw.accountKey)
+            let activeAccessTokenExpiresAt = raw.accountKey == activeAccountKey && raw.matchesAuthIdentity(activeAuthInfo?.identity)
+                ? activeAuthInfo?.accessTokenExpiresAt
+                : nil
+            let accessTokenExpiresAt = activeAccessTokenExpiresAt ?? savedAuthInfo?.accessTokenExpiresAt
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
             let displayName = username ?? "Codex Account"
             let workspaces = raw.usageWorkspaces.resolvingNames(with: workspaceNamesByID)
@@ -153,7 +160,7 @@ struct CodexUsageReader {
             let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
             let loginWarning: UsageAccountLoginWarning? =
                 raw.hasTokenBackedQuotaWarning ? .quotaUnavailable :
-                raw.hasForcedLogoutWarning(authSnapshotInfo: authSnapshotInfo?(raw.accountKey), activeAuthInfo: activeAuthInfo) ? .forcedLogout :
+                raw.hasForcedLogoutWarning(authSnapshotInfo: savedAuthInfo, activeAuthInfo: activeAuthInfo) ? .forcedLogout :
                 raw.lastUsage?.hasUnreadableResetWarning == true ? .unreadableReset :
                 nil
 
@@ -176,7 +183,8 @@ struct CodexUsageReader {
                 loginWarning: loginWarning,
                 workspaceName: workspaceName,
                 workspaceID: workspaceID,
-                workspaces: workspaces
+                workspaces: workspaces,
+                accessTokenExpiresAt: accessTokenExpiresAt
             )
         }
 
@@ -271,6 +279,16 @@ struct CodexUsageReader {
 
             if payload.type == "task_started", let turnID = payload.turnID {
                 let startedAt = epochDate(payload.startedAt) ?? parsedEventDate ?? .distantPast
+                if let previousTaskID = activeTaskID,
+                   previousTaskID != turnID,
+                   var previousBuilder = taskBuilders[previousTaskID],
+                   previousBuilder.terminalState == nil {
+                    let interruptedAt = max(previousBuilder.lastActivityAt, startedAt)
+                    previousBuilder.completedAt = interruptedAt
+                    previousBuilder.lastActivityAt = interruptedAt
+                    previousBuilder.terminalState = .interrupted
+                    taskBuilders[previousTaskID] = previousBuilder
+                }
                 if taskBuilders[turnID] == nil {
                     taskOrder.append(turnID)
                 }
@@ -591,6 +609,7 @@ private struct CodexRegistryAccount: Decodable {
 private struct CodexAuthSnapshotInfo {
     var modifiedAt: Date?
     var identity: CodexAuthIdentity?
+    var accessTokenExpiresAt: Date?
 }
 
 private extension Array where Element == CodexRegistryAccount {

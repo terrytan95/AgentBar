@@ -25,4 +25,8 @@ final class LocalizationTests: XCTestCase {
             "Codex 会话扫描已跳过 4 个 JSONL 文件：4 个超过 10 MB 文件限制。用量可能被低估。"
         )
     }
+
+    func testResetCreditsLabelUsesResetTerminology() {
+        XCTAssertEqual(L.text("reset_credits", .chinese), "重置次数")
+    }
 }

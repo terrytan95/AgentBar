@@ -101,6 +101,7 @@ extension Font {
 private struct AgentBarPanelModifier: ViewModifier {
     var cornerRadius: CGFloat
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -117,17 +118,21 @@ private struct AgentBarPanelModifier: ViewModifier {
 
         return content
             .background {
-                shape
-                    .fill(.regularMaterial)
-                    .opacity(cornerRadius == 0 ? 0 : 1)
-                    .overlay {
-                        shape.fill(cornerRadius == 0 ? AgentBarDesign.appBackground.opacity(0.72) : AgentBarDesign.cardBackground)
-                    }
-                    .overlay(alignment: .top) {
-                        shape
-                            .stroke(AgentBarDesign.panelGlow.opacity(cornerRadius == 0 ? 0 : 0.95), lineWidth: 1)
-                            .blur(radius: 0.4)
-                    }
+                if reduceTransparency {
+                    shape.fill(Color(nsColor: .controlBackgroundColor))
+                } else {
+                    shape
+                        .fill(.regularMaterial)
+                        .opacity(cornerRadius == 0 ? 0 : 1)
+                        .overlay {
+                            shape.fill(cornerRadius == 0 ? AgentBarDesign.appBackground.opacity(0.72) : AgentBarDesign.cardBackground)
+                        }
+                        .overlay(alignment: .top) {
+                            shape
+                                .stroke(AgentBarDesign.panelGlow.opacity(cornerRadius == 0 ? 0 : 0.95), lineWidth: 1)
+                                .blur(radius: 0.4)
+                        }
+                }
             }
             .overlay {
                 shape.strokeBorder(AgentBarDesign.hairline, lineWidth: 0.8)
@@ -142,15 +147,19 @@ private struct AgentBarPanelModifier: ViewModifier {
         let shadowOpacity: Double = cornerRadius == 0 ? 0 : 1
 
         return content
-            .background(
-                shape
-                    .fill(cornerRadius == 0 ? Color(nsColor: .windowBackgroundColor).opacity(0.72) : Color(nsColor: .controlBackgroundColor).opacity(0.78))
-                    .overlay(alignment: .top) {
-                        shape
-                            .stroke(Color(nsColor: .controlBackgroundColor).opacity(cornerRadius == 0 ? 0 : 0.72), lineWidth: 1)
-                            .blur(radius: 0.4)
-                    }
-            )
+            .background {
+                if reduceTransparency {
+                    shape.fill(Color(nsColor: .controlBackgroundColor))
+                } else {
+                    shape
+                        .fill(cornerRadius == 0 ? Color(nsColor: .windowBackgroundColor).opacity(0.72) : Color(nsColor: .controlBackgroundColor).opacity(0.78))
+                        .overlay(alignment: .top) {
+                            shape
+                                .stroke(Color(nsColor: .controlBackgroundColor).opacity(cornerRadius == 0 ? 0 : 0.72), lineWidth: 1)
+                                .blur(radius: 0.4)
+                        }
+                }
+            }
             .overlay {
                 shape.strokeBorder(Color(nsColor: .separatorColor).opacity(0.72), lineWidth: 0.8)
             }
@@ -180,7 +189,10 @@ extension View {
         modifier(AgentBarPanelModifier(cornerRadius: cornerRadius))
     }
 
-    func tactilePlainButton(enabled isEnabled: Bool = true, pressedScale: CGFloat = 0.98) -> some View {
+    func tactilePlainButton(
+        enabled isEnabled: Bool = true,
+        pressedScale: CGFloat = 0.98
+    ) -> some View {
         buttonStyle(AgentBarPressButtonStyle(pressedScale: pressedScale))
             .pointingHandCursor(enabled: isEnabled)
     }

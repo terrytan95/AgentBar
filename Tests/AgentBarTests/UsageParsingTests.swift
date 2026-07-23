@@ -33,9 +33,13 @@ final class UsageParsingTests: XCTestCase {
         checkCodexRecoveryLoginCommandSnapshotsAuthAfterLogin()
         try checkCodexAccessTokenUpdaterMarksTokenBackedSnapshot()
         checkCodexAccountStorageCentralizesRegistryAuthAndRecoveryPaths()
+        try checkCodexAccountStorageParsesAccessTokenExpiration()
+        try checkCodexReadUsesPerAccountAccessTokenExpirations()
         checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState()
+        await checkUsageStoreReconcilesAccessTokenExpiryReminders()
         await checkRefreshSyncsCodexUsageAPIBeforeReadingUsage()
         checkDarkThemeSettingPersistsAndToneColorCopyIsLocalized()
+        checkCodexSidebarQuotaOverlaySettingPersists()
         checkPopoverHeightPreferenceIsClampedWhenLoadedAndSaved()
         try checkCodexReadPrefersRegistryUsageOverLocalSessionRateLimits()
         try checkCodexReadDoesNotRestoreRemovedFiveHourLimitFromSessions()
@@ -62,6 +66,8 @@ final class UsageParsingTests: XCTestCase {
         checkAccount401WarnsInMenuBarTitle()
         checkQuotaResetNotificationsDetectWindowRefreshes()
         checkTaskCompletionNotificationsDetectNewlyFinishedTasks()
+        checkAccessTokenExpiryNotificationSettingPersists()
+        checkAccessTokenExpiryReminderPlanning()
         checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta()
         checkQuotaCapacityHistoryDoesNotEstimateAcrossAccountSwitches()
         checkStatisticsBucketsAggregateExpectedRanges()
@@ -408,8 +414,10 @@ final class UsageParsingTests: XCTestCase {
           ]
         }
         """.data(using: .utf8)!.write(to: accountDir.appending(path: "registry.json"))
+        let credentialExpiry = Date(timeIntervalSince1970: 1_800_000_000)
+        let accessToken = "\(base64URL(#"{"alg":"none"}"#)).\(base64URL(#"{"exp":1800000000}"#))."
         try """
-        {"auth_mode":"chatgpt","tokens":{"access_token":"current-token","account_id":"chatgpt-b"}}
+        {"auth_mode":"chatgpt","tokens":{"access_token":"\(accessToken)","account_id":"chatgpt-b"}}
         """.data(using: .utf8)!.write(to: temp.appending(path: ".codex/auth.json"))
         try """
         {"auth_mode":"chatgpt","tokens":{"access_token":"wrong-token","account_id":"chatgpt-b"}}
@@ -421,6 +429,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-a" }).isActive)
         XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-a" }?.loginWarning, .forcedLogout)
         XCTAssertTrue(try XCTUnwrap(snapshot.accounts.first { $0.id == "acct-b" }).isActive)
+        XCTAssertEqual(snapshot.accounts.first { $0.id == "acct-b" }?.accessTokenExpiresAt, credentialExpiry)
     }
 
     private func checkCodexReadUsesAuthEmailToDisambiguateDuplicateWorkspaceIDs() throws {
@@ -521,11 +530,16 @@ final class UsageParsingTests: XCTestCase {
         {"type":"event_msg","timestamp":"2026-07-10T07:02:01Z","payload":{"type":"user_message","message":"Set project budgets"}}
         {"type":"event_msg","timestamp":"2026-07-10T07:02:10Z","payload":{"type":"agent_message","message":"I will implement repository budgets."}}
         {"type":"event_msg","timestamp":"2026-07-10T07:02:30Z","payload":{"type":"task_complete","turn_id":"turn-2","completed_at":1783666950,"duration_ms":30000}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:03:00Z","payload":{"type":"task_started","turn_id":"turn-3","started_at":1783666980}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:03:01Z","payload":{"type":"user_message","message":"Run every plan"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:04:00Z","payload":{"type":"task_started","turn_id":"turn-4","started_at":1783667040}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:04:01Z","payload":{"type":"user_message","message":"Continue"}}
+        {"type":"event_msg","timestamp":"2026-07-10T07:04:20Z","payload":{"type":"agent_message","message":"Still working."}}
         """.data(using: .utf8)!
 
         let metrics = try CodexUsageReader.parseSessionJsonl(data: data, sessionID: "session-1")
         let task = try XCTUnwrap(metrics.tasks.first)
-        XCTAssertEqual(metrics.tasks.count, 2)
+        XCTAssertEqual(metrics.tasks.count, 4)
         XCTAssertEqual(task.id, "turn-1")
         XCTAssertEqual(task.sessionID, "session-1")
         XCTAssertEqual(task.projectName, "AgentBar")
@@ -535,7 +549,13 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(task.terminalState, .completed)
         XCTAssertEqual(task.state(at: Date(timeIntervalSince1970: 1_783_666_900)), .completed)
         XCTAssertEqual(task.duration(at: task.completedAt!), 60, accuracy: 0.001)
-        XCTAssertEqual(metrics.tasks.last?.title, "Set project budgets")
+        XCTAssertEqual(metrics.tasks[2].terminalState, .interrupted)
+        XCTAssertEqual(metrics.tasks[2].completedAt, Date(timeIntervalSince1970: 1_783_667_040))
+        let currentTask = try XCTUnwrap(metrics.tasks.last)
+        XCTAssertEqual(currentTask.title, "Continue")
+        XCTAssertEqual(currentTask.state(at: Date(timeIntervalSince1970: 1_783_667_400)), .waiting)
+        XCTAssertEqual(currentTask.state(at: Date(timeIntervalSince1970: 1_783_668_960)), .interrupted)
+        XCTAssertEqual(currentTask.duration(at: Date(timeIntervalSince1970: 1_783_668_960)), 20, accuracy: 0.001)
     }
 
     private func checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset() throws {
@@ -950,6 +970,65 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertTrue(storage.recoveryLoginCommand(accountID: "user-a::org").contains("dXNlci1hOjpvcmc.auth.json"))
     }
 
+    private func checkCodexAccountStorageParsesAccessTokenExpiration() throws {
+        let expiry = Date(timeIntervalSince1970: 1_800_086_400)
+        let auth = authJSON(
+            accessToken: accessToken(expiry: expiry),
+            accountID: "acct-a",
+            email: "a@example.com"
+        ).data(using: .utf8)!
+
+        XCTAssertEqual(CodexAccountStorage.accessTokenExpiration(from: auth), expiry)
+        XCTAssertNil(CodexAccountStorage.accessTokenExpiration(
+            from: Data(#"{"auth_mode":"chatgpt","tokens":{"access_token":"broken"}}"#.utf8)
+        ))
+        XCTAssertNil(CodexAccountStorage.accessTokenExpiration(
+            from: Data(#"{"auth_mode":"apikey","OPENAI_API_KEY":"secret"}"#.utf8)
+        ))
+    }
+
+    private func checkCodexReadUsesPerAccountAccessTokenExpirations() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let storage = CodexAccountStorage(homeDirectory: temp)
+        try FileManager.default.createDirectory(at: storage.accountsDirectory, withIntermediateDirectories: true)
+        try """
+        {
+          "schema_version": 3,
+          "active_account_key": "acct-a",
+          "accounts": [
+            {"account_key":"acct-a","email":"a@example.com","chatgpt_account_id":"acct-a"},
+            {"account_key":"acct-b","email":"b@example.com","chatgpt_account_id":"acct-b"}
+          ]
+        }
+        """.data(using: .utf8)!.write(to: storage.registryURL)
+
+        let activeExpiry = Date(timeIntervalSince1970: 1_800_086_400)
+        let staleActiveExpiry = activeExpiry.addingTimeInterval(-86_400)
+        let inactiveExpiry = activeExpiry.addingTimeInterval(86_400)
+        try authJSON(accessToken: accessToken(expiry: activeExpiry), accountID: "acct-a", email: "a@example.com")
+            .data(using: .utf8)!.write(to: storage.activeAuthURL)
+        try authJSON(accessToken: accessToken(expiry: staleActiveExpiry), accountID: "acct-a", email: "a@example.com")
+            .data(using: .utf8)!.write(to: storage.accountAuthURL(for: "acct-a"))
+        try authJSON(accessToken: accessToken(expiry: inactiveExpiry), accountID: "acct-b", email: "b@example.com")
+            .data(using: .utf8)!.write(to: storage.accountAuthURL(for: "acct-b"))
+
+        let accounts = codexReader(homeDirectory: temp).read().accounts
+
+        XCTAssertEqual(accounts.first { $0.id == "acct-a" }?.accessTokenExpiresAt, activeExpiry)
+        XCTAssertEqual(accounts.first { $0.id == "acct-b" }?.accessTokenExpiresAt, inactiveExpiry)
+
+        try FileManager.default.removeItem(at: storage.activeAuthURL)
+        let fallbackAccounts = codexReader(homeDirectory: temp).read().accounts
+        XCTAssertEqual(fallbackAccounts.first { $0.id == "acct-a" }?.accessTokenExpiresAt, staleActiveExpiry)
+
+        let unrelatedExpiry = activeExpiry.addingTimeInterval(2 * 86_400)
+        try authJSON(accessToken: accessToken(expiry: unrelatedExpiry), accountID: "not-in-registry", email: "other@example.com")
+            .data(using: .utf8)!.write(to: storage.activeAuthURL)
+        let mismatchedAccounts = codexReader(homeDirectory: temp).read().accounts
+        XCTAssertEqual(mismatchedAccounts.first { $0.id == "acct-a" }?.accessTokenExpiresAt, staleActiveExpiry)
+    }
+
     @MainActor
     private func checkRefreshingAfterInitialLoadDoesNotReturnAccountUIToLoadingState() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
@@ -1049,6 +1128,26 @@ final class UsageParsingTests: XCTestCase {
         let reloaded = SettingsStore(defaults: defaults)
         XCTAssertTrue(reloaded.useDarkAppearance)
         XCTAssertEqual(L.text("dark_theme", .chinese), "深色主题")
+    }
+
+    @MainActor
+    private func checkCodexSidebarQuotaOverlaySettingPersists() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let initial = SettingsStore(defaults: defaults)
+        XCTAssertFalse(initial.showCodexSidebarQuotaOverlay)
+        XCTAssertFalse(initial.codexSidebarQuotaOverlayIndependent)
+        XCTAssertFalse(initial.didCompleteQuotaWidgetOnboarding)
+
+        initial.showCodexSidebarQuotaOverlay = true
+        initial.codexSidebarQuotaOverlayIndependent = true
+        initial.didCompleteQuotaWidgetOnboarding = true
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertTrue(reloaded.showCodexSidebarQuotaOverlay)
+        XCTAssertTrue(reloaded.codexSidebarQuotaOverlayIndependent)
+        XCTAssertTrue(reloaded.didCompleteQuotaWidgetOnboarding)
     }
 
     @MainActor
@@ -1854,6 +1953,149 @@ final class UsageParsingTests: XCTestCase {
         ).isEmpty)
     }
 
+    @MainActor
+    private func checkAccessTokenExpiryNotificationSettingPersists() {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+
+        XCTAssertFalse(settings.accessTokenExpiryNotificationsEnabled)
+        settings.accessTokenExpiryNotificationsEnabled = true
+
+        XCTAssertTrue(SettingsStore(defaults: defaults).accessTokenExpiryNotificationsEnabled)
+    }
+
+    private func checkAccessTokenExpiryReminderPlanning() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var account = testAccount(id: "acct-a", name: "a@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)
+        let expiry = now.addingTimeInterval(2 * 86_400)
+        account.accessTokenExpiresAt = expiry
+
+        let plan = AccessTokenExpiryReminderPlanner.plan(
+            accounts: [account],
+            registeredExpirations: [:],
+            enabled: true,
+            now: now,
+            language: .english
+        )
+
+        XCTAssertEqual(plan.reminders.first?.deliveryDate, expiry.addingTimeInterval(-86_400))
+        XCTAssertEqual(plan.reminders.first?.title, "Codex access token expires soon")
+        XCTAssertEqual(plan.registrations[account.id], expiry.timeIntervalSince1970)
+        XCTAssertTrue(AccessTokenExpiryReminderPlanner.plan(
+            accounts: [account],
+            registeredExpirations: plan.registrations,
+            enabled: true,
+            now: now,
+            language: .english
+        ).reminders.isEmpty)
+
+        var urgent = account
+        urgent.accessTokenExpiresAt = now.addingTimeInterval(12 * 3_600)
+        let urgentPlan = AccessTokenExpiryReminderPlanner.plan(
+            accounts: [urgent],
+            registeredExpirations: [:],
+            enabled: true,
+            now: now,
+            language: .english
+        )
+        XCTAssertEqual(urgentPlan.reminders.first?.deliveryDate, now)
+
+        var expired = account
+        expired.accessTokenExpiresAt = now.addingTimeInterval(-1)
+        var claude = account
+        claude.id = "claude"
+        claude.service = .claudeCode
+        XCTAssertTrue(AccessTokenExpiryReminderPlanner.plan(
+            accounts: [expired, claude],
+            registeredExpirations: [:],
+            enabled: true,
+            now: now,
+            language: .english
+        ).reminders.isEmpty)
+
+        let changedPlan = AccessTokenExpiryReminderPlanner.plan(
+            accounts: [account],
+            registeredExpirations: [account.id: expiry.addingTimeInterval(-1).timeIntervalSince1970],
+            enabled: true,
+            now: now,
+            language: .english
+        )
+        XCTAssertEqual(changedPlan.reminders.count, 1)
+        XCTAssertEqual(changedPlan.notificationIDsToRemove, ["access-token-expiry-acct-a"])
+
+        let disabledPlan = AccessTokenExpiryReminderPlanner.plan(
+            accounts: [account],
+            registeredExpirations: plan.registrations,
+            enabled: false,
+            now: now,
+            language: .english
+        )
+        XCTAssertTrue(disabledPlan.reminders.isEmpty)
+        XCTAssertTrue(disabledPlan.registrations.isEmpty)
+        XCTAssertEqual(disabledPlan.notificationIDsToRemove, ["access-token-expiry-acct-a"])
+    }
+
+    @MainActor
+    private func checkUsageStoreReconcilesAccessTokenExpiryReminders() async {
+        let suiteName = "AgentBarTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.accessTokenExpiryNotificationsEnabled = true
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = {
+            var account = testAccount(id: "acct-a", name: "a@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)
+            account.accessTokenExpiresAt = now.addingTimeInterval(2 * 86_400)
+            return account
+        }()
+        let recorder = AccessTokenExpiryReconciliationRecorder()
+        let store = UsageStore(
+            settings: settings,
+            codexUsageSynchronizer: { .success },
+            codexUsageReader: {
+                UsageSnapshot(
+                    service: .codex,
+                    status: .live,
+                    accounts: [account],
+                    points: [],
+                    securityNotes: [],
+                    refreshedAt: now,
+                    pricingFingerprint: Pricing.fingerprint
+                )
+            },
+            claudeUsageReader: {
+                UsageSnapshot(
+                    service: .claudeCode,
+                    status: .unavailable,
+                    accounts: [],
+                    points: [],
+                    securityNotes: [],
+                    refreshedAt: now,
+                    pricingFingerprint: Pricing.fingerprint
+                )
+            },
+            accessTokenExpiryReminderReconciler: { accounts, enabled, language in
+                recorder.record(accounts: accounts, enabled: enabled, language: language)
+            }
+        )
+
+        store.refresh(force: true)
+        for _ in 0..<100 where recorder.events.isEmpty {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(recorder.events.last?.accountIDs, ["acct-a"])
+        XCTAssertEqual(recorder.events.last?.enabled, true)
+        XCTAssertEqual(recorder.events.last?.language, .english)
+
+        settings.accessTokenExpiryNotificationsEnabled = false
+        for _ in 0..<100 where recorder.events.last?.enabled != false {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(recorder.events.last?.enabled, false)
+    }
+
     private func checkStatisticsBucketsAggregateExpectedRanges() {
         let calendar = Calendar(identifier: .gregorian)
         let now = ISO8601DateFormatter().date(from: "2026-06-13T22:00:00Z")!
@@ -2245,6 +2487,10 @@ final class UsageParsingTests: XCTestCase {
         "\(base64URL(#"{"alg":"none"}"#)).\(base64URL(#"{"email":"\#(email)"}"#))."
     }
 
+    private func accessToken(expiry: Date) -> String {
+        "\(base64URL(#"{"alg":"none"}"#)).\(base64URL(#"{"exp":\#(Int(expiry.timeIntervalSince1970))}"#))."
+    }
+
     private func base64URL(_ value: String) -> String {
         Data(value.utf8)
             .base64EncodedString()
@@ -2267,6 +2513,21 @@ final class UsageParsingTests: XCTestCase {
             lock.lock()
             recordedEvents.append(event)
             lock.unlock()
+        }
+    }
+
+    @MainActor
+    private final class AccessTokenExpiryReconciliationRecorder {
+        struct Event {
+            var accountIDs: [String]
+            var enabled: Bool
+            var language: AppLanguage
+        }
+
+        private(set) var events: [Event] = []
+
+        func record(accounts: [UsageAccount], enabled: Bool, language: AppLanguage) {
+            events.append(Event(accountIDs: accounts.map(\.id), enabled: enabled, language: language))
         }
     }
 

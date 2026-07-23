@@ -1,6 +1,6 @@
 # 002 — Honor reduced transparency
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 90cdbae
 - **Severity**: MEDIUM
 - **Category**: Accessibility

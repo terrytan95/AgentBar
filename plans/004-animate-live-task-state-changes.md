@@ -1,6 +1,6 @@
 # 004 — Animate live task state changes
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 90cdbae
 - **Severity**: MEDIUM
 - **Category**: Missed opportunities

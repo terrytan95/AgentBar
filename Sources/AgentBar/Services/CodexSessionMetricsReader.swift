@@ -232,7 +232,7 @@ private final class CodexSessionMetricsCache: @unchecked Sendable {
 }
 
 private struct CodexSessionMetricsDiskRecord: Codable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion: Int
     var path: String

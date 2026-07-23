@@ -1,6 +1,6 @@
 # 001 — Unify immediate press feedback
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 90cdbae
 - **Severity**: MEDIUM
 - **Category**: Physicality & origin

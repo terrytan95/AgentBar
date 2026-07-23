@@ -1,15 +1,14 @@
 # AgentBar animation plans
 
-All plans are stamped against commit `90cdbae`. They are implementation plans,
-not completed changes.
+All plans are stamped against commit `90cdbae` and have been implemented.
 
 | Plan | Title | Severity | Status |
 | --- | --- | --- | --- |
-| [001](001-unify-press-feedback.md) | Unify immediate press feedback | MEDIUM | TODO |
-| [002](002-honor-reduced-transparency.md) | Honor reduced transparency | MEDIUM | TODO |
-| [003](003-animate-popover-state-swaps.md) | Animate popover state swaps | MEDIUM | TODO |
-| [004](004-animate-live-task-state-changes.md) | Animate live task state changes | MEDIUM | TODO |
-| [005](005-animate-audit-disclosures.md) | Animate audit disclosures | LOW | TODO |
+| [001](001-unify-press-feedback.md) | Unify immediate press feedback | MEDIUM | DONE |
+| [002](002-honor-reduced-transparency.md) | Honor reduced transparency | MEDIUM | DONE |
+| [003](003-animate-popover-state-swaps.md) | Animate popover state swaps | MEDIUM | DONE |
+| [004](004-animate-live-task-state-changes.md) | Animate live task state changes | MEDIUM | DONE |
+| [005](005-animate-audit-disclosures.md) | Animate audit disclosures | LOW | DONE |
 
 ## Recommended execution order
 

@@ -79,6 +79,7 @@ final class UsageStore: ObservableObject {
     private let codexAccountLoginSuccessNotifier: @Sendable (String) -> Void
     private let quotaResetNotifier: @Sendable (QuotaResetNotification) -> Void
     private let taskCompletionNotifier: @Sendable (TaskCompletionNotification) -> Void
+    private let accessTokenExpiryReminderReconciler: @MainActor @Sendable ([UsageAccount], Bool, AppLanguage) -> Void
     private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
     private var taskTimer: Timer?
@@ -86,6 +87,7 @@ final class UsageStore: ObservableObject {
     private var codexRecoveryLoginObserver: DarwinNotificationObserver?
     private var refreshIntervalObserver: AnyCancellable?
     private var statisticsScopeObserver: AnyCancellable?
+    private var accessTokenExpiryNotificationsObserver: AnyCancellable?
     private var taskRefreshInFlight = false
     private var hasLoadedTaskCenter = false
     private var lastTaskRefreshAt: Date?
@@ -136,6 +138,9 @@ final class UsageStore: ObservableObject {
         taskCompletionNotifier: @escaping @Sendable (TaskCompletionNotification) -> Void = { notification in
             TaskCompletionDesktopNotifier.notify(notification)
         },
+        accessTokenExpiryReminderReconciler: @escaping @MainActor @Sendable ([UsageAccount], Bool, AppLanguage) -> Void = { accounts, enabled, language in
+            AccessTokenExpiryDesktopScheduler.shared.reconcile(accounts: accounts, enabled: enabled, language: language)
+        },
         quotaCapacityHistoryStore: QuotaCapacityHistoryStore = QuotaCapacityHistoryStore()
     ) {
         self.settings = settings
@@ -156,6 +161,7 @@ final class UsageStore: ObservableObject {
         self.codexAccountLoginSuccessNotifier = codexAccountLoginSuccessNotifier
         self.quotaResetNotifier = quotaResetNotifier
         self.taskCompletionNotifier = taskCompletionNotifier
+        self.accessTokenExpiryReminderReconciler = accessTokenExpiryReminderReconciler
         accountRemovalObserver = NotificationCenter.default.addObserver(
             forName: Self.accountRemovalNotification,
             object: nil,
@@ -188,6 +194,15 @@ final class UsageStore: ObservableObject {
                     guard let self else { return }
                     invalidateStatisticsCaches()
                     objectWillChange.send()
+                }
+            }
+        accessTokenExpiryNotificationsObserver = settings.$accessTokenExpiryNotificationsEnabled
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] enabled in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.accessTokenExpiryReminderReconciler(self.accounts, enabled, self.language)
                 }
             }
         Task { @MainActor in
@@ -368,6 +383,11 @@ final class UsageStore: ObservableObject {
             let wasLoaded = self.hasLoadedAccountInformation
             self.snapshots = result.snapshots
             self.accounts = Self.accountsForDisplay(result.accounts)
+            self.accessTokenExpiryReminderReconciler(
+                self.accounts,
+                self.settings.accessTokenExpiryNotificationsEnabled,
+                self.language
+            )
             self.points = result.points
             self.applyTaskCenter(result.tasks, updatesAuditHistory: true)
             self.recordQuotaCapacitySample()

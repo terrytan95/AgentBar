@@ -97,7 +97,19 @@ struct PopoverRootView: View {
     @ObservedObject var store: UsageStore
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var isConfirmingQuit = false
+
+    private var stateSwapAnimation: Animation {
+        .timingCurve(0.22, 1, 0.36, 1, duration: AgentBarDesign.durationNormal)
+    }
+
+    private func stateSwapTransition(anchor: UnitPoint) -> AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .scale(scale: 0.97, anchor: anchor))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -119,26 +131,33 @@ struct PopoverRootView: View {
             footer
                 .padding(.horizontal, PopoverLayout.horizontalInset)
                 .frame(height: 62)
-                .background(.ultraThinMaterial)
+                .background(
+                    reduceTransparency
+                        ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
+                        : AnyShapeStyle(.ultraThinMaterial)
+                )
         }
         .background(popoverBackground)
-        .preferredColorScheme(store.settings.useDarkAppearance ? .dark : .light)
-        .animation(nil, value: store.settings.useDarkAppearance)
         .onDisappear {
             isConfirmingQuit = false
         }
     }
 
+    @ViewBuilder
     private var popoverBackground: some View {
-        LinearGradient(
-            colors: [
-                AgentBarDesign.panelHighlight,
-                AgentBarDesign.appBackground,
-                AgentBarPalette.primary.opacity(0.08)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        if reduceTransparency {
+            Color(nsColor: .windowBackgroundColor)
+        } else {
+            LinearGradient(
+                colors: [
+                    AgentBarDesign.panelHighlight,
+                    AgentBarDesign.appBackground,
+                    AgentBarPalette.primary.opacity(0.08)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
     }
 
     private var hairline: some View {
@@ -199,23 +218,29 @@ struct PopoverRootView: View {
     }
 
     private var accountSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let isLoading = store.isLoadingAccountInformation && store.accounts.isEmpty
+        return VStack(alignment: .leading, spacing: 8) {
             Text(L.text("accounts", store.language))
                 .font(.agentBar(size: 13, weight: .bold))
-            if store.isLoadingAccountInformation && store.accounts.isEmpty {
-                PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
-            } else {
-                ForEach(store.accountDisplayGroups()) { group in
-                    PopoverAccountDisplayGroupView(
-                        group: group,
-                        language: store.language,
-                        switchingAccountID: store.switchingAccountID,
-                        onSwitch: store.switchActiveAccount,
-                        onLogin: { account in store.openLogin(for: account) },
-                        onRemove: store.removeAccount
-                    )
+            Group {
+                if isLoading {
+                    PopoverLoadingRow(title: L.text("loading_accounts", store.language), subtitle: L.text("loading_account_info_subtitle", store.language))
+                        .transition(stateSwapTransition(anchor: .top))
+                } else {
+                    ForEach(store.accountDisplayGroups()) { group in
+                        PopoverAccountDisplayGroupView(
+                            group: group,
+                            language: store.language,
+                            switchingAccountID: store.switchingAccountID,
+                            onSwitch: store.switchActiveAccount,
+                            onLogin: { account in store.openLogin(for: account) },
+                            onRemove: store.removeAccount
+                        )
+                    }
+                    .transition(stateSwapTransition(anchor: .top))
                 }
             }
+            .animation(stateSwapAnimation, value: isLoading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -258,11 +283,14 @@ struct PopoverRootView: View {
         Group {
             if isConfirmingQuit {
                 quitConfirmation
+                    .transition(stateSwapTransition(anchor: .trailing))
             } else {
                 footerActions
+                    .transition(stateSwapTransition(anchor: .trailing))
             }
         }
         .padding(.vertical, 8)
+        .animation(stateSwapAnimation, value: isConfirmingQuit)
     }
 
     private var footerActions: some View {
@@ -332,12 +360,9 @@ private enum AgentBarWindowPresenter {
             return
         }
 
-        let settings = store.settings
         let controller = NSHostingController(
             rootView: StatisticsView(store: store, initialTab: initialTab)
                 .frame(minWidth: 1180, minHeight: 760)
-                .preferredColorScheme(settings.useDarkAppearance ? .dark : .light)
-                .animation(nil, value: settings.useDarkAppearance)
         )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1480, height: 940),
@@ -543,6 +568,13 @@ struct AccountRowView: View {
                     .background(.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
             }
 
+            if account.service == .codex {
+                Label(accessTokenExpiryText, systemImage: "key.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(accessTokenExpiryColor)
+                    .lineLimit(1)
+            }
+
             HStack(spacing: 10) {
                 UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
                 UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
@@ -603,6 +635,25 @@ struct AccountRowView: View {
     private var lastActivitySummary: String {
         guard let lastUpdated = account.lastUpdated else { return "\(L.text("last_activity", language)): --" }
         return "\(L.text("last_activity", language)): \(DisplayFormatters.relativeString(for: lastUpdated, language: language))"
+    }
+
+    private var accessTokenExpiryText: String {
+        guard let expiry = account.accessTokenExpiresAt else {
+            return "\(L.text("access_token_expiry", language)): \(L.text("expiry_date_unavailable", language))"
+        }
+        let date = DisplayFormatters.shortDateTimeString(for: expiry, language: language)
+        let status = expiry <= Date()
+            ? L.text("expired", language)
+            : DisplayFormatters.relativeString(for: expiry, language: language)
+        return "\(L.text("access_token_expiry", language)): \(date) · \(status)"
+    }
+
+    private var accessTokenExpiryColor: Color {
+        guard let expiry = account.accessTokenExpiresAt else { return .secondary }
+        let remaining = expiry.timeIntervalSinceNow
+        if remaining <= 0 { return .red }
+        if remaining <= AccessTokenExpiryReminderPlanner.warningInterval { return .orange }
+        return .secondary
     }
 }
 

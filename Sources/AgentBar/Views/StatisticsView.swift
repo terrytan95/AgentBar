@@ -30,6 +30,8 @@ struct StatisticsView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject private var settings: SettingsStore
     @ObservedObject private var updates: AppUpdateStore
+    @ObservedObject private var codexOverlay = CodexSidebarQuotaOverlayController.shared
+    @ObservedObject private var quotaWidgetHotKey = QuotaWidgetHotKeyController.shared
     @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
     @State private var showsSidebarNavigation = true
@@ -37,6 +39,7 @@ struct StatisticsView: View {
     @State private var showsAccountPopover = false
     @State private var showsServiceBreakdownPopover = false
     @State private var showsModelBreakdownPopover = false
+    @State private var showsQuotaWidgetOnboarding = false
     @State private var settingsSection: SettingsSection = .accounts
     @State private var showsAdvancedRefreshSettings = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -77,6 +80,9 @@ struct StatisticsView: View {
             if let tab = DashboardNavigation.consumePendingTab() {
                 setTopTab(tab)
             }
+            if !settings.didCompleteQuotaWidgetOnboarding {
+                showsQuotaWidgetOnboarding = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: DashboardNavigation.tabRequestNotification)) { notification in
             guard let rawValue = notification.userInfo?["tab"] as? String,
@@ -84,6 +90,13 @@ struct StatisticsView: View {
             else { return }
             setTopTab(tab)
             _ = DashboardNavigation.consumePendingTab()
+        }
+        .sheet(isPresented: $showsQuotaWidgetOnboarding) {
+            QuotaWidgetOnboardingView(
+                settings: settings,
+                overlay: codexOverlay,
+                language: store.language
+            )
         }
     }
 
@@ -829,6 +842,76 @@ struct StatisticsView: View {
                     .accessibilityLabel(L.text("display_value", store.language))
                 }
             }
+
+            SettingsGroup(title: L.text("codex_sidebar", store.language), subtitle: L.text("codex_sidebar_settings_subtitle", store.language)) {
+                SettingsToggleRow(
+                    title: L.text("codex_sidebar_quota", store.language),
+                    subtitle: L.text("codex_sidebar_quota_subtitle", store.language),
+                    isOn: $settings.showCodexSidebarQuotaOverlay
+                )
+                .onChange(of: settings.showCodexSidebarQuotaOverlay) { _, enabled in
+                    if enabled && !settings.codexSidebarQuotaOverlayIndependent {
+                        codexOverlay.requestAccessibilityPermission()
+                    }
+                }
+
+                SettingsRow(
+                    title: L.text("quota_widget_shortcut", store.language),
+                    subtitle: L.text(
+                        quotaWidgetHotKey.registrationFailed
+                            ? "quota_widget_shortcut_conflict"
+                            : "quota_widget_shortcut_subtitle",
+                        store.language
+                    )
+                ) {
+                    QuotaWidgetHotKeyRecorder(
+                        hotKey: $settings.quotaWidgetHotKey,
+                        emptyText: L.text("quota_widget_shortcut_set", store.language),
+                        recordingText: L.text("quota_widget_shortcut_recording", store.language)
+                    )
+                    .frame(width: 150, height: 30)
+                }
+
+                SettingsToggleRow(
+                    title: L.text("codex_sidebar_independent", store.language),
+                    subtitle: L.text("codex_sidebar_independent_subtitle", store.language),
+                    isOn: $settings.codexSidebarQuotaOverlayIndependent
+                )
+                .disabled(!settings.showCodexSidebarQuotaOverlay)
+                .onChange(of: settings.codexSidebarQuotaOverlayIndependent) { _, independent in
+                    if !independent && settings.showCodexSidebarQuotaOverlay {
+                        codexOverlay.requestAccessibilityPermission()
+                    }
+                }
+
+                if settings.showCodexSidebarQuotaOverlay
+                    && !settings.codexSidebarQuotaOverlayIndependent
+                    && !codexOverlay.hasAccessibilityPermission {
+                    SettingsRow(
+                        title: L.text("accessibility_permission_required", store.language),
+                        subtitle: L.text("accessibility_permission_subtitle", store.language)
+                    ) {
+                        Button {
+                            codexOverlay.openAccessibilitySettings()
+                        } label: {
+                            Label(L.text("open_system_settings", store.language), systemImage: "gear")
+                        }
+                        .pointingHandCursor()
+                    }
+                }
+
+                SettingsRow(
+                    title: L.text("quota_onboarding_reopen", store.language),
+                    subtitle: L.text("quota_onboarding_reopen_subtitle", store.language)
+                ) {
+                    Button {
+                        showsQuotaWidgetOnboarding = true
+                    } label: {
+                        Label(L.text("quota_onboarding_open", store.language), systemImage: "questionmark.circle")
+                    }
+                    .pointingHandCursor()
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -914,6 +997,11 @@ struct StatisticsView: View {
                     title: L.text("task_completion_notifications", store.language),
                     subtitle: L.text("task_completion_notifications_subtitle", store.language),
                     isOn: $settings.taskCompletionNotificationsEnabled
+                )
+                SettingsToggleRow(
+                    title: L.text("access_token_expiry_notifications", store.language),
+                    subtitle: L.text("access_token_expiry_notifications_subtitle", store.language),
+                    isOn: $settings.accessTokenExpiryNotificationsEnabled
                 )
             }
         }
@@ -2989,8 +3077,8 @@ private struct TopUsagePanel: View {
                     } label: {
                         topRow(row, color: color, showsLastUsedAt: showsLastUsedAt, isSelected: isSelectable && selectedSessionLabel == row.label)
                     }
-                    .tactilePlainButton(enabled: isSelectable, pressedScale: 1)
                     .disabled(!isSelectable)
+                    .tactilePlainButton(enabled: isSelectable, pressedScale: 1)
                 }
             }
         }

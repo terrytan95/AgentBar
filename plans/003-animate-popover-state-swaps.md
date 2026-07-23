@@ -1,6 +1,6 @@
 # 003 — Animate popover state swaps
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 90cdbae
 - **Severity**: MEDIUM
 - **Category**: Missed opportunities

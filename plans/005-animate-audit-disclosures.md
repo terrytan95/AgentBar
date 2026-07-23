@@ -1,6 +1,6 @@
 # 005 — Animate audit disclosures
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 90cdbae
 - **Severity**: LOW
 - **Category**: Missed opportunities

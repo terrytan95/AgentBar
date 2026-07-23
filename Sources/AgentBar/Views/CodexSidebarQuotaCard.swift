@@ -6,6 +6,25 @@ enum CodexCredentialExpiryState: Equatable {
     case expired(Date)
 }
 
+struct CodexSidebarQuotaCardContent: Equatable {
+    var account: UsageAccount?
+    var language: AppLanguage
+}
+
+@MainActor
+final class CodexSidebarQuotaCardViewModel: ObservableObject {
+    @Published private(set) var content: CodexSidebarQuotaCardContent
+
+    init(content: CodexSidebarQuotaCardContent) {
+        self.content = content
+    }
+
+    func update(_ content: CodexSidebarQuotaCardContent) {
+        guard self.content != content else { return }
+        self.content = content
+    }
+}
+
 struct CodexSidebarQuotaCardState: Equatable {
     var account: UsageAccount?
 
@@ -25,17 +44,17 @@ struct CodexSidebarQuotaCardState: Equatable {
 }
 
 struct CodexSidebarQuotaCard: View {
-    @ObservedObject var store: UsageStore
+    @ObservedObject var model: CodexSidebarQuotaCardViewModel
     var onContentSizeChange: () -> Void = {}
 
     @State private var isResetCreditsExpanded = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
-            let state = CodexSidebarQuotaCardState(account: activeCodexAccount)
+            let state = CodexSidebarQuotaCardState(account: model.content.account)
             VStack(alignment: .leading, spacing: 10) {
                 if state.windows.isEmpty {
-                    Text(L.text("quota_unavailable", store.language))
+                    Text(L.text("quota_unavailable", model.content.language))
                         .font(.agentBar(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                 } else {
@@ -59,17 +78,12 @@ struct CodexSidebarQuotaCard: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var activeCodexAccount: UsageAccount? {
-        store.accounts.first { $0.service == .codex && $0.isActive }
-            ?? store.accounts.first { $0.service == .codex }
-    }
-
     private func quotaWindow(_ window: UsageWindow) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
-                Text(window.kind == .fiveHour ? L.text("five_hour", store.language) : L.text("weekly", store.language))
+                Text(window.kind == .fiveHour ? L.text("five_hour", model.content.language) : L.text("weekly", model.content.language))
                 Spacer(minLength: 8)
-                Text("\(DisplayFormatters.percentString(window.remainingPercent)) \(L.text("remaining", store.language))")
+                Text("\(DisplayFormatters.percentString(window.remainingPercent)) \(L.text("remaining", model.content.language))")
                     .fontWeight(.semibold)
                     .monospacedDigit()
             }
@@ -87,7 +101,7 @@ struct CodexSidebarQuotaCard: View {
             }
             .frame(height: 8)
 
-            Text(window.resetLine(language: store.language))
+            Text(window.resetLine(language: model.content.language))
                 .font(.agentBar(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -102,22 +116,22 @@ struct CodexSidebarQuotaCard: View {
         switch state {
         case .valid(let date):
             expiresAt = date
-            title = L.text("credential_expires", store.language)
+            title = L.text("credential_expires", model.content.language)
             color = .secondary
         case .expired(let date):
             expiresAt = date
-            title = L.text("credential_expired", store.language)
+            title = L.text("credential_expired", model.content.language)
             color = .red
         }
-        let timestamp = DisplayFormatters.shortDateTimeString(for: expiresAt, language: store.language)
+        let timestamp = DisplayFormatters.shortDateTimeString(for: expiresAt, language: model.content.language)
         let relative = state == .expired(expiresAt)
-            ? L.text("expired", store.language)
-            : DisplayFormatters.relativeString(for: expiresAt, language: store.language)
+            ? L.text("expired", model.content.language)
+            : DisplayFormatters.relativeString(for: expiresAt, language: model.content.language)
         return metadataLine("\(title): \(timestamp) (\(relative))", systemImage: "key.horizontal", color: color)
     }
 
     private func resetCreditsSection(_ resetCredits: UsageResetCredits) -> some View {
-        let lines = resetCredits.expirationLines(language: store.language)
+        let lines = resetCredits.expirationLines(language: model.content.language)
         return VStack(alignment: .leading, spacing: 0) {
             Button {
                 isResetCreditsExpanded.toggle()
@@ -128,7 +142,7 @@ struct CodexSidebarQuotaCard: View {
                         .font(.agentBar(size: 9, weight: .semibold))
                         .frame(width: 10)
                         .accessibilityHidden(true)
-                    Label(L.text("reset_credits", store.language), systemImage: "arrow.counterclockwise.circle")
+                    Label(L.text("reset_credits", model.content.language), systemImage: "arrow.counterclockwise.circle")
                     Spacer(minLength: 8)
                     Text("\(resetCredits.visibleCount)")
                         .monospacedDigit()
@@ -139,7 +153,7 @@ struct CodexSidebarQuotaCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(L.text("reset_credits", store.language)), \(resetCredits.visibleCount)")
+            .accessibilityLabel("\(L.text("reset_credits", model.content.language)), \(resetCredits.visibleCount)")
 
             if isResetCreditsExpanded {
                 VStack(alignment: .leading, spacing: 4) {

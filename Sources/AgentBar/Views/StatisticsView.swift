@@ -159,7 +159,10 @@ struct StatisticsView: View {
         }
         .padding(.horizontal, 16)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(AgentBarDesign.cardBackground)
+        .agentBarGlassSurface(
+            isEnabled: settings.useTranslucentAppearance,
+            opaqueBackground: AnyShapeStyle(AgentBarDesign.cardBackground)
+        )
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(sidebarSeparatorColor)
@@ -1030,6 +1033,11 @@ struct StatisticsView: View {
                     .settingsControl(width: settingsControlMediumPickerWidth)
                     .accessibilityLabel(L.text("appearance", store.language))
                 }
+                SettingsToggleRow(
+                    title: L.text("translucent", store.language),
+                    subtitle: L.text("translucent_subtitle", store.language),
+                    isOn: $settings.useTranslucentAppearance
+                )
                 SettingsToggleRow(
                     title: L.text("login_item", store.language),
                     subtitle: settings.loginItemMessage ?? L.text("open_at_login_subtitle", store.language),

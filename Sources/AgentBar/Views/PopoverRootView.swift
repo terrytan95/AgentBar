@@ -98,7 +98,6 @@ struct PopoverRootView: View {
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var isConfirmingQuit = false
 
     private var stateSwapAnimation: Animation {
@@ -131,32 +130,14 @@ struct PopoverRootView: View {
             footer
                 .padding(.horizontal, PopoverLayout.horizontalInset)
                 .frame(height: 62)
-                .background(
-                    reduceTransparency
-                        ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
-                        : AnyShapeStyle(.ultraThinMaterial)
-                )
+                .background(AgentBarDesign.panelHighlight)
         }
-        .background(popoverBackground)
+        .agentBarGlassSurface(
+            isEnabled: store.settings.useTranslucentAppearance,
+            opaqueBackground: AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
+        )
         .onDisappear {
             isConfirmingQuit = false
-        }
-    }
-
-    @ViewBuilder
-    private var popoverBackground: some View {
-        if reduceTransparency {
-            Color(nsColor: .windowBackgroundColor)
-        } else {
-            LinearGradient(
-                colors: [
-                    AgentBarDesign.panelHighlight,
-                    AgentBarDesign.appBackground,
-                    AgentBarPalette.primary.opacity(0.08)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
         }
     }
 

@@ -277,7 +277,7 @@ final class UsageStore: ObservableObject {
     }
 
     var menuBarTitle: String {
-        let title = switch settings.menuBarDisplayMode {
+        switch settings.menuBarDisplayMode {
         case .activeAccountWindows:
             activeAccountWindowTitle
         case .lowestRemaining:
@@ -287,7 +287,6 @@ final class UsageStore: ObservableObject {
         case .codexRemaining:
             DisplayFormatters.percentString(codexRemaining)
         }
-        return budgetWarningPrefix + title
     }
 
     var popoverHeaderQuotaTitle: String {
@@ -591,17 +590,6 @@ final class UsageStore: ObservableObject {
             now: now
         ) else { return }
         switchCodexAccount(account, restartMode: .safeForceCodexAppRestart)
-    }
-
-    private var budgetWarningPrefix: String {
-        accounts.contains { account in
-            switch account.loginWarning {
-            case .forcedLogout, .quotaUnavailable:
-                true
-            case .unreadableReset, nil:
-                false
-            }
-        } ? "! " : ""
     }
 
     private func invalidateStatisticsCaches() {

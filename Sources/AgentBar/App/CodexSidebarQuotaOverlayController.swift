@@ -45,6 +45,23 @@ private func codexSidebarQuotaAXCallback(
     }
 }
 
+private final class CodexSidebarQuotaHostingView: NSHostingView<CodexSidebarQuotaCard> {
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard window?.styleMask.contains(.resizable) == true else { return }
+
+        let edgeWidth: CGFloat = 5
+        addCursorRect(
+            CGRect(x: bounds.minX, y: bounds.minY, width: edgeWidth, height: bounds.height),
+            cursor: .resizeLeftRight
+        )
+        addCursorRect(
+            CGRect(x: bounds.maxX - edgeWidth, y: bounds.minY, width: edgeWidth, height: bounds.height),
+            cursor: .resizeLeftRight
+        )
+    }
+}
+
 @MainActor
 final class CodexSidebarQuotaOverlayController: ObservableObject {
     static let shared = CodexSidebarQuotaOverlayController()
@@ -61,7 +78,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
 
     private weak var settings: SettingsStore?
     private var panel: NSPanel?
-    private var hostingView: NSHostingView<CodexSidebarQuotaCard>?
+    private var hostingView: CodexSidebarQuotaHostingView?
     private var cardModel: CodexSidebarQuotaCardViewModel?
     private var panelMoveObserver: NSObjectProtocol?
     private var panelResizeObserver: NSObjectProtocol?
@@ -350,7 +367,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
                 self?.refreshPanelFrame(reason: .cardContent)
             }
         }
-        let hostingView = NSHostingView(rootView: card)
+        let hostingView = CodexSidebarQuotaHostingView(rootView: card)
         hostingView.frame = CGRect(x: 0, y: 0, width: 280, height: 1)
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
@@ -530,6 +547,9 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             return
         }
         panel?.styleMask.remove(.resizable)
+        if let panel, let hostingView {
+            panel.invalidateCursorRects(for: hostingView)
+        }
         panel?.contentMinSize = .zero
         panel?.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         guard settings?.showCodexSidebarQuotaOverlay == true,
@@ -727,6 +747,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         let enteringIndependentMode = !panel.isMovableByWindowBackground
         panel.isMovableByWindowBackground = true
         panel.styleMask.insert(.resizable)
+        panel.invalidateCursorRects(for: hostingView)
         if enteringIndependentMode {
             _ = panel.setFrameUsingName("CodexQuotaOverlayIndependentResizable")
         }

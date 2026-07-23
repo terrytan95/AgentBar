@@ -24,7 +24,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexSessionJsonlBuildsTaskLifecycle()
         try checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset()
         try await checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
-        try await checkCodexUsageAPISyncerRefreshesOnlyActiveAccount()
+        try await checkCodexUsageAPISyncerRefreshesInactiveAccountsHourly()
         try await checkCodexUsageAPISyncerAlwaysFetchesDetailedResetExpiryDates()
         try await checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess()
         try await checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
@@ -668,14 +668,14 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    private func checkCodexUsageAPISyncerRefreshesOnlyActiveAccount() async throws {
+    private func checkCodexUsageAPISyncerRefreshesInactiveAccountsHourly() async throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
         try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
         let registryURL = accountDir.appending(path: "registry.json")
         try """
-        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"active@example.com"},{"account_key":"acct-b","email":"other@example.com"}]}
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-b","email":"stale@example.com","last_usage_at":1000},{"account_key":"acct-a","email":"active@example.com"},{"account_key":"acct-c","email":"recent@example.com","last_usage_at":4000},{"account_key":"acct-d","email":"failed@example.com","last_usage_at":1000}]}
         """.data(using: .utf8)!.write(to: registryURL)
         try """
         {"auth_mode":"chatgpt","tokens":{"access_token":"active-token","account_id":"active-chatgpt-id"}}
@@ -683,12 +683,30 @@ final class UsageParsingTests: XCTestCase {
         try """
         {"auth_mode":"chatgpt","tokens":{"access_token":"other-token","account_id":"other-chatgpt-id"}}
         """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-b.auth.json"))
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"recent-token","account_id":"recent-chatgpt-id"}}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-c.auth.json"))
+        try """
+        {"auth_mode":"chatgpt","tokens":{"access_token":"failed-token","account_id":"failed-chatgpt-id"}}
+        """.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-d.auth.json"))
 
         let requestRecorder = UsageAPIRequestRecorder()
         let syncer = CodexUsageAPISyncer(
             homeDirectory: temp,
+            now: { Date(timeIntervalSince1970: 4_600) },
             usageClient: { request, _ in
                 requestRecorder.record(request)
+                let accountID = request.value(forHTTPHeaderField: "ChatGPT-Account-Id")
+                if request.url == CodexUsageAPISyncer.usageEndpoint,
+                   accountID == "active-chatgpt-id",
+                   let data = try? Data(contentsOf: registryURL),
+                   var registry = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    registry["concurrent_marker"] = "preserved"
+                    try CodexAccountStorage(homeDirectory: temp).writeRegistry(registry)
+                }
+                if accountID == "failed-chatgpt-id" {
+                    return CodexUsageAPIResponse(statusCode: 500, data: Data())
+                }
                 return CodexUsageAPIResponse(
                     statusCode: 200,
                     data: #"{"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}}}"#.data(using: .utf8)!
@@ -698,12 +716,24 @@ final class UsageParsingTests: XCTestCase {
 
         let result = await syncer.refreshUsage()
         XCTAssertEqual(result, .success)
-        XCTAssertEqual(requestRecorder.requestCount, 2)
-        XCTAssertEqual(requestRecorder.accountID, "active-chatgpt-id")
+        XCTAssertEqual(requestRecorder.accountIDs, [
+            "active-chatgpt-id", "active-chatgpt-id",
+            "other-chatgpt-id", "other-chatgpt-id",
+            "failed-chatgpt-id"
+        ])
         let accounts = try registryAccounts(from: registryURL)
         XCTAssertNotNil(accounts.first { $0["account_key"] as? String == "acct-a" }?["last_usage"])
-        XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["last_usage"])
-        XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["agentbar_auth_error"])
+        XCTAssertNotNil(accounts.first { $0["account_key"] as? String == "acct-b" }?["last_usage"])
+        XCTAssertEqual(accounts.first { $0["account_key"] as? String == "acct-b" }?["agentbar_last_usage_refresh_at"] as? Double, 4_600)
+        XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-c" }?["last_usage"])
+        XCTAssertNil(accounts.first { $0["account_key"] as? String == "acct-d" }?["last_usage"])
+        XCTAssertEqual(accounts.first { $0["account_key"] as? String == "acct-d" }?["agentbar_last_usage_refresh_at"] as? Double, 4_600)
+        let registry = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: registryURL)) as? [String: Any])
+        XCTAssertEqual(registry["concurrent_marker"] as? String, "preserved")
+
+        let secondResult = await syncer.refreshUsage()
+        XCTAssertEqual(secondResult, .success)
+        XCTAssertEqual(requestRecorder.requestCount, 7)
     }
 
     @MainActor
@@ -2535,6 +2565,7 @@ final class UsageParsingTests: XCTestCase {
         private let lock = NSLock()
         private var request: URLRequest?
         private var count = 0
+        private var recordedAccountIDs: [String] = []
 
         var requestCount: Int {
             lock.lock()
@@ -2554,10 +2585,19 @@ final class UsageParsingTests: XCTestCase {
             return request?.value(forHTTPHeaderField: "ChatGPT-Account-Id")
         }
 
+        var accountIDs: [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedAccountIDs
+        }
+
         func record(_ request: URLRequest) {
             lock.lock()
             self.request = request
             count += 1
+            if let accountID = request.value(forHTTPHeaderField: "ChatGPT-Account-Id") {
+                recordedAccountIDs.append(accountID)
+            }
             lock.unlock()
         }
     }

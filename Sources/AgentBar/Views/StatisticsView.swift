@@ -1277,13 +1277,13 @@ struct StatisticsView: View {
 
     @ViewBuilder
     private var resetExpiryRows: some View {
-        let groups = resetExpiryDisplayGroups
-        if groups.isEmpty {
+        let rows = resetExpiryRowData
+        if rows.isEmpty {
             EmptyPanelMessage(totalResetCreditsCount > 0 ? L.text("no_detailed_expiry_dates", store.language) : L.text("no_banked_resets", store.language))
         } else {
             VStack(spacing: 8) {
-                ForEach(groups) { group in
-                    ResetExpiryDisplayGroupView(group: group, language: store.language)
+                ForEach(rows) { row in
+                    ResetExpiryRow(row: row, language: store.language)
                 }
             }
         }
@@ -1340,10 +1340,19 @@ struct StatisticsView: View {
         currentLimitAccounts.displayGroupsByIdentity(sortMode: settings.accountSortMode)
     }
 
-    private var resetExpiryDisplayGroups: [UsageAccountDisplayGroup] {
+    private var resetExpiryRowData: [ResetExpiryRowData] {
         store.accounts
-            .filter { !($0.resetCredits?.resets ?? []).isEmpty }
-            .displayGroupsByIdentity(sortMode: settings.accountSortMode)
+            .flatMap { account in
+                (account.resetCredits?.resets ?? []).enumerated().map { index, reset in
+                    ResetExpiryRowData(
+                        id: "\(account.id)-\(index)-\(reset.expiresAt?.timeIntervalSince1970 ?? 0)",
+                        account: account.displayNameWithWorkspace(language: store.language),
+                        index: index + 1,
+                        expiresAt: reset.expiresAt
+                    )
+                }
+            }
+            .sorted { ($0.expiresAt ?? .distantFuture) < ($1.expiresAt ?? .distantFuture) }
     }
 
     @ViewBuilder
@@ -3251,11 +3260,10 @@ private struct AccountHealthCenterPanel: View {
 }
 
 private struct ResetExpiryRowData: Identifiable {
+    var id: String
     var account: String
     var index: Int
     var expiresAt: Date?
-
-    var id: String { "\(account)-\(index)-\(expiresAt?.timeIntervalSince1970 ?? 0)" }
 }
 
 private struct ResetExpiryRow: View {
@@ -3313,47 +3321,6 @@ private struct ResetExpiryRow: View {
         if seconds <= 86_400 { return .red }
         if seconds <= 3 * 86_400 { return .orange }
         return AgentBarPalette.primary
-    }
-}
-
-private struct ResetExpiryDisplayGroupView: View {
-    var group: UsageAccountDisplayGroup
-    var language: AppLanguage
-
-    var body: some View {
-        if group.isGrouped {
-            VStack(alignment: .leading, spacing: 6) {
-                displayGroupHeader
-                ForEach(group.accounts) { account in
-                    ForEach(rows(for: account)) { row in
-                        ResetExpiryRow(row: row, language: language)
-                            .padding(.leading, 12)
-                    }
-                }
-            }
-        } else if let account = group.accounts.first {
-            ForEach(rows(for: account)) { row in
-                ResetExpiryRow(row: row, language: language)
-            }
-        }
-    }
-
-    private var displayGroupHeader: some View {
-        HStack(spacing: 6) {
-            Text(group.title)
-                .font(.agentBar(size: 11, weight: .bold))
-                .lineLimit(1)
-            Text("\(group.accounts.count) \(L.text("workspaces", language))")
-                .font(.agentBar(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.leading, 2)
-    }
-
-    private func rows(for account: UsageAccount) -> [ResetExpiryRowData] {
-        (account.resetCredits?.resets ?? []).enumerated().map { index, reset in
-            ResetExpiryRowData(account: account.displayNameWithWorkspace(language: language), index: index + 1, expiresAt: reset.expiresAt)
-        }
     }
 }
 

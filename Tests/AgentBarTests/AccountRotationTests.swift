@@ -578,6 +578,8 @@ final class AccountRotationTests: XCTestCase {
         store.applyTestData(accounts: [
             account(id: "removed", used: 10, resetsAt: now, lastUpdated: now, isActive: true)
         ])
+        store.start()
+        defer { store.stop() }
 
         NotificationCenter.default.post(name: UsageStore.accountRemovalNotification, object: nil)
 
@@ -614,6 +616,8 @@ final class AccountRotationTests: XCTestCase {
         store.applyTestData(accounts: [
             account(id: "recovered", used: 10, resetsAt: now, lastUpdated: now, isActive: true)
         ])
+        store.start()
+        defer { store.stop() }
 
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),

@@ -10,6 +10,9 @@ enum AccountActionError: LocalizedError, Equatable {
     case missingAccountSnapshot
     case mismatchedAccountSnapshot
     case emptyAccessToken
+    case codexExecutableNotFound
+    case accessTokenLoginTimedOut
+    case accessTokenLoginCancelled
     case accessTokenLoginFailed(Int32)
 
     var errorDescription: String? {
@@ -21,6 +24,9 @@ enum AccountActionError: LocalizedError, Equatable {
         case .missingAccountSnapshot: "The selected Codex account auth snapshot was not found."
         case .mismatchedAccountSnapshot: "The selected Codex account auth snapshot belongs to a different login."
         case .emptyAccessToken: "No Codex access token was entered."
+        case .codexExecutableNotFound: "The Codex executable could not be found in a trusted install location."
+        case .accessTokenLoginTimedOut: "Codex did not finish applying the access token before the timeout."
+        case .accessTokenLoginCancelled: "The Codex access token update was cancelled."
         case .accessTokenLoginFailed(let status) where status == 503:
             "Codex returned 503 while applying the access token. Log in to one Codex account locally, then try again."
         case .accessTokenLoginFailed(let status):
@@ -109,9 +115,9 @@ struct CodexAccountSwitcher {
 struct CodexAccountAccessTokenUpdater {
     var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     var fileManager: FileManager = .default
-    var envExecutableURL = URL(fileURLWithPath: "/usr/bin/env")
+    var codexExecutableURL: URL? = CodexExecutableLocator.find()
 
-    func updateAccount(accountID: String, accessToken rawAccessToken: String) throws {
+    func updateAccount(accountID: String, accessToken rawAccessToken: String) async throws {
         let accessToken = rawAccessToken
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: #"^Bearer\s+"#, with: "", options: .regularExpression)
@@ -122,27 +128,24 @@ struct CodexAccountAccessTokenUpdater {
         defer { try? fileManager.removeItem(at: tempHome) }
         try fileManager.createDirectory(at: tempHome, withIntermediateDirectories: true)
 
-        let process = Process()
-        process.executableURL = envExecutableURL
-        process.arguments = ["codex", "login", "--with-access-token"]
+        guard let codexExecutableURL else { throw AccountActionError.codexExecutableNotFound }
         var environment = ProcessInfo.processInfo.environment
         environment["HOME"] = tempHome.path
         environment["CODEX_HOME"] = nil
-        process.environment = environment
 
-        let input = Pipe()
-        process.standardInput = input
-        let output = Pipe()
-        let errorOutput = Pipe()
-        process.standardOutput = output
-        process.standardError = errorOutput
-        try process.run()
-        input.fileHandleForWriting.write(Data((accessToken + "\n").utf8))
-        try? input.fileHandleForWriting.close()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            let message = String(data: output.fileHandleForReading.readDataToEndOfFile() + errorOutput.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            throw AccountActionError.accessTokenLoginFailed(message.contains("503") ? 503 : process.terminationStatus)
+        let result = try await AsyncProcessRunner.run(
+            executableURL: codexExecutableURL,
+            arguments: ["login", "--with-access-token"],
+            environment: environment,
+            standardInput: Data((accessToken + "\n").utf8),
+            maximumOutputBytes: 1_048_576,
+            timeout: 30
+        )
+        if result.timedOut { throw AccountActionError.accessTokenLoginTimedOut }
+        if result.wasCancelled { throw AccountActionError.accessTokenLoginCancelled }
+        guard result.exitStatus == 0 else {
+            let message = String(decoding: result.stdout + result.stderr, as: UTF8.self)
+            throw AccountActionError.accessTokenLoginFailed(message.contains("503") ? 503 : result.exitStatus)
         }
 
         let authData = try Data(contentsOf: tempHome.appending(path: ".codex/auth.json"))
@@ -170,6 +173,20 @@ struct CodexAccountAccessTokenUpdater {
         accounts[index].removeValue(forKey: "agentbar_auth_error")
         json["accounts"] = accounts
         try storage.writeRegistry(json)
+    }
+}
+
+private enum CodexExecutableLocator {
+    static func find(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default
+    ) -> URL? {
+        [
+            homeDirectory.appending(path: ".local/bin/codex"),
+            homeDirectory.appending(path: ".codex/bin/codex"),
+            URL(fileURLWithPath: "/opt/homebrew/bin/codex"),
+            URL(fileURLWithPath: "/usr/local/bin/codex")
+        ].first { fileManager.isExecutableFile(atPath: $0.path) }
     }
 }
 
@@ -283,31 +300,42 @@ enum AccountLoginLauncher {
           do script \(appleScriptString(command))
         end tell
         """
-        runAppleScript(script)
+        DispatchQueue.global(qos: .utility).async {
+            if !runAppleScript(script, timeout: 10) {
+                NSLog("AgentBar could not open the login command in Terminal")
+            }
+        }
     }
 
-    static func forceRestartCodexApp() {
-        runAppleScript(codexAppRestartScript())
+    @discardableResult
+    static func forceRestartCodexApp() -> Bool {
+        let restarted = runAppleScript(codexAppRestartScript(), timeout: 15)
+        if !restarted {
+            NSLog("AgentBar could not restart Codex")
+        }
+        return restarted
     }
 
     static func codexAppRestartScript() -> String {
         """
-        tell application id "\(codexAppBundleIdentifier)" to quit
+        try
+          tell application id "\(codexAppBundleIdentifier)" to quit
+        end try
         delay 1
-        do shell script "/usr/bin/pkill -x ChatGPT || /usr/bin/pkill -x Codex || true"
+        do shell script "/usr/bin/pkill -x ChatGPT; /usr/bin/pkill -x Codex; true"
         delay 1
         tell application id "\(codexAppBundleIdentifier)" to activate
         """
     }
 
-    private static func runAppleScript(_ script: String) {
-        DispatchQueue.global(qos: .utility).async {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            process.arguments = ["-e", script]
-            try? process.run()
-            process.waitUntilExit()
-        }
+    private static func runAppleScript(_ script: String, timeout: TimeInterval) -> Bool {
+        guard let result = try? AsyncProcessRunner.runBlocking(
+            executableURL: URL(fileURLWithPath: "/usr/bin/osascript"),
+            arguments: ["-e", script],
+            maximumOutputBytes: 64 * 1024,
+            timeout: timeout
+        ) else { return false }
+        return result.exitStatus == 0 && !result.timedOut && !result.wasCancelled
     }
 
     @MainActor
@@ -324,19 +352,21 @@ enum AccountLoginLauncher {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         let token = input.stringValue
-        DispatchQueue.global(qos: .utility).async {
-            let result = Result {
-                try CodexAccountAccessTokenUpdater().updateAccount(accountID: accountID, accessToken: token)
+        Task.detached(priority: .utility) {
+            let result: Result<Void, Error>
+            do {
+                try await CodexAccountAccessTokenUpdater().updateAccount(accountID: accountID, accessToken: token)
+                result = .success(())
+            } catch {
+                result = .failure(error)
             }
-            DispatchQueue.main.async {
+            await MainActor.run {
                 switch result {
                 case .success:
                     postCodexRecoveryNotification()
                     showCodexLoginSuccess(accountLabel: accountLabel)
                 case .failure(let error):
-                    Task { @MainActor in
-                        showError("Codex access token update failed", message: error.localizedDescription.redactedForCredentialWords)
-                    }
+                    showError("Codex access token update failed", message: error.localizedDescription.redactedForCredentialWords)
                 }
             }
         }

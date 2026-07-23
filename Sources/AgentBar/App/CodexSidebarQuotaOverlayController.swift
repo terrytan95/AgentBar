@@ -71,7 +71,8 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             }
             .store(in: &cancellables)
 
-        store.objectWillChange
+        store.accountsPublisher
+            .dropFirst()
             .sink { [weak self] _ in
                 Task { @MainActor in
                     await Task.yield()

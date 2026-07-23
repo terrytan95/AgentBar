@@ -15,7 +15,9 @@ final class AccountRotationTests: XCTestCase {
         try checkSelectorIgnoresAccountsThatNeedLoginAgain()
         checkSelectorReturnsNilWhenNoActiveCodexAccountExists()
         checkRestartGuardDoesNotRestartWhenCodexWorkIsRunning()
+        checkRestartGuardDoesNotRestartWhenProcessStateIsUnknown()
         checkRestartGuardForceRestartsWhenNoCodexWorkIsRunning()
+        checkRestartGuardReportsRestartFailure()
         checkProcessDetectorTreatsCodexCliRunAsWorkButIgnoresChatGPTAppProcess()
         checkProcessDetectorIgnoresChatGPTAppWhenNoCliWorkIsRunning()
         checkRestartScriptUsesCodexBundleIDAndCurrentChatGPTProcessName()
@@ -166,7 +168,10 @@ final class AccountRotationTests: XCTestCase {
         let recorder = AccountRotationRecorder()
         let restarter = CodexAppRestarter(
             activityDetector: { true },
-            restartCodexApp: { recorder.recordRestart(.restarted) }
+            restartCodexApp: {
+                recorder.recordRestart(.restarted)
+                return true
+            }
         )
 
         let result = restarter.restartIfNoWorkIsRunning()
@@ -175,17 +180,45 @@ final class AccountRotationTests: XCTestCase {
         XCTAssertNil(recorder.restartResult)
     }
 
+    private func checkRestartGuardDoesNotRestartWhenProcessStateIsUnknown() {
+        let recorder = AccountRotationRecorder()
+        let restarter = CodexAppRestarter(
+            activityDetector: { nil },
+            restartCodexApp: {
+                recorder.recordRestart(.restarted)
+                return true
+            }
+        )
+
+        let result = restarter.restartIfNoWorkIsRunning()
+
+        XCTAssertEqual(result, .skippedActivityUnknown)
+        XCTAssertNil(recorder.restartResult)
+    }
+
     private func checkRestartGuardForceRestartsWhenNoCodexWorkIsRunning() {
         let recorder = AccountRotationRecorder()
         let restarter = CodexAppRestarter(
             activityDetector: { false },
-            restartCodexApp: { recorder.recordRestart(.restarted) }
+            restartCodexApp: {
+                recorder.recordRestart(.restarted)
+                return true
+            }
         )
 
         let result = restarter.restartIfNoWorkIsRunning()
 
         XCTAssertEqual(result, .restarted)
         XCTAssertEqual(recorder.restartResult, .restarted)
+    }
+
+    private func checkRestartGuardReportsRestartFailure() {
+        let restarter = CodexAppRestarter(
+            activityDetector: { false },
+            restartCodexApp: { false }
+        )
+
+        XCTAssertEqual(restarter.restartIfNoWorkIsRunning(), .restartFailed)
     }
 
     private func checkProcessDetectorTreatsCodexCliRunAsWorkButIgnoresChatGPTAppProcess() {
@@ -199,7 +232,7 @@ final class AccountRotationTests: XCTestCase {
             }
         )
 
-        XCTAssertTrue(detector.hasRunningCodexWork())
+        XCTAssertEqual(detector.hasRunningCodexWork(), true)
     }
 
     private func checkProcessDetectorIgnoresChatGPTAppWhenNoCliWorkIsRunning() {
@@ -212,14 +245,15 @@ final class AccountRotationTests: XCTestCase {
             }
         )
 
-        XCTAssertFalse(detector.hasRunningCodexWork())
+        XCTAssertEqual(detector.hasRunningCodexWork(), false)
     }
 
     private func checkRestartScriptUsesCodexBundleIDAndCurrentChatGPTProcessName() {
         let script = AccountLoginLauncher.codexAppRestartScript()
 
         XCTAssertTrue(script.contains("application id \"com.openai.codex\""))
-        XCTAssertTrue(script.contains("pkill -x ChatGPT"))
+        XCTAssertTrue(script.contains("pkill -x ChatGPT; /usr/bin/pkill -x Codex; true"))
+        XCTAssertFalse(script.contains("pkill -x ChatGPT ||"))
         XCTAssertFalse(script.contains("tell application \"Codex\""))
     }
 

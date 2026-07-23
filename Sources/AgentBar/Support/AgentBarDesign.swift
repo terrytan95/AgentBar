@@ -169,6 +169,25 @@ private struct AgentBarPanelModifier: ViewModifier {
     }
 }
 
+private struct AgentBarGlassSurfaceModifier: ViewModifier {
+    var isEnabled: Bool
+    var opaqueBackground: AnyShapeStyle
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled && !reduceTransparency {
+            if #available(macOS 26.0, *) {
+                content.glassEffect(.regular, in: Rectangle())
+            } else {
+                content.background(.regularMaterial)
+            }
+        } else {
+            content.background(opaqueBackground)
+        }
+    }
+}
+
 private struct AgentBarPressButtonStyle: ButtonStyle {
     var pressedScale: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -185,6 +204,18 @@ private struct AgentBarPressButtonStyle: ButtonStyle {
 }
 
 extension View {
+    func agentBarGlassSurface(
+        isEnabled: Bool,
+        opaqueBackground: AnyShapeStyle
+    ) -> some View {
+        modifier(
+            AgentBarGlassSurfaceModifier(
+                isEnabled: isEnabled,
+                opaqueBackground: opaqueBackground
+            )
+        )
+    }
+
     func agentBarPanel(cornerRadius: CGFloat = AgentBarDesign.radiusMedium) -> some View {
         modifier(AgentBarPanelModifier(cornerRadius: cornerRadius))
     }

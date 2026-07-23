@@ -82,6 +82,10 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(useDarkAppearance, forKey: Keys.useDarkAppearance) }
     }
 
+    @Published var useTranslucentAppearance: Bool {
+        didSet { defaults.set(useTranslucentAppearance, forKey: Keys.useTranslucentAppearance) }
+    }
+
     @Published var accountSortMode: AccountSortMode {
         didSet { defaults.set(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
     }
@@ -209,6 +213,7 @@ final class SettingsStore: ObservableObject {
         didCompleteQuotaWidgetOnboarding = defaults.bool(forKey: Keys.didCompleteQuotaWidgetOnboarding)
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
+        useTranslucentAppearance = defaults.object(forKey: Keys.useTranslucentAppearance) as? Bool ?? true
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
@@ -312,6 +317,7 @@ final class SettingsStore: ObservableObject {
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"
+        static let useTranslucentAppearance = "useTranslucentAppearance"
         static let accountSortMode = "accountSortMode"
         static let showAggregatedAccountData = "showAggregatedAccountData"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"

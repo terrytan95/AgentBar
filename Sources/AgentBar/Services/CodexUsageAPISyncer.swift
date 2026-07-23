@@ -55,7 +55,7 @@ struct CodexUsageAPISyncer {
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
         guard let data = try? Data(contentsOf: registryURL),
-              var registry = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let registry = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               var accounts = registry["accounts"] as? [[String: Any]]
         else {
             return .unavailable("Codex account registry was not found or could not be parsed.")
@@ -71,11 +71,21 @@ struct CodexUsageAPISyncer {
             return .unavailable("No active ChatGPT account was available for usage refresh.")
         }
 
-        var attempted = 0
-        var updated = false
-        var lastFailure: CodexUsageSyncResult?
+        let inactiveRefreshCutoff = now().timeIntervalSince1970 - 60 * 60
+        let inactiveIndexes = accounts.indices.filter { index in
+            guard index != activeAccountIndex else { return false }
+            let lastRefreshAt = Self.firstNumber([
+                accounts[index]["agentbar_last_usage_refresh_at"],
+                accounts[index]["last_usage_at"]
+            ])?.doubleValue ?? -.infinity
+            return lastRefreshAt <= inactiveRefreshCutoff
+        }
+        let refreshIndexes = [activeAccountIndex] + inactiveIndexes
 
-        for index in [activeAccountIndex] {
+        var activeResult: CodexUsageSyncResult?
+        var updatedFieldsByAccountKey: [String: Set<String>] = [:]
+
+        for index in refreshIndexes {
             if let authMode = accounts[index]["auth_mode"] as? String,
                authMode.localizedCaseInsensitiveCompare("apikey") == .orderedSame {
                 continue
@@ -99,7 +109,10 @@ struct CodexUsageAPISyncer {
                 continue
             }
 
-            attempted += 1
+            if index != activeAccountIndex {
+                accounts[index]["agentbar_last_usage_refresh_at"] = now().timeIntervalSince1970
+                updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_last_usage_refresh_at")
+            }
             var request = URLRequest(url: Self.usageEndpoint)
             request.httpMethod = "GET"
             request.timeoutInterval = timeout
@@ -112,10 +125,10 @@ struct CodexUsageAPISyncer {
             do {
                 response = try await usageClient(request, timeout)
             } catch let error as URLError where error.code == .timedOut {
-                lastFailure = .timedOut
+                if index == activeAccountIndex { activeResult = .timedOut }
                 continue
             } catch {
-                lastFailure = .failed(error.localizedDescription)
+                if index == activeAccountIndex { activeResult = .failed(error.localizedDescription) }
                 continue
             }
 
@@ -125,13 +138,17 @@ struct CodexUsageAPISyncer {
                         "status_code": 401,
                         "detected_at": now().timeIntervalSince1970
                     ]
-                    updated = true
+                    updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_auth_error")
                 }
-                lastFailure = .failed("HTTP \(response.statusCode)\(Self.responseErrorCode(from: response.data))")
+                if index == activeAccountIndex {
+                    activeResult = .failed("HTTP \(response.statusCode)\(Self.responseErrorCode(from: response.data))")
+                }
                 continue
             }
             guard var usage = Self.parseUsageResponse(data: response.data) else {
-                lastFailure = .failed("Usage response did not contain rate limit windows.")
+                if index == activeAccountIndex {
+                    activeResult = .failed("Usage response did not contain rate limit windows.")
+                }
                 continue
             }
             if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
@@ -142,35 +159,52 @@ struct CodexUsageAPISyncer {
                 do {
                     try authData.write(to: accountSnapshotURL, options: [.atomic])
                 } catch {
-                    lastFailure = .failed(error.localizedDescription)
+                    if index == activeAccountIndex { activeResult = .failed(error.localizedDescription) }
                     continue
                 }
             }
             if accounts[index]["agentbar_auth_error"] != nil {
                 accounts[index].removeValue(forKey: "agentbar_auth_error")
-                updated = true
+                updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_auth_error")
             }
             if !Self.jsonValue(accounts[index]["last_usage"], equals: usage) {
                 accounts[index]["last_usage"] = usage
                 accounts[index]["last_usage_at"] = now().timeIntervalSince1970
-                updated = true
+                updatedFieldsByAccountKey[accountKey, default: []].formUnion(["last_usage", "last_usage_at"])
             }
+            if index == activeAccountIndex { activeResult = .success }
         }
 
-        guard attempted > 0 else {
-            return .unavailable("No ChatGPT account auth snapshots were available for usage refresh.")
-        }
-
-        if updated {
-            registry["accounts"] = accounts
+        if !updatedFieldsByAccountKey.isEmpty {
             do {
-                try storage.writeRegistry(registry)
+                let latestData = try Data(contentsOf: registryURL)
+                guard var latestRegistry = try JSONSerialization.jsonObject(with: latestData) as? [String: Any],
+                      var latestAccounts = latestRegistry["accounts"] as? [[String: Any]]
+                else {
+                    return .failed("Codex account registry could not be parsed after usage refresh.")
+                }
+                var refreshedAccounts: [String: [String: Any]] = [:]
+                for account in accounts {
+                    guard let accountKey = account["account_key"] as? String else { continue }
+                    refreshedAccounts[accountKey] = account
+                }
+                for index in latestAccounts.indices {
+                    guard let accountKey = latestAccounts[index]["account_key"] as? String,
+                          let updatedFields = updatedFieldsByAccountKey[accountKey],
+                          let refreshedAccount = refreshedAccounts[accountKey]
+                    else { continue }
+                    for field in updatedFields {
+                        latestAccounts[index][field] = refreshedAccount[field]
+                    }
+                }
+                latestRegistry["accounts"] = latestAccounts
+                try storage.writeRegistry(latestRegistry)
             } catch {
                 return .failed(error.localizedDescription)
             }
         }
 
-        return lastFailure ?? .success
+        return activeResult ?? .unavailable("No active ChatGPT account auth snapshot was available for usage refresh.")
     }
 
     private func preferredAuthURL(

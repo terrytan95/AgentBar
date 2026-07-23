@@ -61,9 +61,8 @@ final class UsageParsingTests: XCTestCase {
         checkMenuBarDefaultsToActiveAccountQuotaWindows()
         checkPopoverHeaderShowsActiveAccountFiveHourAndWeeklyRemaining()
         checkMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows()
-        checkBudgetSettingsPersistWithoutMenuBarWarning()
-        checkRapidUsageAlertDoesNotWarnInMenuBarTitle()
-        checkAccount401WarnsInMenuBarTitle()
+        checkBudgetSettingsPersist()
+        checkAccount401DoesNotAlterMenuBarTitle()
         checkQuotaResetNotificationsDetectWindowRefreshes()
         checkTaskCompletionNotificationsDetectNewlyFinishedTasks()
         checkAccessTokenExpiryNotificationSettingPersists()
@@ -1718,7 +1717,7 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    private func checkBudgetSettingsPersistWithoutMenuBarWarning() {
+    private func checkBudgetSettingsPersist() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -1733,57 +1732,10 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(reloaded.weeklyTokenBudget, 7_000)
         XCTAssertEqual(reloaded.dailyCostBudgetUSD, 2.5)
         XCTAssertEqual(reloaded.weeklyCostBudgetUSD, 12.5)
-
-        let store = UsageStore(settings: reloaded, codexUsageSynchronizer: { .success })
-        store.applyTestData(
-            accounts: [testAccount(id: "active", name: "active@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: Date())],
-            points: [
-                UsagePoint(
-                    service: .codex,
-                    model: "codex-local",
-                    date: Date(),
-                    tokens: TokenTotals(input: 600, cachedInput: 0, output: 400, reasoningOutput: 0, total: 1_000),
-                    estimatedCostUSD: Decimal(string: "2.75")
-                )
-            ]
-        )
-
-        XCTAssertFalse(store.menuBarTitle.hasPrefix("! "))
     }
 
     @MainActor
-    private func checkRapidUsageAlertDoesNotWarnInMenuBarTitle() {
-        let now = Date()
-        let recentPointDate = max(now.addingTimeInterval(-60), Calendar.current.startOfDay(for: now))
-        let suiteName = "AgentBarTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let store = UsageStore(settings: SettingsStore(defaults: defaults), codexUsageSynchronizer: { .success })
-        store.applyTestData(
-            accounts: [testAccount(id: "active", name: "active@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)],
-            points: [
-                UsagePoint(
-                    service: .codex,
-                    model: "codex-local",
-                    date: recentPointDate,
-                    tokens: TokenTotals(input: 3_000, cachedInput: 0, output: 3_000, reasoningOutput: 0, total: 6_000),
-                    estimatedCostUSD: nil
-                ),
-                UsagePoint(
-                    service: .codex,
-                    model: "codex-local",
-                    date: now,
-                    tokens: TokenTotals(input: 2_000, cachedInput: 0, output: 2_000, reasoningOutput: 0, total: 4_000),
-                    estimatedCostUSD: nil
-                )
-            ]
-        )
-
-        XCTAssertFalse(store.menuBarTitle.hasPrefix("! "))
-    }
-
-    @MainActor
-    private func checkAccount401WarnsInMenuBarTitle() {
+    private func checkAccount401DoesNotAlterMenuBarTitle() {
         let now = Date()
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -1793,7 +1745,7 @@ final class UsageParsingTests: XCTestCase {
         account.loginWarning = .forcedLogout
         store.applyTestData(accounts: [account], points: [])
 
-        XCTAssertTrue(store.menuBarTitle.hasPrefix("! "))
+        XCTAssertEqual(store.menuBarTitle, "5H 90%  WK 80%")
     }
 
     private func checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta() {

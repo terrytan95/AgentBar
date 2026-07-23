@@ -1,11 +1,34 @@
 import AppKit
 import ApplicationServices
 import Combine
+import os
 import SwiftUI
 
 struct CodexDisplayGeometry {
     var accessibilityFrame: CGRect
     var appKitFrame: CGRect
+}
+
+private struct CodexAccessibilityCandidate: @unchecked Sendable {
+    var element: AXUIElement
+    var bounds: CGRect
+}
+
+private struct CodexAccessibilityScanResult: @unchecked Sendable {
+    var candidates: [CodexAccessibilityCandidate]
+    var inspectedElementCount: Int
+}
+
+private struct CodexAccessibilityScanInput: @unchecked Sendable {
+    var application: AXUIElement?
+    var window: AXUIElement
+}
+
+private enum CodexOverlayFrameRefreshReason: String {
+    case initial
+    case accessibility
+    case cardContent
+    case fallback
 }
 
 private func codexSidebarQuotaAXCallback(
@@ -16,8 +39,9 @@ private func codexSidebarQuotaAXCallback(
 ) {
     guard let refcon else { return }
     let controller = Unmanaged<CodexSidebarQuotaOverlayController>.fromOpaque(refcon).takeUnretainedValue()
+    let notificationName = notification as String
     Task { @MainActor in
-        controller.handleAccessibilityChange()
+        controller.handleAccessibilityChange(notification: notificationName)
     }
 }
 
@@ -25,13 +49,20 @@ private func codexSidebarQuotaAXCallback(
 final class CodexSidebarQuotaOverlayController: ObservableObject {
     static let shared = CodexSidebarQuotaOverlayController()
     static let codexBundleIdentifier = "com.openai.codex"
+    private static let minimumFrameFallbackInterval: TimeInterval = 5
+    private static let maximumFrameFallbackInterval: TimeInterval = 300
+    private static let fullScanCooldown: TimeInterval = 1
+    private static let performanceLog = OSLog(
+        subsystem: "com.terrytan.AgentBar",
+        category: .pointsOfInterest
+    )
 
     @Published private(set) var hasAccessibilityPermission = AXIsProcessTrusted()
 
     private weak var settings: SettingsStore?
-    private weak var store: UsageStore?
     private var panel: NSPanel?
     private var hostingView: NSHostingView<CodexSidebarQuotaCard>?
+    private var cardModel: CodexSidebarQuotaCardViewModel?
     private var panelMoveObserver: NSObjectProtocol?
     private var panelResizeObserver: NSObjectProtocol?
     private var frameRefreshTimer: Timer?
@@ -40,21 +71,30 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     private var accessibilityObserver: AXObserver?
     private var accessibilityApplication: AXUIElement?
     private var accessibilityWindow: AXUIElement?
-    private var codexProcessIdentifier: pid_t?
+    private var cachedSidebarElement: AXUIElement?
+    private var cachedSidebarWidth: CGFloat?
+    private var cachedAccountMenuElement: AXUIElement?
     private var lastCodexBounds: CGRect?
-    private var framePollCount = 0
+    private var lastFullScanUptime: TimeInterval?
+    private var codexProcessIdentifier: pid_t?
+    private var accessibilityRefreshTask: Task<Void, Never>?
+    private var accessibilityScanTask: Task<Void, Never>?
+    private var accessibilityScanWorkerTask: Task<CodexAccessibilityScanResult, Never>?
+    private var accessibilityScanGeneration = 0
+    private var frameFallbackInterval = CodexSidebarQuotaOverlayController.minimumFrameFallbackInterval
     private var isStarted = false
 
     func start(settings: SettingsStore, store: UsageStore) {
         guard !isStarted else { return }
         isStarted = true
         self.settings = settings
-        self.store = store
-        configurePanel(store: store)
+        let cardContent = Self.cardContent(accounts: store.accounts, language: settings.language)
+        configurePanel(content: cardContent)
         observeWorkspace()
 
         settings.$showCodexSidebarQuotaOverlay
             .removeDuplicates()
+            .dropFirst()
             .sink { [weak self] _ in
                 Task { @MainActor in
                     self?.refreshVisibility()
@@ -64,6 +104,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
 
         settings.$codexSidebarQuotaOverlayIndependent
             .removeDuplicates()
+            .dropFirst()
             .sink { [weak self] _ in
                 Task { @MainActor in
                     self?.refreshVisibility()
@@ -71,23 +112,18 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             }
             .store(in: &cancellables)
 
-        store.objectWillChange
-            .sink { [weak self] _ in
+        Publishers.CombineLatest(store.$accounts, settings.$language)
+            .map(Self.cardContent(accounts:language:))
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] content in
                 Task { @MainActor in
+                    self?.cardModel?.update(content)
                     await Task.yield()
-                    self?.refreshPanelFrame()
+                    self?.refreshPanelFrame(reason: .cardContent)
                 }
             }
             .store(in: &cancellables)
-
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard self?.settings?.codexSidebarQuotaOverlayIndependent == false else { return }
-                self?.pollAttachedPanelFrame()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        frameRefreshTimer = timer
 
         refreshVisibility()
     }
@@ -110,8 +146,8 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         panel?.orderOut(nil)
         panel = nil
         hostingView = nil
+        cardModel = nil
         settings = nil
-        store = nil
         isStarted = false
     }
 
@@ -182,11 +218,24 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         codexBounds: CGRect,
         sidebarWidth: CGFloat? = nil
     ) -> CGRect? {
+        guard let menu = accountMenuCandidateBounds(
+            candidates: candidates,
+            codexBounds: codexBounds,
+            sidebarWidth: sidebarWidth
+        ) else { return nil }
+        return expandedAccountMenuBounds(menu, codexBounds: codexBounds)
+    }
+
+    private nonisolated static func accountMenuCandidateBounds(
+        candidates: [CGRect],
+        codexBounds: CGRect,
+        sidebarWidth: CGFloat? = nil
+    ) -> CGRect? {
         let sidebarWidth = sidebarWidth ?? inferredSidebarWidth(forCodexWindowWidth: codexBounds.width)
         let minimumMenuBottom = codexBounds.maxY - 160
         let maximumMenuHeight = codexBounds.height * 0.65
 
-        let menu = candidates
+        return candidates
             .filter { candidate in
                 candidate.width >= 160
                     && candidate.width <= sidebarWidth + 24
@@ -200,8 +249,13 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             .max { lhs, rhs in
                 lhs.width * lhs.height < rhs.width * rhs.height
             }
-        guard let menu, menu.height < codexBounds.height * 0.5 else { return menu }
+    }
 
+    private nonisolated static func expandedAccountMenuBounds(
+        _ menu: CGRect,
+        codexBounds: CGRect
+    ) -> CGRect {
+        guard menu.height < codexBounds.height * 0.5 else { return menu }
         // ponytail: Codex AX omits the popup's 64pt header chrome; remove this when it exposes the full frame.
         let topInset = min(64, menu.minY - codexBounds.minY)
         return CGRect(
@@ -216,6 +270,13 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         candidates: [CGRect],
         codexBounds: CGRect
     ) -> CGFloat? {
+        sidebarCandidateBounds(candidates: candidates, codexBounds: codexBounds)?.width
+    }
+
+    private nonisolated static func sidebarCandidateBounds(
+        candidates: [CGRect],
+        codexBounds: CGRect
+    ) -> CGRect? {
         // ponytail: infer from edge-aligned AX groups until Codex exposes its sidebar splitter directly.
         let maximumWidth = min(codexBounds.width * 0.5, 500)
         return candidates
@@ -229,8 +290,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
                     && (candidate.minY <= codexBounds.minY + 120
                         || candidate.maxY >= codexBounds.maxY - 8)
             }
-            .map(\.width)
-            .max()
+            .max { lhs, rhs in lhs.width < rhs.width }
     }
 
     nonisolated static func inferredSidebarWidth(forCodexWindowWidth width: CGFloat) -> CGFloat {
@@ -238,16 +298,56 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         min(max(width * 0.35, 240), 360)
     }
 
-    func handleAccessibilityChange() {
-        refreshFocusedWindowObservation()
-        refreshPanelFrame()
+    private nonisolated static func cardContent(
+        accounts: [UsageAccount],
+        language: AppLanguage
+    ) -> CodexSidebarQuotaCardContent {
+        let account = accounts.first { $0.service == .codex && $0.isActive }
+            ?? accounts.first { $0.service == .codex }
+        return CodexSidebarQuotaCardContent(account: account, language: language)
     }
 
-    private func configurePanel(store: UsageStore) {
-        let card = CodexSidebarQuotaCard(store: store) { [weak self] in
+    func handleAccessibilityChange(notification: String) {
+        let refreshesWindow = notification == kAXFocusedWindowChangedNotification as String
+            || notification == kAXMainWindowChangedNotification as String
+            || notification == kAXWindowCreatedNotification as String
+            || notification == kAXUIElementDestroyedNotification as String
+        let isLayoutChange = notification == kAXLayoutChangedNotification as String
+        let alwaysRequiresFullScan = refreshesWindow
+            || notification == kAXMenuOpenedNotification as String
+            || notification == kAXMenuClosedNotification as String
+
+        accessibilityRefreshTask?.cancel()
+        accessibilityRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 75_000_000)
+            guard !Task.isCancelled, let self else { return }
+            if notification == kAXUIElementDestroyedNotification as String {
+                removeWindowNotifications()
+                accessibilityWindow = nil
+            }
+            if refreshesWindow {
+                refreshFocusedWindowObservation()
+            }
+            let scannedRecently = lastFullScanUptime.map {
+                ProcessInfo.processInfo.systemUptime - $0 < Self.fullScanCooldown
+            } ?? false
+            let requiresFullScan = alwaysRequiresFullScan
+                || (isLayoutChange && !scannedRecently)
+                || (notification == kAXResizedNotification as String && cachedSidebarElement == nil)
+            if requiresFullScan {
+                invalidateCachedGeometry()
+            }
+            refreshPanelFrame(forceFullScan: requiresFullScan, reason: .accessibility)
+            scheduleFrameFallback(reset: true)
+        }
+    }
+
+    private func configurePanel(content: CodexSidebarQuotaCardContent) {
+        let cardModel = CodexSidebarQuotaCardViewModel(content: content)
+        let card = CodexSidebarQuotaCard(model: cardModel) { [weak self] in
             Task { @MainActor in
                 await Task.yield()
-                self?.refreshPanelFrame()
+                self?.refreshPanelFrame(reason: .cardContent)
             }
         }
         let hostingView = NSHostingView(rootView: card)
@@ -298,6 +398,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             }
         }
 
+        self.cardModel = cardModel
         self.hostingView = hostingView
         self.panel = panel
     }
@@ -330,12 +431,16 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             hasAccessibilityPermission: hasAccessibilityPermission,
             isCodexFrontmost: isCodexFrontmost
         ) else {
+            frameRefreshTimer?.invalidate()
+            frameRefreshTimer = nil
             panel?.orderOut(nil)
             clearAccessibilityObservation()
             return
         }
 
         if independent {
+            frameRefreshTimer?.invalidate()
+            frameRefreshTimer = nil
             clearAccessibilityObservation()
             refreshIndependentPanelFrame()
             return
@@ -344,7 +449,8 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         guard let application else { return }
         panel?.isMovableByWindowBackground = false
         attach(to: application)
-        refreshPanelFrame()
+        refreshPanelFrame(forceFullScan: true, reason: .initial)
+        scheduleFrameFallback(reset: true)
     }
 
     private func attach(to application: NSRunningApplication) {
@@ -367,7 +473,6 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         [
             kAXFocusedWindowChangedNotification,
-            kAXFocusedUIElementChangedNotification,
             kAXMainWindowChangedNotification,
             kAXLayoutChangedNotification,
             kAXMenuOpenedNotification,
@@ -387,8 +492,8 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     private func refreshFocusedWindowObservation() {
         guard let observer = accessibilityObserver,
               let application = accessibilityApplication,
-              let rawWindow = accessibilityAttribute(application, kAXMainWindowAttribute as CFString)
-                ?? accessibilityAttribute(application, kAXFocusedWindowAttribute as CFString),
+              let rawWindow = Self.accessibilityAttribute(application, kAXMainWindowAttribute as CFString)
+                ?? Self.accessibilityAttribute(application, kAXFocusedWindowAttribute as CFString),
               CFGetTypeID(rawWindow) == AXUIElementGetTypeID()
         else {
             accessibilityWindow = nil
@@ -416,7 +521,10 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         }
     }
 
-    private func refreshPanelFrame() {
+    private func refreshPanelFrame(
+        forceFullScan: Bool = false,
+        reason: CodexOverlayFrameRefreshReason
+    ) {
         if settings?.codexSidebarQuotaOverlayIndependent == true {
             refreshIndependentPanelFrame()
             return
@@ -427,9 +535,9 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         guard settings?.showCodexSidebarQuotaOverlay == true,
               NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Self.codexBundleIdentifier,
               let window = accessibilityWindow,
-              accessibilityAttribute(window, kAXMinimizedAttribute as CFString) as? Bool != true,
-              let position = accessibilityPoint(window, kAXPositionAttribute as CFString),
-              let size = accessibilitySize(window, kAXSizeAttribute as CFString),
+              Self.accessibilityAttribute(window, kAXMinimizedAttribute as CFString) as? Bool != true,
+              let position = Self.accessibilityPoint(window, kAXPositionAttribute as CFString),
+              let size = Self.accessibilitySize(window, kAXSizeAttribute as CFString),
               let hostingView,
               let panel
         else {
@@ -443,14 +551,35 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             panel.orderOut(nil)
             return
         }
-        let candidates = accessibilityCandidateBounds(in: window)
-        let sidebarWidth = Self.sidebarWidth(candidates: candidates, codexBounds: codexBounds)
-            ?? Self.inferredSidebarWidth(forCodexWindowWidth: size.width)
-        let accountMenuBounds = Self.accountMenuBounds(
-            candidates: candidates,
-            codexBounds: codexBounds,
-            sidebarWidth: sidebarWidth
-        )
+
+        var needsFullScan = forceFullScan || cachedSidebarWidth == nil
+        var sidebarWidth = cachedSidebarWidth
+        var accountMenuBounds: CGRect?
+        if !needsFullScan, let cachedSidebarElement {
+            if let bounds = Self.accessibilityBounds(cachedSidebarElement) {
+                sidebarWidth = bounds.width
+                cachedSidebarWidth = bounds.width
+            } else {
+                needsFullScan = true
+            }
+        }
+        if !needsFullScan, let cachedAccountMenuElement {
+            if let bounds = Self.accessibilityBounds(cachedAccountMenuElement) {
+                accountMenuBounds = Self.expandedAccountMenuBounds(bounds, codexBounds: codexBounds)
+            } else {
+                needsFullScan = true
+            }
+        }
+
+        if needsFullScan {
+            startAccessibilityScan(in: window, codexBounds: codexBounds, reason: reason)
+            return
+        }
+
+        guard let sidebarWidth else {
+            panel.orderOut(nil)
+            return
+        }
         hostingView.frame.size.width = sidebarWidth - 24
         hostingView.layoutSubtreeIfNeeded()
         let contentHeight = max(1, ceil(hostingView.fittingSize.height))
@@ -465,20 +594,125 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             return
         }
 
-        panel.setFrame(frame, display: true)
-        panel.orderFrontRegardless()
+        let frameChanged = panel.frame != frame
+        os_signpost(
+            .event,
+            log: Self.performanceLog,
+            name: "Overlay frame",
+            "reason=%{public}@ changed=%{public}d",
+            reason.rawValue,
+            frameChanged ? 1 : 0
+        )
+        if frameChanged {
+            panel.setFrame(frame, display: true)
+        }
+        if !panel.isVisible {
+            panel.orderFrontRegardless()
+        }
     }
 
-    private func pollAttachedPanelFrame() {
+    private func startAccessibilityScan(
+        in window: AXUIElement,
+        codexBounds: CGRect,
+        reason: CodexOverlayFrameRefreshReason
+    ) {
+        guard accessibilityScanTask == nil else { return }
+        let input = CodexAccessibilityScanInput(
+            application: accessibilityApplication,
+            window: window
+        )
+        let generation = accessibilityScanGeneration
+        let signpostID = OSSignpostID(log: Self.performanceLog)
+        lastFullScanUptime = ProcessInfo.processInfo.systemUptime
+        os_signpost(
+            .begin,
+            log: Self.performanceLog,
+            name: "AX tree scan",
+            signpostID: signpostID,
+            "reason=%{public}@",
+            reason.rawValue
+        )
+
+        let workerTask = Task.detached(priority: .utility) {
+            Self.accessibilityCandidates(application: input.application, in: input.window)
+        }
+        accessibilityScanWorkerTask = workerTask
+        accessibilityScanTask = Task { @MainActor [weak self] in
+            let scan = await workerTask.value
+            os_signpost(
+                .end,
+                log: Self.performanceLog,
+                name: "AX tree scan",
+                signpostID: signpostID,
+                "nodes=%{public}d",
+                scan.inspectedElementCount
+            )
+            guard let self else { return }
+            if accessibilityScanGeneration == generation {
+                accessibilityScanTask = nil
+                accessibilityScanWorkerTask = nil
+            }
+            guard !Task.isCancelled,
+                  accessibilityScanGeneration == generation,
+                  let currentWindow = accessibilityWindow,
+                  CFEqual(currentWindow, window)
+            else { return }
+
+            let candidates = scan.candidates.map(\.bounds)
+            let sidebarBounds = Self.sidebarCandidateBounds(candidates: candidates, codexBounds: codexBounds)
+            let sidebarWidth = sidebarBounds?.width
+                ?? Self.inferredSidebarWidth(forCodexWindowWidth: codexBounds.width)
+            cachedSidebarWidth = sidebarWidth
+            cachedSidebarElement = sidebarBounds.flatMap { bounds in
+                scan.candidates.first { $0.bounds == bounds }?.element
+            }
+            let accountMenuBounds = Self.accountMenuCandidateBounds(
+                candidates: candidates,
+                codexBounds: codexBounds,
+                sidebarWidth: sidebarWidth
+            )
+            cachedAccountMenuElement = accountMenuBounds.flatMap { bounds in
+                scan.candidates.first { $0.bounds == bounds }?.element
+            }
+            refreshPanelFrame(reason: reason)
+        }
+    }
+
+    private func scheduleFrameFallback(reset: Bool) {
+        frameRefreshTimer?.invalidate()
+        frameRefreshTimer = nil
+        if reset {
+            frameFallbackInterval = Self.minimumFrameFallbackInterval
+        }
+        guard isStarted,
+              settings?.showCodexSidebarQuotaOverlay == true,
+              settings?.codexSidebarQuotaOverlayIndependent == false,
+              panel?.isVisible == true
+        else { return }
+
+        let timer = Timer(timeInterval: frameFallbackInterval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.runFrameFallback()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        frameRefreshTimer = timer
+    }
+
+    private func runFrameFallback() {
+        frameRefreshTimer = nil
         guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Self.codexBundleIdentifier,
               let window = accessibilityWindow,
-              let position = accessibilityPoint(window, kAXPositionAttribute as CFString),
-              let size = accessibilitySize(window, kAXSizeAttribute as CFString)
+              let position = Self.accessibilityPoint(window, kAXPositionAttribute as CFString),
+              let size = Self.accessibilitySize(window, kAXSizeAttribute as CFString)
         else { return }
-        framePollCount += 1
-        if CGRect(origin: position, size: size) != lastCodexBounds || framePollCount.isMultiple(of: 4) {
-            refreshPanelFrame()
+        let codexBounds = CGRect(origin: position, size: size)
+        let watchdogExpired = frameFallbackInterval >= Self.maximumFrameFallbackInterval
+        if codexBounds != lastCodexBounds || watchdogExpired {
+            refreshPanelFrame(forceFullScan: watchdogExpired, reason: .fallback)
         }
+        frameFallbackInterval = min(frameFallbackInterval * 2, Self.maximumFrameFallbackInterval)
+        scheduleFrameFallback(reset: false)
     }
 
     private func refreshIndependentPanelFrame() {
@@ -529,11 +763,14 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
     }
 
     private func clearAccessibilityObservation() {
+        accessibilityRefreshTask?.cancel()
+        accessibilityRefreshTask = nil
+        frameRefreshTimer?.invalidate()
+        frameRefreshTimer = nil
         removeWindowNotifications()
         if let observer = accessibilityObserver, let application = accessibilityApplication {
             [
                 kAXFocusedWindowChangedNotification,
-                kAXFocusedUIElementChangedNotification,
                 kAXMainWindowChangedNotification,
                 kAXLayoutChangedNotification,
                 kAXMenuOpenedNotification,
@@ -548,8 +785,25 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         accessibilityApplication = nil
         accessibilityObserver = nil
         codexProcessIdentifier = nil
+        invalidateCachedGeometry()
         lastCodexBounds = nil
-        framePollCount = 0
+        lastFullScanUptime = nil
+        frameFallbackInterval = Self.minimumFrameFallbackInterval
+    }
+
+    private func invalidateCachedGeometry() {
+        cancelAccessibilityScan()
+        cachedSidebarElement = nil
+        cachedSidebarWidth = nil
+        cachedAccountMenuElement = nil
+    }
+
+    private func cancelAccessibilityScan() {
+        accessibilityScanGeneration &+= 1
+        accessibilityScanTask?.cancel()
+        accessibilityScanTask = nil
+        accessibilityScanWorkerTask?.cancel()
+        accessibilityScanWorkerTask = nil
     }
 
     private func removeWindowNotifications() {
@@ -566,13 +820,16 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         }
     }
 
-    private func accessibilityAttribute(_ element: AXUIElement, _ attribute: CFString) -> CFTypeRef? {
+    private nonisolated static func accessibilityAttribute(
+        _ element: AXUIElement,
+        _ attribute: CFString
+    ) -> CFTypeRef? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
         return value
     }
 
-    private func accessibilityPoint(_ element: AXUIElement, _ attribute: CFString) -> CGPoint? {
+    private nonisolated static func accessibilityPoint(_ element: AXUIElement, _ attribute: CFString) -> CGPoint? {
         guard let rawValue = accessibilityAttribute(element, attribute),
               CFGetTypeID(rawValue) == AXValueGetTypeID()
         else { return nil }
@@ -582,7 +839,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         return AXValueGetValue(value, .cgPoint, &point) ? point : nil
     }
 
-    private func accessibilitySize(_ element: AXUIElement, _ attribute: CFString) -> CGSize? {
+    private nonisolated static func accessibilitySize(_ element: AXUIElement, _ attribute: CFString) -> CGSize? {
         guard let rawValue = accessibilityAttribute(element, attribute),
               CFGetTypeID(rawValue) == AXValueGetTypeID()
         else { return nil }
@@ -592,48 +849,61 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         return AXValueGetValue(value, .cgSize, &size) ? size : nil
     }
 
-    private func accessibilityCandidateBounds(in mainWindow: AXUIElement) -> [CGRect] {
-        var candidates: [CGRect] = []
+    private nonisolated static func accessibilityBounds(_ element: AXUIElement) -> CGRect? {
+        guard let position = accessibilityPoint(element, kAXPositionAttribute as CFString),
+              let size = accessibilitySize(element, kAXSizeAttribute as CFString)
+        else { return nil }
+        return CGRect(origin: position, size: size)
+    }
 
-        if let application = accessibilityApplication,
+    private nonisolated static func accessibilityCandidates(
+        application: AXUIElement?,
+        in mainWindow: AXUIElement
+    ) -> CodexAccessibilityScanResult {
+        var candidates: [CodexAccessibilityCandidate] = []
+        var inspectedElementCount = 0
+
+        if let application,
            let windows = accessibilityAttribute(application, kAXWindowsAttribute as CFString) as? [AXUIElement] {
-            for window in windows where !CFEqual(window, mainWindow) {
-                if let position = accessibilityPoint(window, kAXPositionAttribute as CFString),
-                   let size = accessibilitySize(window, kAXSizeAttribute as CFString) {
-                    candidates.append(CGRect(origin: position, size: size))
+            for window in windows where !Task.isCancelled && !CFEqual(window, mainWindow) {
+                inspectedElementCount += 1
+                if let bounds = accessibilityBounds(window) {
+                    candidates.append(CodexAccessibilityCandidate(element: window, bounds: bounds))
                 }
             }
         }
 
-        var inspectedElementCount = 0
-        collectCandidateBounds(
+        collectCandidates(
             from: mainWindow,
             depth: 0,
             inspectedElementCount: &inspectedElementCount,
             candidates: &candidates
         )
-        return candidates
+        return CodexAccessibilityScanResult(
+            candidates: candidates,
+            inspectedElementCount: inspectedElementCount
+        )
     }
 
-    private func collectCandidateBounds(
+    private nonisolated static func collectCandidates(
         from element: AXUIElement,
         depth: Int,
         inspectedElementCount: inout Int,
-        candidates: inout [CGRect]
+        candidates: inout [CodexAccessibilityCandidate]
     ) {
-        guard depth < 32, inspectedElementCount < 8_000 else { return }
+        guard !Task.isCancelled, depth < 32, inspectedElementCount < 8_000 else { return }
         inspectedElementCount += 1
 
-        if let position = accessibilityPoint(element, kAXPositionAttribute as CFString),
-           let size = accessibilitySize(element, kAXSizeAttribute as CFString) {
-            candidates.append(CGRect(origin: position, size: size))
+        if let bounds = accessibilityBounds(element) {
+            candidates.append(CodexAccessibilityCandidate(element: element, bounds: bounds))
         }
 
         guard let children = accessibilityAttribute(element, kAXChildrenAttribute as CFString) as? [AXUIElement] else {
             return
         }
         for child in children {
-            collectCandidateBounds(
+            guard !Task.isCancelled else { return }
+            collectCandidates(
                 from: child,
                 depth: depth + 1,
                 inspectedElementCount: &inspectedElementCount,

@@ -77,44 +77,48 @@ private extension UsageAccount {
 enum CodexAppRestartResult: Equatable {
     case restarted
     case skippedWorkRunning
+    case skippedActivityUnknown
+    case restartFailed
 }
 
 struct CodexAppRestarter {
-    var activityDetector: @Sendable () -> Bool = {
+    var activityDetector: @Sendable () -> Bool? = {
         CodexWorkActivityDetector().hasRunningCodexWork()
     }
-    var restartCodexApp: @Sendable () -> Void = {
+    var restartCodexApp: @Sendable () -> Bool = {
         AccountLoginLauncher.forceRestartCodexApp()
     }
 
     func restartIfNoWorkIsRunning() -> CodexAppRestartResult {
-        guard !activityDetector() else { return .skippedWorkRunning }
-        restartCodexApp()
-        return .restarted
+        guard let hasRunningWork = activityDetector() else { return .skippedActivityUnknown }
+        guard !hasRunningWork else { return .skippedWorkRunning }
+        return restartCodexApp() ? .restarted : .restartFailed
     }
 }
 
 struct CodexWorkActivityDetector {
-    var processLines: @Sendable () -> [String] = {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-axo", "command="]
-        process.standardOutput = pipe
+    var processLines: @Sendable () -> [String]? = {
         do {
-            try process.run()
-            process.waitUntilExit()
+            let result = try AsyncProcessRunner.runBlocking(
+                executableURL: URL(fileURLWithPath: "/bin/ps"),
+                arguments: ["-axo", "command="],
+                maximumOutputBytes: 8 * 1_048_576,
+                timeout: 5
+            )
+            guard result.exitStatus == 0,
+                  !result.timedOut,
+                  !result.wasCancelled,
+                  !result.stdoutTruncated
+            else { return nil }
+            guard let output = String(data: result.stdout, encoding: .utf8) else { return nil }
+            return output.split(separator: "\n").map(String.init)
         } catch {
-            return []
+            return nil
         }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
-        return output.split(separator: "\n").map(String.init)
     }
 
-    func hasRunningCodexWork() -> Bool {
-        processLines().contains { line in
+    func hasRunningCodexWork() -> Bool? {
+        processLines()?.contains { line in
             let command = line.lowercased()
             if command.contains("/chatgpt.app/") || command.contains(".app/contents/macos/chatgpt")
                 || command.contains("/codex.app/") || command.contains(".app/contents/macos/codex") {

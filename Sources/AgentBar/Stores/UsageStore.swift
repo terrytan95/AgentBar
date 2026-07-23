@@ -34,26 +34,26 @@ private final class DarwinNotificationObserver {
     }
 }
 
+private struct AppSnapshot: Equatable {
+    var snapshots: [UsageService: UsageSnapshot] = [:]
+    var accounts: [UsageAccount] = []
+    var points: [UsagePoint] = []
+    var tasks: [AgentTask] = []
+    var auditTasks: [AgentTask] = []
+    var quotaCapacityHistory = QuotaCapacityHistory(samples: [])
+    var isRefreshing = false
+    var isManualRefreshFeedbackVisible = false
+    var hasLoadedAccountInformation = false
+    var generation: UInt64 = 0
+}
+
 @MainActor
 final class UsageStore: ObservableObject {
     static let accountRemovalNotification = Notification.Name("AgentBarUsageStoreAccountRemoval")
     private static let taskHistoryWindow: TimeInterval = 24 * 60 * 60
     private static let maximumTaskHistoryCount = 200
 
-    @Published private(set) var snapshots: [UsageService: UsageSnapshot] = [:]
-    @Published private(set) var accounts: [UsageAccount] = []
-    @Published private(set) var points: [UsagePoint] = [] {
-        didSet {
-            invalidateStatisticsCaches()
-            yearActivityBarsCache = nil
-        }
-    }
-    @Published private(set) var tasks: [AgentTask] = []
-    @Published private(set) var auditTasks: [AgentTask] = []
-    @Published private(set) var quotaCapacityHistory: QuotaCapacityHistory
-    @Published private(set) var isRefreshing = false
-    @Published private(set) var isManualRefreshFeedbackVisible = false
-    @Published private(set) var hasLoadedAccountInformation = false
+    @Published private var appSnapshot = AppSnapshot()
     @Published private(set) var lastError: String?
     @Published private(set) var switchingAccountID: String?
     @Published var selectedRange: UsageRange = .today {
@@ -83,12 +83,16 @@ final class UsageStore: ObservableObject {
     private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
     private var taskTimer: Timer?
+    private var initialRefreshTask: Task<Void, Never>?
+    private var taskRefreshTask: Task<Void, Never>?
     private var accountRemovalObserver: NSObjectProtocol?
     private var codexRecoveryLoginObserver: DarwinNotificationObserver?
     private var refreshIntervalObserver: AnyCancellable?
     private var statisticsScopeObserver: AnyCancellable?
     private var accessTokenExpiryNotificationsObserver: AnyCancellable?
+    private var isStarted = false
     private var taskRefreshInFlight = false
+    private var taskRefreshGeneration: UInt64 = 0
     private var hasLoadedTaskCenter = false
     private var lastTaskRefreshAt: Date?
     private var summaryCache: UsageSummary?
@@ -141,15 +145,16 @@ final class UsageStore: ObservableObject {
         accessTokenExpiryReminderReconciler: @escaping @MainActor @Sendable ([UsageAccount], Bool, AppLanguage) -> Void = { accounts, enabled, language in
             AccessTokenExpiryDesktopScheduler.shared.reconcile(accounts: accounts, enabled: enabled, language: language)
         },
-        quotaCapacityHistoryStore: QuotaCapacityHistoryStore = QuotaCapacityHistoryStore()
+        quotaCapacityHistoryStore: QuotaCapacityHistoryStore = QuotaCapacityHistoryStore(),
+        refreshTimeout: Duration = .seconds(60)
     ) {
         self.settings = settings
         self.quotaCapacityHistoryStore = quotaCapacityHistoryStore
-        quotaCapacityHistory = quotaCapacityHistoryStore.load()
         refreshLifecycle = UsageRefreshLifecycle(
             codexUsageSynchronizer: codexUsageSynchronizer,
             codexUsageReader: codexUsageReader,
-            claudeUsageReader: claudeUsageReader
+            claudeUsageReader: claudeUsageReader,
+            refreshTimeout: refreshTimeout
         )
         self.codexTaskReader = codexTaskReader
         self.codexAccountSwitcher = codexAccountSwitcher
@@ -162,18 +167,43 @@ final class UsageStore: ObservableObject {
         self.quotaResetNotifier = quotaResetNotifier
         self.taskCompletionNotifier = taskCompletionNotifier
         self.accessTokenExpiryReminderReconciler = accessTokenExpiryReminderReconciler
+    }
+
+    var snapshots: [UsageService: UsageSnapshot] { appSnapshot.snapshots }
+    var accounts: [UsageAccount] { appSnapshot.accounts }
+    var points: [UsagePoint] { appSnapshot.points }
+    var tasks: [AgentTask] { appSnapshot.tasks }
+    var auditTasks: [AgentTask] { appSnapshot.auditTasks }
+    var quotaCapacityHistory: QuotaCapacityHistory { appSnapshot.quotaCapacityHistory }
+    var isRefreshing: Bool { appSnapshot.isRefreshing }
+    var isManualRefreshFeedbackVisible: Bool { appSnapshot.isManualRefreshFeedbackVisible }
+    var hasLoadedAccountInformation: Bool { appSnapshot.hasLoadedAccountInformation }
+    var refreshGeneration: UInt64 { appSnapshot.generation }
+    var accountsPublisher: AnyPublisher<[UsageAccount], Never> {
+        $appSnapshot.map(\.accounts).removeDuplicates().eraseToAnyPublisher()
+    }
+
+    func start() {
+        guard !isStarted else { return }
+        isStarted = true
+
+        var next = appSnapshot
+        next.quotaCapacityHistory = quotaCapacityHistoryStore.load()
+        publish(next)
         accountRemovalObserver = NotificationCenter.default.addObserver(
             forName: Self.accountRemovalNotification,
             object: nil,
             queue: nil
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.refresh(force: true)
+                guard let self, self.isStarted else { return }
+                self.refresh(force: true)
             }
         }
         codexRecoveryLoginObserver = DarwinNotificationObserver(name: CodexAccountStorage.recoveryLoginFinishedNotificationName) { [weak self] in
             Task { @MainActor [weak self] in
-                self?.refresh(force: true)
+                guard let self, self.isStarted else { return }
+                self.refresh(force: true)
             }
         }
         configureTimer()
@@ -183,7 +213,8 @@ final class UsageStore: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    self?.configureTimer()
+                    guard let self, self.isStarted else { return }
+                    self.configureTimer()
                 }
             }
         statisticsScopeObserver = settings.$showAggregatedAccountData
@@ -191,7 +222,7 @@ final class UsageStore: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    guard let self else { return }
+                    guard let self, self.isStarted else { return }
                     invalidateStatisticsCaches()
                     objectWillChange.send()
                 }
@@ -201,14 +232,46 @@ final class UsageStore: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] enabled in
                 Task { @MainActor [weak self] in
-                    guard let self else { return }
+                    guard let self, self.isStarted else { return }
                     self.accessTokenExpiryReminderReconciler(self.accounts, enabled, self.language)
                 }
             }
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            refresh(force: true)
+        initialRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            guard let self, self.isStarted else { return }
+            self.refresh(force: true)
         }
+    }
+
+    func stop() {
+        isStarted = false
+        timer?.invalidate()
+        timer = nil
+        taskTimer?.invalidate()
+        taskTimer = nil
+        initialRefreshTask?.cancel()
+        initialRefreshTask = nil
+        taskRefreshTask?.cancel()
+        taskRefreshTask = nil
+        taskRefreshGeneration &+= 1
+        taskRefreshInFlight = false
+        refreshLifecycle.reset()
+
+        if let accountRemovalObserver {
+            NotificationCenter.default.removeObserver(accountRemovalObserver)
+        }
+        accountRemovalObserver = nil
+        codexRecoveryLoginObserver = nil
+        refreshIntervalObserver = nil
+        statisticsScopeObserver = nil
+        accessTokenExpiryNotificationsObserver = nil
+
+        guard appSnapshot.isRefreshing || appSnapshot.isManualRefreshFeedbackVisible else { return }
+        var next = appSnapshot
+        next.isRefreshing = false
+        next.isManualRefreshFeedbackVisible = false
+        publish(next)
     }
 
     var language: AppLanguage { settings.language }
@@ -372,45 +435,93 @@ final class UsageStore: ObservableObject {
     }
 
     func refresh(force: Bool = false, showManualFeedback: Bool = false) {
-        if showManualFeedback {
-            isManualRefreshFeedbackVisible = true
-        }
+        var next = appSnapshot
+        next.isManualRefreshFeedbackVisible = next.isManualRefreshFeedbackVisible || showManualFeedback
         let started = refreshLifecycle.refresh(
             force: force
-        ) { [weak self] result, isFinal in
-            guard let self else { return }
-            let previousAccounts = self.accounts
-            let wasLoaded = self.hasLoadedAccountInformation
-            self.snapshots = result.snapshots
-            self.accounts = Self.accountsForDisplay(result.accounts)
-            self.accessTokenExpiryReminderReconciler(
-                self.accounts,
-                self.settings.accessTokenExpiryNotificationsEnabled,
-                self.language
-            )
-            self.points = result.points
-            self.applyTaskCenter(result.tasks, updatesAuditHistory: true)
-            self.recordQuotaCapacitySample()
-            self.sendQuotaResetNotifications(previousAccounts: previousAccounts, wasLoaded: wasLoaded)
-            self.hasLoadedAccountInformation = true
-            guard isFinal else { return }
-            self.isRefreshing = false
-            self.isManualRefreshFeedbackVisible = false
-            if self.retryPendingCodexSwitchRecovery() {
-                return
-            }
-            self.evaluateAutomaticCodexRotation()
+        ) { [weak self] completion in
+            self?.finishRefresh(completion)
         }
-        guard started else { return }
-        isRefreshing = true
-        lastError = nil
+        if started {
+            next.isRefreshing = true
+            if lastError != nil {
+                lastError = nil
+            }
+        }
+        if next.isRefreshing != appSnapshot.isRefreshing ||
+            next.isManualRefreshFeedbackVisible != appSnapshot.isManualRefreshFeedbackVisible {
+            publish(next)
+        }
+    }
+
+    private func finishRefresh(_ completion: UsageRefreshLifecycle.Completion) {
+        guard case let .result(result) = completion else {
+            var next = appSnapshot
+            next.isRefreshing = false
+            next.isManualRefreshFeedbackVisible = false
+            publish(next)
+            NSLog("AgentBar usage refresh timed out")
+            return
+        }
+
+        let now = Date()
+        let previous = appSnapshot
+        let taskCenterWasLoaded = hasLoadedTaskCenter
+        let completedAfter = lastTaskRefreshAt ?? now
+        var next = previous
+        next.snapshots = result.snapshots
+        next.accounts = Self.accountsForDisplay(result.accounts)
+        next.points = result.points
+        next.tasks = Self.visibleTasks(result.tasks, now: now)
+        next.auditTasks = Self.sortedAuditTasks(result.tasks)
+        next.quotaCapacityHistory = previous.quotaCapacityHistory.appendingSample(
+            account: next.accounts.first(where: \.isActive) ?? next.accounts.first,
+            points: next.points,
+            now: now,
+            minimumInterval: settings.quotaCapacityHistoryInterval
+        )
+        next.isRefreshing = false
+        next.isManualRefreshFeedbackVisible = false
+        next.hasLoadedAccountInformation = true
+        next.generation = result.generation
+        publish(next)
+
+        hasLoadedTaskCenter = true
+        lastTaskRefreshAt = now
+        accessTokenExpiryReminderReconciler(
+            next.accounts,
+            settings.accessTokenExpiryNotificationsEnabled,
+            language
+        )
+        if next.quotaCapacityHistory != previous.quotaCapacityHistory {
+            quotaCapacityHistoryStore.save(next.quotaCapacityHistory)
+        }
+        if taskCenterWasLoaded, settings.taskCompletionNotificationsEnabled {
+            for notification in TaskCompletionNotifications.newlyCompleted(
+                previous: previous.tasks,
+                current: next.tasks,
+                completedAfter: completedAfter,
+                language: language
+            ) {
+                taskCompletionNotifier(notification)
+            }
+        }
+        sendQuotaResetNotifications(
+            previousAccounts: previous.accounts,
+            wasLoaded: previous.hasLoadedAccountInformation,
+            now: now
+        )
+        if !retryPendingCodexSwitchRecovery() {
+            evaluateAutomaticCodexRotation()
+        }
     }
 
     func configureTimer() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: max(30, settings.refreshInterval), repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refresh()
+                guard let self, self.isStarted else { return }
+                self.refresh()
             }
         }
     }
@@ -419,7 +530,8 @@ final class UsageStore: ObservableObject {
         taskTimer?.invalidate()
         let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshTaskCenter()
+                guard let self, self.isStarted else { return }
+                self.refreshTaskCenter()
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -427,14 +539,21 @@ final class UsageStore: ObservableObject {
     }
 
     func refreshTaskCenter() {
-        guard !taskRefreshInFlight else { return }
+        guard isStarted, !taskRefreshInFlight else { return }
         taskRefreshInFlight = true
+        taskRefreshGeneration &+= 1
+        let generation = taskRefreshGeneration
         let codexTaskReader = codexTaskReader
 
-        Task.detached(priority: .utility) { [weak self] in
+        taskRefreshTask = Task.detached(priority: .utility) { [weak self] in
             let tasks = codexTaskReader()
+            guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in
-                guard let self else { return }
+                guard let self,
+                      self.isStarted,
+                      self.taskRefreshGeneration == generation
+                else { return }
+                self.taskRefreshTask = nil
                 self.taskRefreshInFlight = false
                 self.applyTaskCenter(tasks)
             }
@@ -471,7 +590,9 @@ final class UsageStore: ObservableObject {
                     return
                 }
                 self.codexAccountLifecycle.removeAccount(account.id)
-                self.accounts.removeAll { $0.service == .codex && $0.id == account.id }
+                var next = self.appSnapshot
+                next.accounts.removeAll { $0.service == .codex && $0.id == account.id }
+                self.publish(next)
                 NotificationCenter.default.post(name: Self.accountRemovalNotification, object: nil)
             }
         }
@@ -588,17 +709,20 @@ final class UsageStore: ObservableObject {
         points: [UsagePoint] = [],
         tasks: [AgentTask] = []
     ) {
-        self.snapshots = snapshots
-        self.accounts = Self.accountsForDisplay(accounts)
-        self.points = points
-        self.tasks = tasks
-        self.auditTasks = tasks
+        stop()
+
+        var next = appSnapshot
+        next.snapshots = snapshots
+        next.accounts = Self.accountsForDisplay(accounts)
+        next.points = points
+        next.tasks = tasks
+        next.auditTasks = tasks
+        next.hasLoadedAccountInformation = true
+        next.isRefreshing = false
+        next.isManualRefreshFeedbackVisible = false
+        publish(next)
         hasLoadedTaskCenter = true
         lastTaskRefreshAt = Date()
-        hasLoadedAccountInformation = true
-        isRefreshing = false
-        isManualRefreshFeedbackVisible = false
-        refreshLifecycle.reset()
     }
 
     func recordQuotaCapacitySample(now: Date = Date()) {
@@ -609,7 +733,9 @@ final class UsageStore: ObservableObject {
             minimumInterval: settings.quotaCapacityHistoryInterval
         )
         guard history != quotaCapacityHistory else { return }
-        quotaCapacityHistory = history
+        var next = appSnapshot
+        next.quotaCapacityHistory = history
+        publish(next)
         quotaCapacityHistoryStore.save(history)
     }
 
@@ -630,32 +756,20 @@ final class UsageStore: ObservableObject {
         now: Date = Date(),
         updatesAuditHistory: Bool = false
     ) {
+        let previousTasks = tasks
+        var next = appSnapshot
         if updatesAuditHistory {
-            let sortedAuditTasks = nextTasks.sorted { lhs, rhs in
-                if lhs.auditDate != rhs.auditDate { return lhs.auditDate > rhs.auditDate }
-                return lhs.id > rhs.id
-            }
-            if auditTasks != sortedAuditTasks {
-                auditTasks = sortedAuditTasks
-            }
+            next.auditTasks = Self.sortedAuditTasks(nextTasks)
         }
 
-        let previousTasks = tasks
         let completedAfter = lastTaskRefreshAt ?? now
-        let historyCutoff = now.addingTimeInterval(-Self.taskHistoryWindow)
-        tasks = Array(nextTasks
-            .filter { ($0.completedAt ?? $0.lastActivityAt) >= historyCutoff }
-            .sorted { lhs, rhs in
-                let lhsDate = lhs.completedAt ?? lhs.lastActivityAt
-                let rhsDate = rhs.completedAt ?? rhs.lastActivityAt
-                return lhsDate > rhsDate
-            }
-            .prefix(Self.maximumTaskHistoryCount))
+        next.tasks = Self.visibleTasks(nextTasks, now: now)
+        publish(next)
 
         if hasLoadedTaskCenter, settings.taskCompletionNotificationsEnabled {
             for notification in TaskCompletionNotifications.newlyCompleted(
                 previous: previousTasks,
-                current: tasks,
+                current: next.tasks,
                 completedAfter: completedAfter,
                 language: language
             ) {
@@ -664,6 +778,34 @@ final class UsageStore: ObservableObject {
         }
         hasLoadedTaskCenter = true
         lastTaskRefreshAt = now
+    }
+
+    private static func sortedAuditTasks(_ tasks: [AgentTask]) -> [AgentTask] {
+        tasks.sorted { lhs, rhs in
+            if lhs.auditDate != rhs.auditDate { return lhs.auditDate > rhs.auditDate }
+            return lhs.id > rhs.id
+        }
+    }
+
+    private static func visibleTasks(_ tasks: [AgentTask], now: Date) -> [AgentTask] {
+        let historyCutoff = now.addingTimeInterval(-taskHistoryWindow)
+        return Array(tasks
+            .filter { ($0.completedAt ?? $0.lastActivityAt) >= historyCutoff }
+            .sorted { lhs, rhs in
+                let lhsDate = lhs.completedAt ?? lhs.lastActivityAt
+                let rhsDate = rhs.completedAt ?? rhs.lastActivityAt
+                return lhsDate > rhsDate
+            }
+            .prefix(Self.maximumTaskHistoryCount))
+    }
+
+    private func publish(_ next: AppSnapshot) {
+        guard appSnapshot != next else { return }
+        if appSnapshot.points != next.points || appSnapshot.accounts != next.accounts {
+            invalidateStatisticsCaches()
+            yearActivityBarsCache = nil
+        }
+        appSnapshot = next
     }
 
 }

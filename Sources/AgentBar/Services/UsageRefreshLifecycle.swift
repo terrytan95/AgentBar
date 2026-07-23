@@ -3,39 +3,52 @@ import Foundation
 @MainActor
 final class UsageRefreshLifecycle {
     struct Result: Sendable {
-        var snapshots: [UsageService: UsageSnapshot]
-        var accounts: [UsageAccount]
-        var points: [UsagePoint]
-        var tasks: [AgentTask]
+        let snapshots: [UsageService: UsageSnapshot]
+        let accounts: [UsageAccount]
+        let points: [UsagePoint]
+        let tasks: [AgentTask]
+        let generation: UInt64
     }
 
-    private let codexUsageSource: @Sendable () async -> UsageSnapshot
+    enum Completion: Sendable {
+        case result(Result)
+        case timedOut
+    }
+
+    typealias Receiver = @MainActor @Sendable (Completion) -> Void
+
+    private struct Run {
+        let generation: UInt64
+        var workTask: Task<Void, Never>?
+        var timeoutTask: Task<Void, Never>?
+    }
+
+    private let codexUsageSynchronizer: @Sendable () async -> CodexUsageSyncResult
+    private let codexUsageReader: @Sendable () -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
-    private var isInFlight = false
+    private let refreshTimeout: Duration
+    private var generation: UInt64 = 0
+    private var inFlight: Run?
     private var refreshQueued = false
 
     init(
         codexUsageSynchronizer: @escaping @Sendable () async -> CodexUsageSyncResult,
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot,
-        claudeUsageReader: @escaping @Sendable () -> UsageSnapshot
+        claudeUsageReader: @escaping @Sendable () -> UsageSnapshot,
+        refreshTimeout: Duration = .seconds(60)
     ) {
-        codexUsageSource = {
-            let syncResult = await codexUsageSynchronizer()
-            var snapshot = codexUsageReader()
-            if let note = syncResult.note {
-                snapshot.securityNotes.append(note)
-            }
-            return snapshot
-        }
+        self.codexUsageSynchronizer = codexUsageSynchronizer
+        self.codexUsageReader = codexUsageReader
         self.claudeUsageReader = claudeUsageReader
+        self.refreshTimeout = refreshTimeout
     }
 
     @discardableResult
     func refresh(
         force: Bool,
-        receive: @escaping @MainActor @Sendable (Result, Bool) -> Void
+        receive: @escaping Receiver
     ) -> Bool {
-        guard !isInFlight else {
+        guard inFlight == nil else {
             refreshQueued = refreshQueued || force
             return false
         }
@@ -44,35 +57,79 @@ final class UsageRefreshLifecycle {
     }
 
     func reset() {
-        isInFlight = false
+        generation &+= 1
+        inFlight?.workTask?.cancel()
+        inFlight?.timeoutTask?.cancel()
+        inFlight = nil
         refreshQueued = false
     }
 
-    private func start(
-        receive: @escaping @MainActor @Sendable (Result, Bool) -> Void
-    ) {
-        isInFlight = true
-        let codexUsageSource = codexUsageSource
+    private func start(receive: @escaping Receiver) {
+        generation &+= 1
+        let runGeneration = generation
+        let codexUsageSynchronizer = codexUsageSynchronizer
+        let codexUsageReader = codexUsageReader
         let claudeUsageReader = claudeUsageReader
-        Task.detached(priority: .utility) { [weak self] in
-            let codex = await codexUsageSource()
+        inFlight = Run(generation: runGeneration)
+
+        let workTask = Task.detached(priority: .utility) { [weak self] in
+            let syncResult = await codexUsageSynchronizer()
+            guard !Task.isCancelled else { return }
+            var codex = codexUsageReader()
+            guard !Task.isCancelled else { return }
+            if let note = syncResult.note {
+                codex.securityNotes.append(note)
+            }
             let claude = claudeUsageReader()
+            guard !Task.isCancelled else { return }
             let result = Result(
                 snapshots: [.codex: codex, .claudeCode: claude],
                 accounts: codex.accounts + claude.accounts,
                 points: codex.points + claude.points,
-                tasks: codex.tasks
+                tasks: codex.tasks,
+                generation: runGeneration
             )
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.isInFlight = false
-                let shouldRepeat = self.refreshQueued
-                self.refreshQueued = false
-                receive(result, !shouldRepeat)
-                if shouldRepeat {
-                    self.start(receive: receive)
-                }
+            await self?.finish(.result(result), generation: runGeneration, receive: receive)
+        }
+        guard inFlight?.generation == runGeneration else {
+            workTask.cancel()
+            return
+        }
+        inFlight?.workTask = workTask
+
+        let refreshTimeout = refreshTimeout
+        let timeoutTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: refreshTimeout)
+            } catch {
+                return
             }
+            guard !Task.isCancelled else { return }
+            self?.finish(.timedOut, generation: runGeneration, receive: receive)
+        }
+        guard inFlight?.generation == runGeneration else {
+            timeoutTask.cancel()
+            return
+        }
+        inFlight?.timeoutTask = timeoutTask
+    }
+
+    private func finish(
+        _ completion: Completion,
+        generation runGeneration: UInt64,
+        receive: @escaping Receiver
+    ) {
+        guard let run = inFlight, run.generation == runGeneration else { return }
+        run.workTask?.cancel()
+        run.timeoutTask?.cancel()
+        inFlight = nil
+
+        let shouldRepeat = refreshQueued
+        refreshQueued = false
+        if shouldRepeat {
+            start(receive: receive)
+        } else {
+            receive(completion)
         }
     }
 }

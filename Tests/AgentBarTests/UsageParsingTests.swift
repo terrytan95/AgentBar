@@ -1122,7 +1122,6 @@ final class UsageParsingTests: XCTestCase {
                 return UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [claudePoint], securityNotes: ["test"], refreshedAt: now, pricingFingerprint: Pricing.fingerprint)
             }
         )
-
         store.refresh(force: true)
 
         await fulfillment(of: [expectation], timeout: 2)
@@ -2110,6 +2109,8 @@ final class UsageParsingTests: XCTestCase {
                 recorder.record(accounts: accounts, enabled: enabled, language: language)
             }
         )
+        store.start()
+        defer { store.stop() }
 
         store.refresh(force: true)
         for _ in 0..<100 where recorder.events.isEmpty {

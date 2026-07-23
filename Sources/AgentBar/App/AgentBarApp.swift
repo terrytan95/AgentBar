@@ -61,6 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let store = store ?? UsageStore(settings: settings)
+        self.store = store
+        store.start()
         StatusItemController.shared.show(settings: settings, store: store)
         CodexSidebarQuotaOverlayController.shared.start(settings: settings, store: store)
         QuotaWidgetHotKeyController.shared.start(settings: settings)
@@ -78,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        store?.stop()
         QuotaWidgetHotKeyController.shared.stop()
         CodexSidebarQuotaOverlayController.shared.stop()
     }

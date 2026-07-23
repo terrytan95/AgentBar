@@ -112,7 +112,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             }
             .store(in: &cancellables)
 
-        Publishers.CombineLatest(store.$accounts, settings.$language)
+        Publishers.CombineLatest(store.accountsPublisher, settings.$language)
             .map(Self.cardContent(accounts:language:))
             .removeDuplicates()
             .dropFirst()

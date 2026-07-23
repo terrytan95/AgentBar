@@ -58,11 +58,10 @@ final class UsageParsingTests: XCTestCase {
         checkPricingNormalizesProviderAndDateSuffixes()
         checkPricingUsesDecimalAndUnknownModelsCostZeroButKeepTokens()
         checkPricingFingerprintIsStableSHA256AndIncludedInSummary()
-        checkMenuBarDefaultsToActiveAccountQuotaWindows()
+        checkMenuBarDefaultsToActiveQuotaWithoutWarningMark()
         checkPopoverHeaderShowsActiveAccountFiveHourAndWeeklyRemaining()
         checkMenuBarDisplayModeMigratesExistingInstallToActiveAccountWindows()
         checkBudgetSettingsPersist()
-        checkAccount401DoesNotAlterMenuBarTitle()
         checkQuotaResetNotificationsDetectWindowRefreshes()
         checkTaskCompletionNotificationsDetectNewlyFinishedTasks()
         checkAccessTokenExpiryNotificationSettingPersists()
@@ -1628,47 +1627,18 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    private func checkMenuBarDefaultsToActiveAccountQuotaWindows() {
+    private func checkMenuBarDefaultsToActiveQuotaWithoutWarningMark() {
         let suiteName = "AgentBarTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = SettingsStore(defaults: defaults)
         let store = UsageStore(settings: settings, codexUsageSynchronizer: { .success })
         let now = Date()
-        store.applyTestData(accounts: [
-            UsageAccount(
-                id: "inactive",
-                service: .codex,
-                displayName: "inactive@example.com",
-                username: "inactive@example.com",
-                maskedEmail: nil,
-                plan: "team",
-                sourceDescription: "test",
-                status: .live,
-                fiveHourWindow: UsageWindow(kind: .fiveHour, usedPercent: 90, windowMinutes: 300, resetsAt: now),
-                weeklyWindow: UsageWindow(kind: .weekly, usedPercent: 40, windowMinutes: 10080, resetsAt: now),
-                tokens: .zero,
-                estimatedCostUSD: nil,
-                lastUpdated: now,
-                isActive: false
-            ),
-            UsageAccount(
-                id: "active",
-                service: .codex,
-                displayName: "active@example.com",
-                username: "active@example.com",
-                maskedEmail: nil,
-                plan: "team",
-                sourceDescription: "test",
-                status: .live,
-                fiveHourWindow: UsageWindow(kind: .fiveHour, usedPercent: 31, windowMinutes: 300, resetsAt: now),
-                weeklyWindow: UsageWindow(kind: .weekly, usedPercent: 8, windowMinutes: 10080, resetsAt: now),
-                tokens: .zero,
-                estimatedCostUSD: nil,
-                lastUpdated: now,
-                isActive: true
-            )
-        ])
+        let inactive = testAccount(id: "inactive", name: "inactive@example.com", fiveHourUsed: 90, weeklyUsed: 40, now: now)
+        var active = testAccount(id: "active", name: "active@example.com", fiveHourUsed: 31, weeklyUsed: 8, now: now)
+        active.isActive = true
+        active.loginWarning = .forcedLogout
+        store.applyTestData(accounts: [inactive, active], points: [])
 
         XCTAssertEqual(settings.menuBarDisplayMode, .activeAccountWindows)
         XCTAssertEqual(store.menuBarTitle, "5H 69%  WK 92%")
@@ -1732,20 +1702,6 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(reloaded.weeklyTokenBudget, 7_000)
         XCTAssertEqual(reloaded.dailyCostBudgetUSD, 2.5)
         XCTAssertEqual(reloaded.weeklyCostBudgetUSD, 12.5)
-    }
-
-    @MainActor
-    private func checkAccount401DoesNotAlterMenuBarTitle() {
-        let now = Date()
-        let suiteName = "AgentBarTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let store = UsageStore(settings: SettingsStore(defaults: defaults), codexUsageSynchronizer: { .success })
-        var account = testAccount(id: "locked", name: "locked@example.com", fiveHourUsed: 10, weeklyUsed: 20, now: now)
-        account.loginWarning = .forcedLogout
-        store.applyTestData(accounts: [account], points: [])
-
-        XCTAssertEqual(store.menuBarTitle, "5H 90%  WK 80%")
     }
 
     private func checkQuotaCapacityHistoryEstimatesFromPercentAndTokenDelta() {

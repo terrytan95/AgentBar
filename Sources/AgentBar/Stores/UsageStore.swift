@@ -82,7 +82,6 @@ final class UsageStore: ObservableObject {
     private let accessTokenExpiryReminderReconciler: @MainActor @Sendable ([UsageAccount], Bool, AppLanguage) -> Void
     private let quotaCapacityHistoryStore: QuotaCapacityHistoryStore
     private var timer: Timer?
-    private var taskTimer: Timer?
     private var initialRefreshTask: Task<Void, Never>?
     private var taskRefreshTask: Task<Void, Never>?
     private var accountRemovalObserver: NSObjectProtocol?
@@ -207,7 +206,6 @@ final class UsageStore: ObservableObject {
             }
         }
         configureTimer()
-        configureTaskTimer()
         refreshIntervalObserver = settings.$refreshInterval
             .dropFirst()
             .removeDuplicates()
@@ -248,8 +246,6 @@ final class UsageStore: ObservableObject {
         isStarted = false
         timer?.invalidate()
         timer = nil
-        taskTimer?.invalidate()
-        taskTimer = nil
         initialRefreshTask?.cancel()
         initialRefreshTask = nil
         taskRefreshTask?.cancel()
@@ -524,18 +520,6 @@ final class UsageStore: ObservableObject {
                 self.refresh()
             }
         }
-    }
-
-    func configureTaskTimer() {
-        taskTimer?.invalidate()
-        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.isStarted else { return }
-                self.refreshTaskCenter()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        taskTimer = timer
     }
 
     func refreshTaskCenter() {

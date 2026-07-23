@@ -178,9 +178,13 @@ private struct AgentBarGlassSurfaceModifier: ViewModifier {
     func body(content: Content) -> some View {
         if isEnabled && !reduceTransparency {
             if #available(macOS 26.0, *) {
-                content.glassEffect(.regular, in: Rectangle())
+                content
+                    .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
-                content.background(.regularMaterial)
+                content
+                    .background { CodexSidebarMaterialView() }
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         } else {
             content.background(opaqueBackground)

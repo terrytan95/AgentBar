@@ -29,6 +29,11 @@ A native macOS menu bar companion for Codex usage, quotas, accounts, tasks, and 
       <img src="screenshots/agentbar-settings.png" alt="AgentBar settings page showing accounts, menu bar options, budgets, and refresh settings">
     </td>
   </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="screenshots/agentbar-quota-widget.png" alt="AgentBar floating quota widget showing weekly quota, reset time, reset credits, and access-token expiry" width="50%">
+    </td>
+  </tr>
 </table>
 
 <a id="english"></a>
@@ -42,7 +47,7 @@ AgentBar turns the usage data already available on your Mac into a compact menu 
 - **Menu bar at a glance:** show the active account's 5-hour and weekly windows, the lowest remaining quota, total tokens, or Codex-only remaining quota. The popover is vertically resizable.
 - **Codex accounts:** view, sort, switch, add, remove, and recover local accounts. Optional automatic rotation switches away from a low-quota account while avoiding a Codex restart during active CLI work.
 - **Quota visibility:** track 5-hour and weekly windows, reset times, reset credits, quota pressure, capacity history, and access-token expiry.
-- **Codex sidebar widget:** attach a quota card to the Codex sidebar or use it as an independent floating panel. It supports edge snapping, resizing, and a configurable global shortcut.
+- **Codex sidebar widget:** attach a quota card to the Codex sidebar or use it as an independent floating panel. See the active quota window's remaining percentage, progress, exact reset time and countdown, reset credits, and access-token expiry at a glance. The widget supports edge snapping, resizing, and a configurable global shortcut.
 - **Usage dashboard:** inspect tokens, estimated cost, service/model breakdowns, activity charts, and comparisons for today, yesterday, this week, this month, this year, rolling 7/30 days, all time, or a custom range.
 - **Live Task Center:** follow working, waiting, completed, and interrupted Codex tasks with repository, elapsed time, and token totals.
 - **Projects and budgets:** group usage by repository, review model and cost trends, and set daily or weekly token/cost budgets globally or per project.
@@ -84,7 +89,7 @@ AgentBar 将 Mac 上已有的用量数据整理为简洁的菜单栏视图和完
 - **菜单栏概览：** 可显示当前账户的 5 小时与每周额度、最低剩余额度、Token 总量，或仅显示 Codex 剩余额度；弹窗支持垂直调整大小。
 - **Codex 多账户：** 查看、排序、切换、添加、移除和恢复本地账户。可选的自动轮换会在当前账户额度偏低时切换账户，并在 CLI 任务运行期间避免重启 Codex。
 - **额度追踪：** 查看 5 小时与每周额度窗口、重置时间、重置额度、额度压力、容量历史，以及访问令牌到期时间。
-- **Codex 侧边栏小组件：** 将额度卡片附加到 Codex 侧边栏，或作为独立悬浮面板使用；支持贴边、调整大小和自定义全局快捷键。
+- **Codex 侧边栏小组件：** 将额度卡片附加到 Codex 侧边栏，或作为独立悬浮面板使用；可一眼查看当前额度窗口的剩余百分比、进度、准确重置时间与倒计时、重置额度，以及访问令牌到期时间，并支持贴边、调整大小和自定义全局快捷键。
 - **用量仪表盘：** 查看 Token、预估费用、服务与模型分布、活动图表和区间对比；支持今天、昨天、本周、本月、本年、近 7/30 天、全部和自定义日期范围。
 - **实时任务中心：** 跟踪工作中、等待中、已完成和已中断的 Codex 任务，并查看仓库、耗时与 Token 总量。
 - **项目与预算：** 按仓库汇总用量，查看模型和费用趋势，并设置全局或单项目的每日/每周 Token 与费用预算。

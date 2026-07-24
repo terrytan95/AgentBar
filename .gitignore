@@ -13,3 +13,6 @@ DerivedData/
 .codex/config.toml
 paseo.json
 .foglamp/
+AGENTS.md
+CONTEXT.md
+.codex/

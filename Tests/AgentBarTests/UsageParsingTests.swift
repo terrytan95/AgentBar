@@ -507,7 +507,7 @@ final class UsageParsingTests: XCTestCase {
     private func checkCodexSessionJsonlCarriesSessionAndProjectMetadata() throws {
         let jsonl = """
         {"type":"event_msg","timestamp":"2026-06-13T22:06:01.000Z","payload":{"type":"user_message","message":"# Files mentioned by the user:\\n\\n## My request for Codex:\\nFix high CPU usage in AgentBar\\n"}}
-        {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","session_id":"session-1","payload":{"cwd":"/Users/terrytan/Desktop/Coding/AgentBar","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0,"total_tokens":15}}}}
+        {"type":"event_msg","timestamp":"2026-06-13T22:06:12.184Z","session_id":"session-1","payload":{"cwd":"/Users/tester/Desktop/Coding/AgentBar","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0,"total_tokens":15}}}}
         """.data(using: .utf8)!
 
         let metrics = try CodexUsageReader.parseSessionJsonl(data: jsonl)

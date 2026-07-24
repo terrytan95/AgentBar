@@ -30,8 +30,11 @@ A native macOS menu bar companion for Codex usage, quotas, accounts, tasks, and 
     </td>
   </tr>
   <tr>
-    <td colspan="2" align="center">
-      <img src="screenshots/agentbar-quota-widget.png" alt="AgentBar floating quota widget showing weekly quota, reset time, reset credits, and access-token expiry" width="50%">
+    <td width="50%">
+      <img src="screenshots/agentbar-quota-widget-en.png" alt="AgentBar floating quota widget in English showing weekly quota, reset time, reset credits, and credential expiry">
+    </td>
+    <td width="50%">
+      <img src="screenshots/agentbar-quota-widget.png" alt="AgentBar floating quota widget in Simplified Chinese showing weekly quota, reset time, reset credits, and credential expiry">
     </td>
   </tr>
 </table>

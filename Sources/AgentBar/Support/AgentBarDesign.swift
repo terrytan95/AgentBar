@@ -3,26 +3,36 @@ import CoreText
 
 enum AgentBarDesign {
     static let radiusMedium: CGFloat = 12
-    static let appBackground = adaptiveColor(
-        light: NSColor.windowBackgroundColor,
-        dark: NSColor(calibratedRed: 0.060, green: 0.064, blue: 0.058, alpha: 1)
-    )
-    static let cardBackground = adaptiveColor(
-        light: NSColor.controlBackgroundColor.withAlphaComponent(0.78),
-        dark: NSColor(calibratedRed: 0.165, green: 0.170, blue: 0.155, alpha: 0.78)
-    )
-    static let hairline = adaptiveColor(
-        light: NSColor.separatorColor.withAlphaComponent(0.72),
-        dark: NSColor(calibratedWhite: 1, alpha: 0.13)
-    )
-    static let panelHighlight = adaptiveColor(
-        light: NSColor.controlBackgroundColor.withAlphaComponent(0.72),
-        dark: NSColor(calibratedWhite: 1, alpha: 0.075)
-    )
-    static let panelGlow = adaptiveColor(
-        light: NSColor.white.withAlphaComponent(0.28),
-        dark: NSColor.white.withAlphaComponent(0.10)
-    )
+    static var appBackground: Color {
+        adaptiveColor(
+            light: NSColor.windowBackgroundColor,
+            dark: NSColor(calibratedRed: 0.060, green: 0.064, blue: 0.058, alpha: 1)
+        )
+    }
+    static var cardBackground: Color {
+        adaptiveColor(
+            light: NSColor.controlBackgroundColor.withAlphaComponent(0.78),
+            dark: NSColor(calibratedRed: 0.165, green: 0.170, blue: 0.155, alpha: 0.78)
+        )
+    }
+    static var hairline: Color {
+        adaptiveColor(
+            light: NSColor.separatorColor.withAlphaComponent(0.72),
+            dark: NSColor(calibratedWhite: 1, alpha: 0.13)
+        )
+    }
+    static var panelHighlight: Color {
+        adaptiveColor(
+            light: NSColor.controlBackgroundColor.withAlphaComponent(0.72),
+            dark: NSColor(calibratedWhite: 1, alpha: 0.075)
+        )
+    }
+    static var panelGlow: Color {
+        adaptiveColor(
+            light: NSColor.white.withAlphaComponent(0.28),
+            dark: NSColor.white.withAlphaComponent(0.10)
+        )
+    }
     static let durationFast = 0.15
     static let durationNormal = 0.20
 

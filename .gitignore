@@ -1,18 +1,34 @@
+# Build / package output
 .build/
 dist/
+DerivedData/
+*.xcuserdata/
+
+# Local scratch / verification
+verification/
+tmp/
+.worktrees/
+.superpowers/
+
+# Agent / tooling (local only)
+/docs/
+/plans/
+AGENTS.md
+CONTEXT.md
+paseo.json
+.codex/
+.cursor/
+.codegraph/
+.foglamp/
+
+# Screenshots: keep README product shots only
 screenshots/*
 !screenshots/agentbar-overview-dashboard.png
 !screenshots/agentbar-settings.png
-verification/
-tmp/
-.superpowers/
-.worktrees/
+!screenshots/agentbar-audit.png
+!screenshots/agentbar-resets.png
+!screenshots/agentbar-quota-widget.png
+!screenshots/agentbar-quota-widget-en.png
+
+# OS noise
 **/.DS_Store
-*.xcuserdata/
-DerivedData/
-.codex/config.toml
-paseo.json
-.foglamp/
-AGENTS.md
-CONTEXT.md
-.codex/

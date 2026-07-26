@@ -93,6 +93,10 @@ final class SettingsStore: ObservableObject {
         didSet { persist(showAggregatedAccountData, forKey: Keys.showAggregatedAccountData) }
     }
 
+    @Published var showQuotaPressureSection: Bool {
+        didSet { persist(showQuotaPressureSection, forKey: Keys.showQuotaPressureSection) }
+    }
+
     @Published var autoCodexAccountRotationEnabled: Bool {
         didSet { persist(autoCodexAccountRotationEnabled, forKey: Keys.autoCodexAccountRotationEnabled) }
     }
@@ -232,6 +236,7 @@ final class SettingsStore: ObservableObject {
         useTranslucentAppearance = defaults.object(forKey: Keys.useTranslucentAppearance) as? Bool ?? true
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
+        showQuotaPressureSection = defaults.object(forKey: Keys.showQuotaPressureSection) as? Bool ?? true
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
         taskCompletionNotificationsEnabled = defaults.object(forKey: Keys.taskCompletionNotificationsEnabled) as? Bool ?? false
@@ -357,6 +362,7 @@ final class SettingsStore: ObservableObject {
         static let useTranslucentAppearance = "useTranslucentAppearance"
         static let accountSortMode = "accountSortMode"
         static let showAggregatedAccountData = "showAggregatedAccountData"
+        static let showQuotaPressureSection = "showQuotaPressureSection"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
         static let taskCompletionNotificationsEnabled = "taskCompletionNotificationsEnabled"
@@ -386,6 +392,7 @@ final class SettingsStore: ObservableObject {
             useTranslucentAppearance,
             accountSortMode,
             showAggregatedAccountData,
+            showQuotaPressureSection,
             autoCodexAccountRotationEnabled,
             quotaResetNotificationsEnabled,
             taskCompletionNotificationsEnabled,

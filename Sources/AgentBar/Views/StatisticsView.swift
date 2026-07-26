@@ -677,8 +677,10 @@ struct StatisticsView: View {
             }
             .frame(height: 116)
 
-            QuotaPressurePanel(pressure: quotaPressure, language: store.language)
-                .padding(.top, 8)
+            if settings.showQuotaPressureSection {
+                QuotaPressurePanel(pressure: quotaPressure, language: store.language)
+                    .padding(.top, 8)
+            }
 
             dailyUsagePanel
 
@@ -1039,6 +1041,14 @@ struct StatisticsView: View {
 
     private var usageSettingsContent: some View {
         VStack(alignment: .leading, spacing: 18) {
+            SettingsGroup(title: L.text("overview", store.language), subtitle: L.text("overview_sections_subtitle", store.language)) {
+                SettingsToggleRow(
+                    title: L.text("quota_pressure", store.language),
+                    subtitle: L.text("quota_pressure_section_subtitle", store.language),
+                    isOn: $settings.showQuotaPressureSection
+                )
+            }
+
             SettingsGroup(title: budgetLocalized("budgets"), subtitle: budgetLocalized("budget_subtitle")) {
                 SettingsRow(title: L.text("daily_budget", store.language), subtitle: L.text("budget_zero_disables_alerts", store.language)) {
                     HStack(spacing: 16) {

@@ -5,7 +5,12 @@ struct CodexUsageReader {
     var fileManager: FileManager = .default
     var now: @Sendable () -> Date = Date.init
     static let maximumSessionFileBytes = 10 * 1024 * 1024
+    static let maximumReasonableSessionFileBytes = 512 * 1024 * 1024
     static let maximumSessionFiles = 1_000
+    static let maximumSessionLineBytes = 1024 * 1024
+    static let maximumSessionPayloadBytes = 512 * 1024
+    static let maximumMalformedSessionLines = 100
+    static let sessionParserVersion = 1
     static let sessionMetricsCacheDirectoryName = "AgentBar/CodexSessionMetrics-v6"
 
     init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser, now: @escaping @Sendable () -> Date = Date.init) {
@@ -207,211 +212,20 @@ struct CodexUsageReader {
         projectName fallbackProjectName: String? = nil,
         sourceFile: String? = nil
     ) throws -> CodexSessionMetrics {
-        var eventCount = 0
-        var latestTotal = TokenTotals.zero
-        var points: [UsagePoint] = []
-        var fiveHour: UsageWindow?
-        var weekly: UsageWindow?
-        var resetCredits: UsageResetCredits?
-        var latestRateLimitAt: Date?
-        var currentCumulativeResetAt: Date?
-        var previousCumulativeUsage: TokenTotals?
-        var previousCumulativeResetAt: Date?
-        var currentSessionTitle: String?
-        var currentModel: String?
-        var currentCwd: String?
-        var currentReasoningEffort: String?
-        var taskBuilders: [String: CodexTaskBuilder] = [:]
-        var taskOrder: [String] = []
-        var activeTaskID: String?
-        var seenTaskUsageSequences = Set<CodexTaskUsageSequence>()
-        let decoder = JSONDecoder()
-        let dateParser = CodexTimestampParser()
-        let compactResponseItemMarker = Data(#""type":"response_item""#.utf8)
-        let spacedResponseItemMarker = Data(#""type": "response_item""#.utf8)
-        let meaningfulPayloadMarkers = [
-            "last_token_usage",
-            "total_token_usage",
-            "rate_limits",
-            "rate_limit_reset_credits",
-            "turn_context",
-            "session_meta",
-            "user_message",
-            "task_started",
-            "task_complete",
-            "turn_aborted",
-            "agent_message",
-            "agent_reasoning",
-            "mcp_tool_call_begin",
-            "mcp_tool_call_end",
-            "web_search_begin",
-            "web_search_end",
-            "patch_apply_begin",
-            "patch_apply_end",
-            "exec_command_begin",
-            "exec_command_end",
-            #""cwd":"#,
-            #""model":"#,
-            #""reasoning_effort":"#,
-            #""title":"#
-        ].map { Data($0.utf8) }
-
-        for (lineOffset, line) in data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true).enumerated() {
-            if line.range(of: compactResponseItemMarker) != nil || line.range(of: spacedResponseItemMarker) != nil {
-                continue
-            }
-            guard meaningfulPayloadMarkers.contains(where: { line.range(of: $0) != nil }) else {
-                continue
-            }
-            guard let event = try? decoder.decode(CodexSessionEvent.self, from: Data(line))
-            else { continue }
-
-            guard let payload = event.payload else { continue }
-            let parsedEventDate = event.parsedDate(using: dateParser)
-            let eventDate = parsedEventDate ?? .distantPast
-            let sessionID = event.sessionID ?? fallbackSessionID
-            let taskTitleCandidate = payload.type == "user_message" ? payload.sessionTitleCandidate : nil
-            currentSessionTitle = currentSessionTitle ?? taskTitleCandidate
-            currentModel = payload.model ?? currentModel
-            currentCwd = payload.cwd ?? currentCwd
-            currentReasoningEffort = payload.reasoningEffort ?? currentReasoningEffort
-            let projectName = payload.projectName ?? currentCwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? fallbackProjectName
-
-            if payload.type == "task_started", let turnID = payload.turnID {
-                let startedAt = epochDate(payload.startedAt) ?? parsedEventDate ?? .distantPast
-                if let previousTaskID = activeTaskID,
-                   previousTaskID != turnID,
-                   var previousBuilder = taskBuilders[previousTaskID],
-                   previousBuilder.terminalState == nil {
-                    let interruptedAt = max(previousBuilder.lastActivityAt, startedAt)
-                    previousBuilder.completedAt = interruptedAt
-                    previousBuilder.lastActivityAt = interruptedAt
-                    previousBuilder.terminalState = .interrupted
-                    taskBuilders[previousTaskID] = previousBuilder
-                }
-                if taskBuilders[turnID] == nil {
-                    taskOrder.append(turnID)
-                }
-                taskBuilders[turnID] = CodexTaskBuilder(
-                    id: turnID,
-                    sessionID: sessionID ?? fallbackSessionID ?? turnID,
-                    title: currentSessionTitle,
-                    projectName: projectName,
-                    cwd: currentCwd,
-                    sourceFile: sourceFile,
-                    startedAt: startedAt,
-                    completedAt: nil,
-                    lastActivityAt: startedAt,
-                    tokens: .zero,
-                    estimatedCostUSD: nil,
-                    models: [],
-                    reasoningEffort: currentReasoningEffort,
-                    terminalState: nil
-                )
-                activeTaskID = turnID
-            }
-
-            if let activeTaskID, var builder = taskBuilders[activeTaskID] {
-                builder.title = taskTitleCandidate ?? builder.title ?? currentSessionTitle
-                builder.cwd = currentCwd ?? builder.cwd
-                builder.projectName = projectName ?? builder.projectName
-                builder.reasoningEffort = currentReasoningEffort ?? builder.reasoningEffort
-                if let parsedEventDate {
-                    builder.lastActivityAt = max(builder.lastActivityAt, parsedEventDate)
-                }
-                taskBuilders[activeTaskID] = builder
-            }
-            if let resetAt = payload.rateLimits?.primary?.resetDate ?? payload.rateLimits?.secondary?.resetDate {
-                currentCumulativeResetAt = resetAt
-            }
-            if let info = payload.info,
-               let pointUsage = Self.pointUsage(
-                from: info,
-                previousCumulativeUsage: previousCumulativeResetAt == currentCumulativeResetAt ? previousCumulativeUsage : nil
-               ) {
-                let cumulativeTotals = info.totalTokenUsage?.toTotals()
-                latestTotal = cumulativeTotals ?? pointUsage
-                if let cumulativeTotals {
-                    previousCumulativeUsage = cumulativeTotals
-                    previousCumulativeResetAt = currentCumulativeResetAt
-                }
-                let model = Pricing.normalize(model: firstNonEmptyOptional([info.model, currentModel]) ?? "Codex local")
-                let pointCost = Pricing.cost(model: model, tokens: pointUsage)
-                let usageSequence = activeTaskID.flatMap { taskID in
-                    cumulativeTotals.map { CodexTaskUsageSequence(taskID: taskID, cumulativeTokens: $0) }
-                }
-                let shouldRecordUsage = usageSequence.map { seenTaskUsageSequences.insert($0).inserted } ?? true
-                if shouldRecordUsage {
-                    eventCount += 1
-                    points.append(
-                        UsagePoint(
-                            service: .codex,
-                            model: model,
-                            date: eventDate,
-                            tokens: pointUsage,
-                            cumulativeTokens: cumulativeTotals,
-                            estimatedCostUSD: pointCost,
-                            sessionID: sessionID,
-                            sessionTitle: currentSessionTitle,
-                            projectName: projectName,
-                            cwd: currentCwd,
-                            taskID: activeTaskID,
-                            sourceFile: sourceFile,
-                            sourceLine: lineOffset + 1,
-                            reasoningEffort: currentReasoningEffort,
-                            initiator: payload.callInitiator,
-                            modelContextWindow: info.modelContextWindow
-                        )
-                    )
-                    if let activeTaskID, var builder = taskBuilders[activeTaskID] {
-                        builder.tokens = builder.tokens + pointUsage
-                        builder.estimatedCostUSD = (builder.estimatedCostUSD ?? 0) + pointCost
-                        if !builder.models.contains(model) {
-                            builder.models.append(model)
-                        }
-                        taskBuilders[activeTaskID] = builder
-                    }
-                }
-            }
-
-            if (payload.type == "task_complete" || payload.type == "turn_aborted"),
-               let turnID = payload.turnID ?? activeTaskID,
-               var builder = taskBuilders[turnID] {
-                let completedAt = epochDate(payload.completedAt) ?? parsedEventDate ?? builder.lastActivityAt
-                builder.completedAt = completedAt
-                builder.lastActivityAt = max(builder.lastActivityAt, completedAt)
-                builder.terminalState = payload.type == "turn_aborted" ? .interrupted : .completed
-                builder.reportedDurationMilliseconds = payload.durationMilliseconds ?? builder.reportedDurationMilliseconds
-                builder.timeToFirstTokenMilliseconds = payload.timeToFirstTokenMilliseconds ?? builder.timeToFirstTokenMilliseconds
-                taskBuilders[turnID] = builder
-                if activeTaskID == turnID {
-                    activeTaskID = nil
-                }
-            }
-
-            if let parsedEventDate,
-               payload.rateLimits != nil || payload.resetCredits != nil,
-               latestRateLimitAt == nil || parsedEventDate >= (latestRateLimitAt ?? .distantPast) {
-                if let rateLimits = payload.rateLimits {
-                    let quotaWindows = CodexRateWindow.usageWindows(
-                        primary: rateLimits.primary,
-                        secondary: rateLimits.secondary
-                    )
-                    fiveHour = quotaWindows.fiveHour
-                    weekly = quotaWindows.weekly
-                }
-                if let sessionResetCredits = payload.resetCredits {
-                    resetCredits = sessionResetCredits.toUsageResetCredits()
-                }
-                latestRateLimitAt = parsedEventDate
-            }
-        }
-
-        let tasks = taskOrder.compactMap { taskBuilders[$0]?.task }
-        return CodexSessionMetrics(eventCount: eventCount, tokenTotals: latestTotal, points: points, tasks: tasks, latestFiveHour: fiveHour, latestWeekly: weekly, latestResetCredits: resetCredits, latestRateLimitAt: latestRateLimitAt)
+        var aggregate = CodexSessionParseAggregate()
+        aggregate.consume(
+            data: data,
+            sessionID: fallbackSessionID,
+            projectName: fallbackProjectName,
+            sourceFile: sourceFile,
+            maximumLineBytes: maximumSessionLineBytes,
+            maximumPayloadBytes: maximumSessionPayloadBytes,
+            maximumMalformedLines: maximumMalformedSessionLines
+        )
+        return aggregate.metrics
     }
 
-    private static func pointUsage(
+    fileprivate static func pointUsage(
         from info: CodexInfo,
         previousCumulativeUsage: TokenTotals?
     ) -> TokenTotals? {
@@ -476,6 +290,299 @@ struct CodexUsageReader {
 
     private static func isSessionTitleLine(_ line: String) -> Bool {
         !line.hasPrefix("#") && !line.hasPrefix("<image") && !line.hasPrefix("!")
+    }
+}
+
+enum CodexSessionLineOutcome {
+    case consumed
+    case ignored
+    case malformed
+}
+
+struct CodexSessionParserContext {
+    fileprivate let decoder = JSONDecoder()
+    fileprivate let dateParser = CodexTimestampParser()
+}
+
+struct CodexSessionParseAggregate: Codable {
+    private static let compactResponseItemMarker = Data(#""type":"response_item""#.utf8)
+    private static let spacedResponseItemMarker = Data(#""type": "response_item""#.utf8)
+    private static let meaningfulPayloadMarkers = [
+        "last_token_usage",
+        "total_token_usage",
+        "rate_limits",
+        "rate_limit_reset_credits",
+        "turn_context",
+        "session_meta",
+        "user_message",
+        "task_started",
+        "task_complete",
+        "turn_aborted",
+        "agent_message",
+        "agent_reasoning",
+        "mcp_tool_call_begin",
+        "mcp_tool_call_end",
+        "web_search_begin",
+        "web_search_end",
+        "patch_apply_begin",
+        "patch_apply_end",
+        "exec_command_begin",
+        "exec_command_end",
+        #""cwd":"#,
+        #""model":"#,
+        #""reasoning_effort":"#,
+        #""title":"#
+    ].map { Data($0.utf8) }
+
+    var metrics: CodexSessionMetrics
+    private var currentCumulativeResetAt: Date?
+    private var previousCumulativeUsage: TokenTotals?
+    private var previousCumulativeResetAt: Date?
+    private var currentSessionTitle: String?
+    private var currentModel: String?
+    private var currentCwd: String?
+    private var currentReasoningEffort: String?
+    private var taskBuilders: [String: CodexTaskBuilder]
+    private var taskOrder: [String]
+    private var activeTaskID: String?
+    private var seenTaskUsageSequences: Set<CodexTaskUsageSequence>
+    private(set) var parsedLineCount: Int
+    private(set) var malformedLineCount: Int
+
+    init() {
+        metrics = CodexSessionMetrics(
+            eventCount: 0,
+            tokenTotals: .zero,
+            points: [],
+            latestFiveHour: nil,
+            latestWeekly: nil,
+            latestRateLimitAt: nil
+        )
+        taskBuilders = [:]
+        taskOrder = []
+        seenTaskUsageSequences = []
+        parsedLineCount = 0
+        malformedLineCount = 0
+    }
+
+    func reachedMalformedLineLimit(_ maximumMalformedLines: Int) -> Bool {
+        malformedLineCount >= maximumMalformedLines
+    }
+
+    mutating func skipOversizedLine() {
+        parsedLineCount += 1
+    }
+
+    mutating func consume(
+        data: Data,
+        sessionID: String?,
+        projectName: String?,
+        sourceFile: String?,
+        maximumLineBytes: Int,
+        maximumPayloadBytes: Int,
+        maximumMalformedLines: Int
+    ) {
+        let context = CodexSessionParserContext()
+        var lineStart = data.startIndex
+
+        while lineStart < data.endIndex,
+              !Task.isCancelled,
+              !reachedMalformedLineLimit(maximumMalformedLines) {
+            let newline = data[lineStart...].firstIndex(of: UInt8(ascii: "\n"))
+            let lineEnd = newline ?? data.endIndex
+            let nextLineStart = newline.map { data.index(after: $0) } ?? data.endIndex
+            let line = data[lineStart..<lineEnd]
+
+            if line.count > maximumLineBytes {
+                skipOversizedLine()
+            } else {
+                autoreleasepool {
+                    _ = consumeLine(
+                        Data(line),
+                        sessionID: sessionID,
+                        projectName: projectName,
+                        sourceFile: sourceFile,
+                        maximumPayloadBytes: maximumPayloadBytes,
+                        maximumMalformedLines: maximumMalformedLines,
+                        context: context
+                    )
+                }
+            }
+            lineStart = nextLineStart
+        }
+        finalizeTasks()
+    }
+
+    mutating func consumeLine(
+        _ line: Data,
+        sessionID fallbackSessionID: String?,
+        projectName fallbackProjectName: String?,
+        sourceFile: String?,
+        maximumPayloadBytes: Int,
+        maximumMalformedLines: Int,
+        context: CodexSessionParserContext
+    ) -> CodexSessionLineOutcome {
+        guard !line.isEmpty else { return .ignored }
+        parsedLineCount += 1
+        if line.range(of: Self.compactResponseItemMarker) != nil ||
+            line.range(of: Self.spacedResponseItemMarker) != nil {
+            return .ignored
+        }
+        guard Self.meaningfulPayloadMarkers.contains(where: { line.range(of: $0) != nil }) else {
+            return .ignored
+        }
+        guard line.count <= maximumPayloadBytes else { return .ignored }
+        guard let event = try? context.decoder.decode(CodexSessionEvent.self, from: line) else {
+            malformedLineCount = min(maximumMalformedLines, malformedLineCount + 1)
+            return .malformed
+        }
+        guard let payload = event.payload else { return .ignored }
+
+        let parsedEventDate = event.parsedDate(using: context.dateParser)
+        let eventDate = parsedEventDate ?? .distantPast
+        let sessionID = event.sessionID ?? fallbackSessionID
+        let taskTitleCandidate = payload.type == "user_message" ? payload.sessionTitleCandidate : nil
+        currentSessionTitle = currentSessionTitle ?? taskTitleCandidate
+        currentModel = payload.model ?? currentModel
+        currentCwd = payload.cwd ?? currentCwd
+        currentReasoningEffort = payload.reasoningEffort ?? currentReasoningEffort
+        let projectName = payload.projectName ??
+            currentCwd.map { URL(fileURLWithPath: $0).lastPathComponent } ??
+            fallbackProjectName
+
+        if payload.type == "task_started", let turnID = payload.turnID {
+            let startedAt = epochDate(payload.startedAt) ?? parsedEventDate ?? .distantPast
+            if let previousTaskID = activeTaskID,
+               previousTaskID != turnID,
+               var previousBuilder = taskBuilders[previousTaskID],
+               previousBuilder.terminalState == nil {
+                let interruptedAt = max(previousBuilder.lastActivityAt, startedAt)
+                previousBuilder.completedAt = interruptedAt
+                previousBuilder.lastActivityAt = interruptedAt
+                previousBuilder.terminalState = .interrupted
+                taskBuilders[previousTaskID] = previousBuilder
+            }
+            if taskBuilders[turnID] == nil {
+                taskOrder.append(turnID)
+            }
+            taskBuilders[turnID] = CodexTaskBuilder(
+                id: turnID,
+                sessionID: sessionID ?? fallbackSessionID ?? turnID,
+                title: currentSessionTitle,
+                projectName: projectName,
+                cwd: currentCwd,
+                sourceFile: sourceFile,
+                startedAt: startedAt,
+                completedAt: nil,
+                lastActivityAt: startedAt,
+                tokens: .zero,
+                estimatedCostUSD: nil,
+                models: [],
+                reasoningEffort: currentReasoningEffort,
+                terminalState: nil
+            )
+            activeTaskID = turnID
+        }
+
+        if let activeTaskID, var builder = taskBuilders[activeTaskID] {
+            builder.title = taskTitleCandidate ?? builder.title ?? currentSessionTitle
+            builder.cwd = currentCwd ?? builder.cwd
+            builder.projectName = projectName ?? builder.projectName
+            builder.reasoningEffort = currentReasoningEffort ?? builder.reasoningEffort
+            if let parsedEventDate {
+                builder.lastActivityAt = max(builder.lastActivityAt, parsedEventDate)
+            }
+            taskBuilders[activeTaskID] = builder
+        }
+        if let resetAt = payload.rateLimits?.primary?.resetDate ?? payload.rateLimits?.secondary?.resetDate {
+            currentCumulativeResetAt = resetAt
+        }
+        if let info = payload.info,
+           let pointUsage = CodexUsageReader.pointUsage(
+            from: info,
+            previousCumulativeUsage: previousCumulativeResetAt == currentCumulativeResetAt ? previousCumulativeUsage : nil
+           ) {
+            let cumulativeTotals = info.totalTokenUsage?.toTotals()
+            metrics.tokenTotals = cumulativeTotals ?? pointUsage
+            if let cumulativeTotals {
+                previousCumulativeUsage = cumulativeTotals
+                previousCumulativeResetAt = currentCumulativeResetAt
+            }
+            let model = Pricing.normalize(model: firstNonEmptyOptional([info.model, currentModel]) ?? "Codex local")
+            let pointCost = Pricing.cost(model: model, tokens: pointUsage)
+            let usageSequence = activeTaskID.flatMap { taskID in
+                cumulativeTotals.map { CodexTaskUsageSequence(taskID: taskID, cumulativeTokens: $0) }
+            }
+            let shouldRecordUsage = usageSequence.map { seenTaskUsageSequences.insert($0).inserted } ?? true
+            if shouldRecordUsage {
+                metrics.eventCount += 1
+                metrics.points.append(
+                    UsagePoint(
+                        service: .codex,
+                        model: model,
+                        date: eventDate,
+                        tokens: pointUsage,
+                        cumulativeTokens: cumulativeTotals,
+                        estimatedCostUSD: pointCost,
+                        sessionID: sessionID,
+                        sessionTitle: currentSessionTitle,
+                        projectName: projectName,
+                        cwd: currentCwd,
+                        taskID: activeTaskID,
+                        sourceFile: sourceFile,
+                        sourceLine: parsedLineCount,
+                        reasoningEffort: currentReasoningEffort,
+                        initiator: payload.callInitiator,
+                        modelContextWindow: info.modelContextWindow
+                    )
+                )
+                if let activeTaskID, var builder = taskBuilders[activeTaskID] {
+                    builder.tokens = builder.tokens + pointUsage
+                    builder.estimatedCostUSD = (builder.estimatedCostUSD ?? 0) + pointCost
+                    if !builder.models.contains(model) {
+                        builder.models.append(model)
+                    }
+                    taskBuilders[activeTaskID] = builder
+                }
+            }
+        }
+
+        if (payload.type == "task_complete" || payload.type == "turn_aborted"),
+           let turnID = payload.turnID ?? activeTaskID,
+           var builder = taskBuilders[turnID] {
+            let completedAt = epochDate(payload.completedAt) ?? parsedEventDate ?? builder.lastActivityAt
+            builder.completedAt = completedAt
+            builder.lastActivityAt = max(builder.lastActivityAt, completedAt)
+            builder.terminalState = payload.type == "turn_aborted" ? .interrupted : .completed
+            builder.reportedDurationMilliseconds = payload.durationMilliseconds ?? builder.reportedDurationMilliseconds
+            builder.timeToFirstTokenMilliseconds = payload.timeToFirstTokenMilliseconds ?? builder.timeToFirstTokenMilliseconds
+            taskBuilders[turnID] = builder
+            if activeTaskID == turnID {
+                activeTaskID = nil
+            }
+        }
+
+        if let parsedEventDate,
+           payload.rateLimits != nil || payload.resetCredits != nil,
+           metrics.latestRateLimitAt == nil || parsedEventDate >= (metrics.latestRateLimitAt ?? .distantPast) {
+            if let rateLimits = payload.rateLimits {
+                let quotaWindows = CodexRateWindow.usageWindows(
+                    primary: rateLimits.primary,
+                    secondary: rateLimits.secondary
+                )
+                metrics.latestFiveHour = quotaWindows.fiveHour
+                metrics.latestWeekly = quotaWindows.weekly
+            }
+            if let sessionResetCredits = payload.resetCredits {
+                metrics.latestResetCredits = sessionResetCredits.toUsageResetCredits()
+            }
+            metrics.latestRateLimitAt = parsedEventDate
+        }
+        return .consumed
+    }
+
+    mutating func finalizeTasks() {
+        metrics.tasks = taskOrder.compactMap { taskBuilders[$0]?.task }
     }
 }
 
@@ -900,7 +1007,7 @@ private struct CodexSessionPayload: Decodable {
     }
 }
 
-private struct CodexTaskBuilder {
+private struct CodexTaskBuilder: Codable {
     var id: String
     var sessionID: String
     var title: String?
@@ -940,7 +1047,7 @@ private struct CodexTaskBuilder {
     }
 }
 
-private struct CodexTaskUsageSequence: Hashable {
+private struct CodexTaskUsageSequence: Codable, Hashable {
     var taskID: String
     var cumulativeTokens: TokenTotals
 }

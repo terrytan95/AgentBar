@@ -5,6 +5,7 @@ struct CodexSessionMetricsReader {
     var fileManager: FileManager = .default
 
     private static let sessionMetricsCache = CodexSessionMetricsCache()
+    private static let readChunkBytes = 64 * 1024
 
     func read(
         root: URL,
@@ -46,8 +47,12 @@ struct CodexSessionMetricsReader {
         var taskIndexes: [String: Int] = [:]
 
         for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
+            guard !Task.isCancelled else { break }
             do {
-                guard let fileSignature = try CodexSessionFileSignature(fileURL: fileURL) else { continue }
+                guard let fileSignature = try CodexSessionFileSignature(
+                    fileURL: fileURL,
+                    fileManager: fileManager
+                ) else { continue }
                 candidates.append(CodexSessionFileCandidate(url: fileURL, signature: fileSignature))
             } catch {
                 accessIssueNote = accessIssueNote ?? LocalFileAccessWarning.codexNote(for: error, path: fileURL.path)
@@ -56,9 +61,9 @@ struct CodexSessionMetricsReader {
 
         let selectedCandidates = candidates
             .sorted { lhs, rhs in
-                let lhsDate = lhs.signature.modifiedAt ?? .distantPast
-                let rhsDate = rhs.signature.modifiedAt ?? .distantPast
-                if lhsDate != rhsDate { return lhsDate > rhsDate }
+                if lhs.signature.modifiedAt != rhs.signature.modifiedAt {
+                    return lhs.signature.modifiedAt > rhs.signature.modifiedAt
+                }
                 return lhs.url.path > rhs.url.path
             }
             .prefix(maximumSessionFiles)
@@ -66,47 +71,24 @@ struct CodexSessionMetricsReader {
         let livePaths = Set(selectedCandidates.map(\.url.path))
 
         for candidate in selectedCandidates {
-            let fileURL = candidate.url
-            let signature = candidate.signature
-            let path = fileURL.path
-            let metrics: CodexSessionMetrics
-            if let cachedMetrics = Self.sessionMetricsCache.metrics(
-                for: path,
-                signature: signature,
-                cacheDirectory: cacheDirectory
-            ) {
-                metrics = cachedMetrics
-            } else {
-                let data: Data
-                do {
-                    data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
-                } catch {
-                    accessIssueNote = accessIssueNote ?? LocalFileAccessWarning.codexNote(for: error, path: fileURL.path)
-                    continue
-                }
-                guard let parsedMetrics = try? CodexUsageReader.parseSessionJsonl(
-                        data: data,
-                        sessionID: fileURL.deletingPathExtension().lastPathComponent,
-                        projectName: nil,
-                        sourceFile: fileURL.path
-                      )
-                else { continue }
-                metrics = RepositoryIdentityResolver.resolve(in: parsedMetrics, fileManager: fileManager)
-                if signature.size > maximumSessionFileBytes,
+            guard !Task.isCancelled else { break }
+            guard candidate.signature.size <= UInt64(CodexUsageReader.maximumReasonableSessionFileBytes) else {
+                aggregate.skippedOversizedSessionFileCount += 1
+                continue
+            }
+            do {
+                let metrics = try metrics(for: candidate, cacheDirectory: cacheDirectory)
+                if candidate.signature.size > UInt64(maximumSessionFileBytes),
                    metrics.eventCount == 0,
                    metrics.latestRateLimitAt == nil {
                     aggregate.skippedOversizedSessionFileCount += 1
                     continue
                 }
-                Self.sessionMetricsCache.store(
-                    metrics,
-                    for: path,
-                    signature: signature,
-                    cacheDirectory: cacheDirectory
-                )
+                aggregate.merge(metrics, seenPoints: &seenPoints, taskIndexes: &taskIndexes)
+            } catch {
+                accessIssueNote = accessIssueNote ??
+                    LocalFileAccessWarning.codexNote(for: error, path: candidate.url.path)
             }
-
-            aggregate.merge(metrics, seenPoints: &seenPoints, taskIndexes: &taskIndexes)
         }
         if prunesCache {
             Self.sessionMetricsCache.retain(paths: livePaths, cacheDirectory: cacheDirectory)
@@ -119,6 +101,146 @@ struct CodexSessionMetricsReader {
     static func resetCacheForTesting() {
         sessionMetricsCache.removeAll()
     }
+
+    private func metrics(
+        for candidate: CodexSessionFileCandidate,
+        cacheDirectory: URL?
+    ) throws -> CodexSessionMetrics {
+        let path = candidate.url.path
+        let signature = candidate.signature
+        let cachedIndex = Self.sessionMetricsCache.index(for: path, cacheDirectory: cacheDirectory)
+
+        if let cachedIndex,
+           cachedIndex.fileID == signature.fileID,
+           cachedIndex.parserVersion == CodexUsageReader.sessionParserVersion,
+           cachedIndex.modifiedAt == signature.modifiedAt,
+           cachedIndex.size == signature.size,
+           cachedIndex.parsedOffset == signature.size {
+            return cachedIndex.aggregate.metrics
+        }
+
+        let resumableIndex: CodexSessionFileIndex? = cachedIndex.flatMap { index in
+            guard index.fileID == signature.fileID,
+                  index.parserVersion == CodexUsageReader.sessionParserVersion,
+                  index.parsedOffset <= signature.size,
+                  (signature.size > index.size ||
+                    signature.size == index.size && signature.modifiedAt == index.modifiedAt)
+            else { return nil }
+            return index
+        }
+        var aggregate = resumableIndex?.aggregate ?? CodexSessionParseAggregate()
+        let parsedOffset = try parse(
+            candidate.url,
+            through: signature.size,
+            from: resumableIndex?.parsedOffset ?? 0,
+            aggregate: &aggregate
+        )
+        aggregate.finalizeTasks()
+        aggregate.metrics = RepositoryIdentityResolver.resolve(in: aggregate.metrics, fileManager: fileManager)
+
+        let index = CodexSessionFileIndex(
+            fileID: signature.fileID,
+            path: path,
+            modifiedAt: signature.modifiedAt,
+            size: signature.size,
+            parsedOffset: parsedOffset,
+            parserVersion: CodexUsageReader.sessionParserVersion,
+            aggregate: aggregate
+        )
+        Self.sessionMetricsCache.store(index, cacheDirectory: cacheDirectory)
+        return aggregate.metrics
+    }
+
+    private func parse(
+        _ fileURL: URL,
+        through endOffset: UInt64,
+        from startOffset: UInt64,
+        aggregate: inout CodexSessionParseAggregate
+    ) throws -> UInt64 {
+        guard startOffset < endOffset else { return startOffset }
+        guard !aggregate.reachedMalformedLineLimit(CodexUsageReader.maximumMalformedSessionLines) else {
+            return endOffset
+        }
+
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+        try handle.seek(toOffset: startOffset)
+
+        let context = CodexSessionParserContext()
+        var committedOffset = startOffset
+        var streamOffset = startOffset
+        var buffer = Data()
+        var discardedLineBytes: UInt64 = 0
+
+        while streamOffset < endOffset,
+              !Task.isCancelled,
+              !aggregate.reachedMalformedLineLimit(CodexUsageReader.maximumMalformedSessionLines) {
+            let requestedBytes = Int(min(UInt64(Self.readChunkBytes), endOffset - streamOffset))
+            guard let chunk = try handle.read(upToCount: requestedBytes), !chunk.isEmpty else { break }
+            buffer.append(chunk)
+            streamOffset += UInt64(chunk.count)
+
+            var lineStart = buffer.startIndex
+            while !Task.isCancelled,
+                  !aggregate.reachedMalformedLineLimit(CodexUsageReader.maximumMalformedSessionLines),
+                  let newline = buffer[lineStart...].firstIndex(of: UInt8(ascii: "\n")) {
+                let line = buffer[lineStart..<newline]
+                let consumedBytes = discardedLineBytes + UInt64(line.count) + 1
+                if discardedLineBytes > 0 || line.count > CodexUsageReader.maximumSessionLineBytes {
+                    aggregate.skipOversizedLine()
+                } else {
+                    autoreleasepool {
+                        _ = aggregate.consumeLine(
+                            Data(line),
+                            sessionID: fileURL.deletingPathExtension().lastPathComponent,
+                            projectName: nil,
+                            sourceFile: fileURL.path,
+                            maximumPayloadBytes: CodexUsageReader.maximumSessionPayloadBytes,
+                            maximumMalformedLines: CodexUsageReader.maximumMalformedSessionLines,
+                            context: context
+                        )
+                    }
+                }
+                committedOffset += consumedBytes
+                discardedLineBytes = 0
+                lineStart = buffer.index(after: newline)
+            }
+            if lineStart > buffer.startIndex {
+                buffer.removeSubrange(buffer.startIndex..<lineStart)
+            }
+            if buffer.count > CodexUsageReader.maximumSessionLineBytes {
+                discardedLineBytes += UInt64(buffer.count)
+                buffer.removeAll(keepingCapacity: true)
+            }
+        }
+
+        if aggregate.reachedMalformedLineLimit(CodexUsageReader.maximumMalformedSessionLines) {
+            return endOffset
+        }
+        guard !Task.isCancelled else { return committedOffset }
+
+        if discardedLineBytes > 0 {
+            aggregate.skipOversizedLine()
+            return committedOffset + discardedLineBytes + UInt64(buffer.count)
+        }
+        guard !buffer.isEmpty else { return committedOffset }
+
+        var trailingAggregate = aggregate
+        let trailingOutcome = autoreleasepool {
+            trailingAggregate.consumeLine(
+                buffer,
+                sessionID: fileURL.deletingPathExtension().lastPathComponent,
+                projectName: nil,
+                sourceFile: fileURL.path,
+                maximumPayloadBytes: CodexUsageReader.maximumSessionPayloadBytes,
+                maximumMalformedLines: CodexUsageReader.maximumMalformedSessionLines,
+                context: context
+            )
+        }
+        guard trailingOutcome != .malformed else { return committedOffset }
+        aggregate = trailingAggregate
+        return committedOffset + UInt64(buffer.count)
+    }
 }
 
 private struct CodexSessionFileCandidate {
@@ -126,72 +248,78 @@ private struct CodexSessionFileCandidate {
     var signature: CodexSessionFileSignature
 }
 
-private struct CodexSessionFileSignature: Codable, Equatable {
-    var size: Int
-    var modifiedAt: Date?
+private struct CodexSessionFileSignature {
+    var fileID: Data
+    var modifiedAt: Date
+    var size: UInt64
 
-    init?(fileURL: URL) throws {
-        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey])
-        guard values.isRegularFile == true,
-              let size = values.fileSize
+    init?(fileURL: URL, fileManager: FileManager) throws {
+        let attributes = try fileManager.attributesOfItem(atPath: fileURL.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              let modifiedAt = attributes[.modificationDate] as? Date,
+              let size = (attributes[.size] as? NSNumber)?.uint64Value,
+              let systemNumber = (attributes[.systemNumber] as? NSNumber)?.uint64Value,
+              let fileNumber = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
         else { return nil }
+        fileID = Data("\(systemNumber):\(fileNumber)".utf8)
+        self.modifiedAt = modifiedAt
         self.size = size
-        self.modifiedAt = values.contentModificationDate
     }
 }
 
+private struct CodexSessionFileIndex: Codable {
+    let fileID: Data
+    let path: String
+    let modifiedAt: Date
+    let size: UInt64
+    let parsedOffset: UInt64
+    let parserVersion: Int
+    let aggregate: CodexSessionParseAggregate
+}
+
 private final class CodexSessionMetricsCache: @unchecked Sendable {
-    private struct Entry {
-        var signature: CodexSessionFileSignature
-        var metrics: CodexSessionMetrics
-    }
-
     private let lock = NSLock()
-    private var entries: [String: Entry] = [:]
+    private var entries: [String: CodexSessionFileIndex] = [:]
 
-    func metrics(
+    func index(
         for path: String,
-        signature: CodexSessionFileSignature,
         cacheDirectory: URL?
-    ) -> CodexSessionMetrics? {
+    ) -> CodexSessionFileIndex? {
         lock.lock()
-        let memoryEntry = entries[path]
+        let memoryIndex = entries[path]
         lock.unlock()
-        if let memoryEntry, memoryEntry.signature == signature {
-            return memoryEntry.metrics
+        if let memoryIndex,
+           memoryIndex.parserVersion == CodexUsageReader.sessionParserVersion {
+            return memoryIndex
         }
 
         guard let cacheDirectory,
               let data = try? Data(contentsOf: cacheFileURL(for: path, in: cacheDirectory)),
-              let record = try? JSONDecoder().decode(CodexSessionMetricsDiskRecord.self, from: data),
-              record.schemaVersion == CodexSessionMetricsDiskRecord.currentSchemaVersion,
-              record.path == path,
-              record.signature == signature
+              let index = try? JSONDecoder().decode(CodexSessionFileIndex.self, from: data),
+              index.parserVersion == CodexUsageReader.sessionParserVersion,
+              index.path == path
         else { return nil }
 
         lock.lock()
-        entries[path] = Entry(signature: signature, metrics: record.metrics)
+        entries[path] = index
         lock.unlock()
-        return record.metrics
+        return index
     }
 
     func store(
-        _ metrics: CodexSessionMetrics,
-        for path: String,
-        signature: CodexSessionFileSignature,
+        _ index: CodexSessionFileIndex,
         cacheDirectory: URL?
     ) {
         lock.lock()
-        entries[path] = Entry(signature: signature, metrics: metrics)
+        entries[index.path] = index
         lock.unlock()
 
         guard let cacheDirectory else { return }
-        let record = CodexSessionMetricsDiskRecord(path: path, signature: signature, metrics: metrics)
-        guard let data = try? JSONEncoder().encode(record) else { return }
+        guard let data = try? JSONEncoder().encode(index) else { return }
         do {
             try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cacheDirectory.path)
-            let cacheURL = cacheFileURL(for: path, in: cacheDirectory)
+            let cacheURL = cacheFileURL(for: index.path, in: cacheDirectory)
             try data.write(to: cacheURL, options: [.atomic])
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cacheURL.path)
         } catch {
@@ -228,37 +356,6 @@ private final class CodexSessionMetricsCache: @unchecked Sendable {
             .map { String(format: "%02x", $0) }
             .joined()
         return directory.appending(path: "\(digest).json")
-    }
-}
-
-private struct CodexSessionMetricsDiskRecord: Codable {
-    static let currentSchemaVersion = 3
-
-    var schemaVersion: Int
-    var path: String
-    var signature: CodexSessionFileSignature
-    var metrics: CodexSessionMetrics
-
-    init(path: String, signature: CodexSessionFileSignature, metrics: CodexSessionMetrics) {
-        schemaVersion = Self.currentSchemaVersion
-        self.path = path
-        self.signature = signature
-        self.metrics = metrics
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case schemaVersion
-        case path
-        case signature
-        case metrics
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
-        path = try container.decode(String.self, forKey: .path)
-        signature = try container.decode(CodexSessionFileSignature.self, forKey: .signature)
-        metrics = try container.decode(CodexSessionMetrics.self, forKey: .metrics)
     }
 }
 

@@ -42,6 +42,7 @@ struct StatisticsView: View {
     @State private var showsQuotaWidgetOnboarding = false
     @State private var settingsSection: SettingsSection = .accounts
     @State private var showsAdvancedRefreshSettings = false
+    @State private var dismissedUpdateVersion: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -154,6 +155,12 @@ struct StatisticsView: View {
 
             Spacer()
 
+            if let release = sidebarUpdateRelease {
+                sidebarUpdateCard(release)
+                    .padding(.bottom, 10)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .bottom)))
+            }
+
             sidebarAccountSelector
                 .padding(.bottom, 18)
         }
@@ -168,10 +175,100 @@ struct StatisticsView: View {
                 .fill(sidebarSeparatorColor)
                 .frame(width: 1)
         }
+        .animation(
+            AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion),
+            value: sidebarUpdateRelease?.version
+        )
     }
 
     private var sidebarSeparatorColor: Color {
         colorScheme == .dark ? AgentBarDesign.hairline : Color(nsColor: .separatorColor).opacity(0.18)
+    }
+
+    private var sidebarUpdateRelease: AppUpdateRelease? {
+        guard let release = updates.downloadedUpdate?.release,
+              dismissedUpdateVersion != release.version
+        else { return nil }
+        return release
+    }
+
+    private func sidebarUpdateCard(_ release: AppUpdateRelease) -> some View {
+        let displayVersion = release.version.hasPrefix("v") || release.version.hasPrefix("V")
+            ? String(release.version.dropFirst())
+            : release.version
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.agentBar(size: 28, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, AgentBarPalette.primary)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L.text("new_version_available", store.language))
+                        .font(.agentBar(size: 9, weight: .bold))
+                        .foregroundStyle(AgentBarPalette.primary)
+                    Text("AgentBar \(displayVersion)")
+                        .font(.agentBar(size: 12, weight: .bold))
+                        .lineLimit(1)
+                    Text("\(L.text("current_version", store.language)) \(AppVersion.currentComparableVersion)")
+                        .font(.agentBar(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    dismissedUpdateVersion = release.version
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.agentBar(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .tactilePlainButton(pressedScale: 0.94)
+                .accessibilityLabel(L.text("dismiss_update", store.language))
+            }
+
+            Button {
+                updates.installDownloadedUpdate()
+            } label: {
+                Text(L.text("install_update", store.language))
+                    .font(.agentBar(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 32)
+                    .background(AgentBarPalette.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .tactilePlainButton(enabled: updates.canInstallDownloadedUpdate)
+            .disabled(!updates.canInstallDownloadedUpdate)
+
+            Link(destination: release.pageURL) {
+                HStack(spacing: 4) {
+                    Text(String(format: L.text("view_release_notes", store.language), release.version))
+                    Image(systemName: "arrow.up.right")
+                        .font(.agentBar(size: 8, weight: .bold))
+                }
+                .font(.agentBar(size: 10, weight: .semibold))
+                .foregroundStyle(AgentBarPalette.primary)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            shape.fill(AgentBarPalette.primary.opacity(colorScheme == .dark ? 0.14 : 0.06))
+        }
+        .overlay {
+            shape.strokeBorder(AgentBarPalette.primary.opacity(colorScheme == .dark ? 0.28 : 0.20), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.12 : 0.06), radius: 8, y: 2)
     }
 
     private var sidebarBrand: some View {

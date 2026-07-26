@@ -132,7 +132,7 @@ struct AuditView: View {
     }
 
     private func statusPill(_ snapshot: AuditUsageSnapshot) -> some View {
-        Text("\(snapshot.rangeTasks.count) \(localized("tasks")) · JSONL")
+        Text("\(snapshot.rangePoints.count) \(localized("calls")) · \(snapshot.rangeTasks.count) \(localized("tasks")) · JSONL")
             .font(.agentBar(size: 12, weight: .bold))
             .foregroundStyle(AgentBarPalette.primary)
             .padding(.horizontal, 10)
@@ -166,7 +166,7 @@ struct AuditView: View {
         GeometryReader { proxy in
             let columns = Self.kpiGridColumns(for: proxy.size.width)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.kpiGridSpacing), count: columns), spacing: Self.kpiGridSpacing) {
-                metricCard(localized("visible_tasks"), "\(snapshot.rangeTasks.count)")
+                metricCard(localized("visible_calls"), "\(snapshot.rangePoints.count)")
                 metricCard(localized("total_tokens"), DisplayFormatters.compactTokenString(snapshot.composition.total, language: store.language))
                 metricCard(localized("cached_input"), DisplayFormatters.compactTokenString(snapshot.composition.cachedInput, language: store.language))
                 metricCard(localized("uncached_input"), DisplayFormatters.compactTokenString(max(0, snapshot.composition.input - snapshot.composition.cachedInput), language: store.language))

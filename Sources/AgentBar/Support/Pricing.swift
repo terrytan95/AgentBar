@@ -7,23 +7,28 @@ struct ModelPrice: Sendable {
     var output: Decimal
     var cacheRead: Decimal
     var cacheCreation: Decimal
+
+    var cacheCreation1h: Decimal { input * 2 }
 }
 
 enum Pricing {
     static let table: [String: ModelPrice] = [
         "claude-fable-5": .init(input: 10, output: 50, cacheRead: 1.00, cacheCreation: 12.50),
+        "claude-mythos-5": .init(input: 10, output: 50, cacheRead: 1.00, cacheCreation: 12.50),
+        "claude-mythos-preview": .init(input: 10, output: 50, cacheRead: 1.00, cacheCreation: 12.50),
         "claude-opus-4-8": .init(input: 5, output: 25, cacheRead: 0.50, cacheCreation: 6.25),
         "claude-opus-4-7": .init(input: 5, output: 25, cacheRead: 0.50, cacheCreation: 6.25),
         "claude-opus-4-6": .init(input: 5, output: 25, cacheRead: 0.50, cacheCreation: 6.25),
         "claude-opus-4-5": .init(input: 5, output: 25, cacheRead: 0.50, cacheCreation: 6.25),
         "claude-opus-4-1": .init(input: 15, output: 75, cacheRead: 1.50, cacheCreation: 18.75),
         "claude-opus-4": .init(input: 15, output: 75, cacheRead: 1.50, cacheCreation: 18.75),
-        "claude-sonnet-4-7": .init(input: 3, output: 15, cacheRead: 0.30, cacheCreation: 3.75),
+        "claude-sonnet-5": .init(input: 3, output: 15, cacheRead: 0.30, cacheCreation: 3.75),
+        "claude-sonnet-5-intro": .init(input: 2, output: 10, cacheRead: 0.20, cacheCreation: 2.50),
         "claude-sonnet-4-6": .init(input: 3, output: 15, cacheRead: 0.30, cacheCreation: 3.75),
         "claude-sonnet-4-5": .init(input: 3, output: 15, cacheRead: 0.30, cacheCreation: 3.75),
         "claude-sonnet-4": .init(input: 3, output: 15, cacheRead: 0.30, cacheCreation: 3.75),
         "claude-haiku-4-5": .init(input: 1, output: 5, cacheRead: 0.10, cacheCreation: 1.25),
-        "claude-haiku-4": .init(input: 0.8, output: 4, cacheRead: 0.08, cacheCreation: 1.0),
+        "claude-3-5-haiku": .init(input: 0.8, output: 4, cacheRead: 0.08, cacheCreation: 1.0),
 
         "gpt-5": .init(input: 1.25, output: 10, cacheRead: 0.125, cacheCreation: 0),
         "gpt-5-mini": .init(input: 0.25, output: 2, cacheRead: 0.025, cacheCreation: 0),
@@ -55,6 +60,19 @@ enum Pricing {
         "codex-mini-latest": .init(input: 1.50, output: 6, cacheRead: 0.375, cacheCreation: 0)
     ]
 
+    private static let sonnet5StandardPricingStart = Calendar(identifier: .gregorian).date(
+        from: DateComponents(timeZone: TimeZone(secondsFromGMT: 0), year: 2026, month: 9, day: 1)
+    )!
+    private static let dataResidencyModels: Set<String> = [
+        "claude-fable-5", "claude-mythos-5", "claude-mythos-preview",
+        "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6",
+        "claude-sonnet-5", "claude-sonnet-4-6"
+    ]
+    private static let fastModeMultipliers: [String: Decimal] = [
+        "claude-opus-4-8": 2,
+        "claude-opus-4-7": 6
+    ]
+
     static func normalize(model: String) -> String {
         var normalized = model.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalized.hasPrefix("openai/") {
@@ -82,13 +100,26 @@ enum Pricing {
         input: Int,
         output: Int,
         cacheRead: Int,
-        cacheCreation: Int
+        cacheCreation: Int,
+        cacheCreation1h: Int = 0,
+        inferenceGeo: String? = nil,
+        speed: String? = nil,
+        webSearchRequests: Int = 0,
+        at date: Date = Date()
     ) -> Decimal {
-        guard let price = table[normalize(model: model)] else { return 0 }
-        return Decimal(input) * price.input / perMillion
+        let normalizedModel = normalize(model: model)
+        let priceKey = normalizedModel == "claude-sonnet-5" && date < sonnet5StandardPricingStart
+            ? "claude-sonnet-5-intro"
+            : normalizedModel
+        guard let price = table[priceKey] else { return 0 }
+        let tokenCost = Decimal(input) * price.input / perMillion
             + Decimal(output) * price.output / perMillion
             + Decimal(cacheRead) * price.cacheRead / perMillion
             + Decimal(cacheCreation) * price.cacheCreation / perMillion
+            + Decimal(cacheCreation1h) * price.cacheCreation1h / perMillion
+        let residencyMultiplier: Decimal = inferenceGeo?.lowercased() == "us" && dataResidencyModels.contains(normalizedModel) ? 1.1 : 1
+        let speedMultiplier = speed?.lowercased() == "fast" ? fastModeMultipliers[normalizedModel, default: 1] : 1
+        return tokenCost * residencyMultiplier * speedMultiplier + Decimal(max(0, webSearchRequests)) / 100
     }
 
     static func cost(model: String, tokens: TokenTotals) -> Decimal {
@@ -98,15 +129,16 @@ enum Pricing {
             input: uncachedInput,
             output: tokens.output + tokens.reasoningOutput,
             cacheRead: tokens.cachedInput,
-            cacheCreation: 0
+            cacheCreation: 0,
+            at: Date()
         )
     }
 
     static let fingerprint: String = {
         let body = table.keys.sorted().map { key -> String in
             let price = table[key]!
-            return "\(key):\(price.input)/\(price.output)/\(price.cacheRead)/\(price.cacheCreation)"
-        }.joined(separator: ";")
+            return "\(key):\(price.input)/\(price.output)/\(price.cacheRead)/\(price.cacheCreation)/\(price.cacheCreation1h)"
+        }.joined(separator: ";") + ";sonnet5-standard=2026-09-01;us=1.1;fast-opus-4-8=2;fast-opus-4-7=6;web-search=0.01"
         let digest = SHA256.hash(data: Data(body.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }()

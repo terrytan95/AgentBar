@@ -142,7 +142,7 @@ struct StatisticsView: View {
                 sidebarItem(L.text("project_billing", store.language), systemImage: "folder", active: topTab == .usage && viewMode == .projects) {
                     setPage(tab: .usage, viewMode: .projects)
                 }
-                sidebarItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
+                sidebarItem(L.text("quota_and_resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
                     setPage(tab: .usage, viewMode: .resets)
                 }
                 sidebarItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
@@ -306,7 +306,7 @@ struct StatisticsView: View {
                 topNavigationItem(L.text("project_billing", store.language), systemImage: "folder", active: topTab == .usage && viewMode == .projects) {
                     setPage(tab: .usage, viewMode: .projects)
                 }
-                topNavigationItem(L.text("resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
+                topNavigationItem(L.text("quota_and_resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
                     setPage(tab: .usage, viewMode: .resets)
                 }
                 topNavigationItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
@@ -665,13 +665,13 @@ struct StatisticsView: View {
                         accent: .green,
                     )
                     DashboardKPI(
-                        title: L.text("openai_overview", store.language),
-                        value: serviceCostText(.codex),
-                        delta: serviceShareText(.codex),
+                        title: L.text(overviewService == .codex ? "openai_overview" : "anthropic_overview", store.language),
+                        value: serviceCostText(overviewService),
+                        delta: serviceShareText(overviewService),
                         subtitle: L.text("share_of_total_cost", store.language),
                         systemImage: "sparkles",
-                        marker: AgentBarPalette.tertiary,
-                        accent: AgentBarPalette.tertiary,
+                        marker: overviewService == .codex ? AgentBarPalette.tertiary : AgentBarPalette.secondary,
+                        accent: overviewService == .codex ? AgentBarPalette.tertiary : AgentBarPalette.secondary,
                     )
                 }
             }
@@ -778,7 +778,7 @@ struct StatisticsView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(L.text("resets", store.language))
+                    Text(L.text("quota_and_resets", store.language))
                         .font(.agentBar(size: 20, weight: .bold))
                     Text(L.text("reset_intro", store.language))
                         .font(.agentBar(size: 12, weight: .semibold))
@@ -789,14 +789,18 @@ struct StatisticsView: View {
             }
 
             GeometryReader { proxy in
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: proxy.size.width < 820 ? 2 : 4), spacing: 14) {
-                    SummaryChip(title: L.text("resets", store.language), value: "\(totalResetCreditsCount)", color: .green, systemImage: "checkmark")
-                    SummaryChip(title: L.text("next_expiry", store.language), value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry), systemImage: "clock")
-                    if let fiveHour = store.activeAccount?.fiveHourWindow {
-                        SummaryChip(title: L.text("five_hour_left", store.language), value: DisplayFormatters.percentString(fiveHour.remainingPercent), color: quotaMeterColor(fiveHour.remainingPercent), progress: fiveHour.remainingPercent)
-                    }
-                    if let weekly = store.activeAccount?.weeklyWindow {
-                        SummaryChip(title: L.text("weekly_left", store.language), value: DisplayFormatters.percentString(weekly.remainingPercent), color: quotaMeterColor(weekly.remainingPercent), progress: weekly.remainingPercent)
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.flexible(), spacing: 14),
+                        count: proxy.size.width < 820 || codexAccounts.isEmpty ? 2 : 4
+                    ),
+                    spacing: 14
+                ) {
+                    SummaryChip(title: L.text("total_tokens", store.language), value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language), color: AgentBarPalette.primary, systemImage: "cylinder.split.1x2.fill")
+                    SummaryChip(title: L.text("total_cost", store.language), value: costText(summary.estimatedCostUSD), color: .green, systemImage: "dollarsign")
+                    if !codexAccounts.isEmpty {
+                        SummaryChip(title: L.text("resets", store.language), value: "\(totalResetCreditsCount)", color: .green, systemImage: "checkmark")
+                        SummaryChip(title: L.text("next_expiry", store.language), value: nextResetExpiry.map { DisplayFormatters.shortDateTimeString(for: $0, language: store.language) } ?? "--", color: resetExpiryColor(nextResetExpiry), systemImage: "clock")
                     }
                 }
             }
@@ -804,12 +808,18 @@ struct StatisticsView: View {
 
             ResetAdvicePanel(advice: resetSpendAdvice)
 
-            HStack(alignment: .top, spacing: 14) {
-                Panel(title: L.text("expiry_watch", store.language)) {
-                    resetExpiryRows
+            if codexAccounts.isEmpty {
+                Panel(title: L.text("by_service", store.language)) {
+                    serviceMixRows
                 }
-                Panel(title: L.text("current_windows", store.language)) {
-                    currentLimitsRows
+            } else {
+                HStack(alignment: .top, spacing: 14) {
+                    Panel(title: L.text("expiry_watch", store.language)) {
+                        resetExpiryRows
+                    }
+                    Panel(title: L.text("current_windows", store.language)) {
+                        currentLimitsRows
+                    }
                 }
             }
         }
@@ -1223,6 +1233,10 @@ struct StatisticsView: View {
         !claudeAccounts.isEmpty || store.points.contains { $0.service == .claudeCode }
     }
 
+    private var overviewService: UsageService {
+        codexAccounts.isEmpty && hasClaudeData ? .claudeCode : .codex
+    }
+
     private func kpiColumns(for width: CGFloat) -> [GridItem] {
         let count = width < 760 ? 2 : 3
         return Array(repeating: GridItem(.flexible(), spacing: 12), count: count)
@@ -1252,9 +1266,14 @@ struct StatisticsView: View {
     }
 
     private func serviceShareText(_ service: UsageService) -> String {
-        let total = max(1, summary.serviceBreakdown.values.reduce(0, +))
-        let value = summary.serviceBreakdown[service, default: 0]
-        return "\(Int((Double(value) / Double(total) * 100).rounded()))% \(L.text("share", store.language))"
+        let total = selectedRangePoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
+        guard total > 0 else { return "0% \(L.text("share", store.language))" }
+        let serviceCost = selectedRangePoints
+            .filter { $0.service == service }
+            .compactMap(\.estimatedCostUSD)
+            .reduce(Decimal(0), +)
+        let share = NSDecimalNumber(decimal: serviceCost / total).doubleValue * 100
+        return "\(Int(share.rounded()))% \(L.text("share", store.language))"
     }
 
     private func costText(_ value: Decimal?) -> String {
@@ -1374,7 +1393,16 @@ struct StatisticsView: View {
     }
 
     private var resetSpendAdvice: ResetSpendAdvice {
-        ResetSpendAdvice.make(
+        guard !codexAccounts.isEmpty else {
+            return ResetSpendAdvice(
+                title: L.text(hasClaudeData ? "local_usage_available" : "no_usage_sources", store.language),
+                message: L.text(hasClaudeData ? "claude_quota_unavailable_message" : "no_usage_sources_message", store.language),
+                detail: hasClaudeData ? "Claude Code" : "AgentBar",
+                systemImage: hasClaudeData ? "chart.bar.fill" : "questionmark.circle",
+                color: hasClaudeData ? AgentBarPalette.secondary : .secondary
+            )
+        }
+        return ResetSpendAdvice.make(
             fiveHour: store.activeAccount?.fiveHourWindow,
             weekly: store.activeAccount?.weeklyWindow,
             resetCount: totalResetCreditsCount,

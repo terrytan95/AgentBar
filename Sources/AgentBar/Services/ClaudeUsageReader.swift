@@ -24,6 +24,7 @@ enum ClaudeUsageReader {
         let candidates = discovery.files
         var points: [UsagePoint] = []
         var seenMessageIDs = Set<String>()
+        var authenticationFailed = false
 
         for candidate in candidates.prefix(maximumSessionFiles) where candidate.size <= maximumSessionFileBytes {
             do {
@@ -31,7 +32,8 @@ enum ClaudeUsageReader {
                     candidate.url,
                     projectsDirectory: projectsDirectory,
                     points: &points,
-                    seenMessageIDs: &seenMessageIDs
+                    seenMessageIDs: &seenMessageIDs,
+                    authenticationFailed: &authenticationFailed
                 )
             } catch {
                 accessIssueNote = accessIssueNote
@@ -41,6 +43,14 @@ enum ClaudeUsageReader {
 
         if let accessIssueNote {
             return snapshot(status: .needsAuthorization, points: points, note: accessIssueNote, refreshedAt: now)
+        }
+        if points.isEmpty, authenticationFailed {
+            return snapshot(
+                status: .needsAuthorization,
+                points: [],
+                note: "Claude Code is installed but not signed in. Run claude auth login, then refresh AgentBar.",
+                refreshedAt: now
+            )
         }
         let note = points.isEmpty
             ? "Claude Code local usage records were not found."
@@ -93,7 +103,8 @@ enum ClaudeUsageReader {
         _ fileURL: URL,
         projectsDirectory: URL,
         points: inout [UsagePoint],
-        seenMessageIDs: inout Set<String>
+        seenMessageIDs: inout Set<String>,
+        authenticationFailed: inout Bool
     ) throws {
         let handle = try FileHandle(forReadingFrom: fileURL)
         defer { try? handle.close() }
@@ -123,7 +134,8 @@ enum ClaudeUsageReader {
                     decoder: decoder,
                     dateParser: dateParser,
                     points: &points,
-                    seenMessageIDs: &seenMessageIDs
+                    seenMessageIDs: &seenMessageIDs,
+                    authenticationFailed: &authenticationFailed
                 )
             }
             if buffer.count > maximumSessionLineBytes {
@@ -141,7 +153,8 @@ enum ClaudeUsageReader {
                 decoder: decoder,
                 dateParser: dateParser,
                 points: &points,
-                seenMessageIDs: &seenMessageIDs
+                seenMessageIDs: &seenMessageIDs,
+                authenticationFailed: &authenticationFailed
             )
         }
     }
@@ -154,10 +167,14 @@ enum ClaudeUsageReader {
         decoder: JSONDecoder,
         dateParser: ISO8601TimestampParser,
         points: inout [UsagePoint],
-        seenMessageIDs: inout Set<String>
+        seenMessageIDs: inout Set<String>,
+        authenticationFailed: inout Bool
     ) {
         guard line.count <= maximumSessionLineBytes,
-              let event = try? decoder.decode(ClaudeSessionEvent.self, from: Data(line)),
+              let event = try? decoder.decode(ClaudeSessionEvent.self, from: Data(line))
+        else { return }
+        authenticationFailed = authenticationFailed || event.error == "authentication_failed"
+        guard
               event.type == "assistant",
               let message = event.message,
               let usage = message.usage,
@@ -185,7 +202,12 @@ enum ClaudeUsageReader {
                     input: usage.inputTokens,
                     output: usage.outputTokens,
                     cacheRead: usage.cacheReadInputTokens,
-                    cacheCreation: usage.cacheCreationInputTokens
+                    cacheCreation: usage.cacheCreation5mInputTokens,
+                    cacheCreation1h: usage.cacheCreation1hInputTokens,
+                    inferenceGeo: usage.inferenceGeo,
+                    speed: usage.speed,
+                    webSearchRequests: usage.webSearchRequests,
+                    at: date
                 ),
                 sessionID: event.sessionID,
                 projectName: projectName,
@@ -207,10 +229,30 @@ enum ClaudeUsageReader {
         note: String,
         refreshedAt: Date
     ) -> UsageSnapshot {
-        UsageSnapshot(
+        let tokens = points.reduce(TokenTotals.zero) { $0 + $1.tokens }
+        let costs = points.compactMap(\.estimatedCostUSD)
+        let accounts = points.isEmpty ? [] : [
+            UsageAccount(
+                id: "claude-code-local",
+                service: .claudeCode,
+                displayName: "Claude Code",
+                username: nil,
+                maskedEmail: nil,
+                plan: nil,
+                sourceDescription: "Local Claude Code session usage",
+                status: status,
+                fiveHourWindow: nil,
+                weeklyWindow: nil,
+                tokens: tokens,
+                estimatedCostUSD: costs.isEmpty ? nil : costs.reduce(Decimal(0), +),
+                lastUpdated: points.map(\.date).max(),
+                isActive: true
+            )
+        ]
+        return UsageSnapshot(
             service: .claudeCode,
             status: status,
-            accounts: [],
+            accounts: accounts,
             points: points,
             securityNotes: [note],
             refreshedAt: refreshedAt,
@@ -227,6 +269,7 @@ private struct ClaudeSessionFile {
 
 private struct ClaudeSessionEvent: Decodable {
     var type: String?
+    var error: String?
     var sessionID: String?
     var timestamp: String?
     var cwd: String?
@@ -234,6 +277,7 @@ private struct ClaudeSessionEvent: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case type
+        case error
         case sessionID = "sessionId"
         case legacySessionID = "session_id"
         case timestamp
@@ -244,6 +288,7 @@ private struct ClaudeSessionEvent: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         type = try container.decodeIfPresent(String.self, forKey: .type)
+        error = try container.decodeIfPresent(String.self, forKey: .error)
         sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
             ?? container.decodeIfPresent(String.self, forKey: .legacySessionID)
         timestamp = try container.decodeIfPresent(String.self, forKey: .timestamp)
@@ -263,6 +308,26 @@ private struct ClaudeSessionUsage: Decodable {
     var cacheCreationInputTokens: Int
     var cacheReadInputTokens: Int
     var outputTokens: Int
+    var cacheCreation: ClaudeCacheCreation?
+    var inferenceGeo: String?
+    var speed: String?
+    var serverToolUse: ClaudeServerToolUse?
+
+    var cacheCreation1hInputTokens: Int {
+        max(0, cacheCreation?.ephemeral1hInputTokens ?? 0)
+    }
+
+    var cacheCreation5mInputTokens: Int {
+        let ephemeral5mInputTokens = max(0, cacheCreation?.ephemeral5mInputTokens ?? 0)
+        let ephemeral1hInputTokens = max(0, cacheCreation?.ephemeral1hInputTokens ?? 0)
+        guard ephemeral5mInputTokens + ephemeral1hInputTokens > 0
+        else { return cacheCreationInputTokens }
+        return ephemeral5mInputTokens
+    }
+
+    var webSearchRequests: Int {
+        max(0, serverToolUse?.webSearchRequests ?? 0)
+    }
 
     var tokens: TokenTotals? {
         guard inputTokens >= 0,
@@ -286,6 +351,28 @@ private struct ClaudeSessionUsage: Decodable {
         case cacheCreationInputTokens = "cache_creation_input_tokens"
         case cacheReadInputTokens = "cache_read_input_tokens"
         case outputTokens = "output_tokens"
+        case cacheCreation = "cache_creation"
+        case inferenceGeo = "inference_geo"
+        case speed
+        case serverToolUse = "server_tool_use"
+    }
+}
+
+private struct ClaudeCacheCreation: Decodable {
+    var ephemeral5mInputTokens: Int?
+    var ephemeral1hInputTokens: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case ephemeral5mInputTokens = "ephemeral_5m_input_tokens"
+        case ephemeral1hInputTokens = "ephemeral_1h_input_tokens"
+    }
+}
+
+private struct ClaudeServerToolUse: Decodable {
+    var webSearchRequests: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case webSearchRequests = "web_search_requests"
     }
 }
 

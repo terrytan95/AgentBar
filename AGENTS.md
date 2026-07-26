@@ -11,3 +11,7 @@ Use the default canonical triage labels. See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 This repo uses single-context domain docs. See `docs/agents/domain.md`.
+
+### Releases
+
+When the user asks to make a release, follow `docs/agents/release.md`. **Do not run tests** unless they explicitly ask.

@@ -75,7 +75,12 @@ if [ -n "${AGENTBAR_SWIFT_BUILD_EXTRA_ARGS:-}" ]; then
   SWIFT_BUILD_ARGS+=("${EXTRA_SWIFT_BUILD_ARGS[@]}")
 fi
 swift build "${SWIFT_BUILD_ARGS[@]}"
-BUILD_BINARY="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)/$APP_NAME"
+BUILD_BIN_PATH="$(swift build \
+  --scratch-path "$BUILD_SCRATCH_DIR" \
+  -c "$BUILD_CONFIGURATION" \
+  --show-bin-path
+)"
+BUILD_BINARY="$BUILD_BIN_PATH/$APP_NAME"
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"

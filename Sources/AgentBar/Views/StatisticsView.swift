@@ -423,6 +423,17 @@ struct StatisticsView: View {
                     .font(.agentBar(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
+            if let error = settings.settingsPersistenceError {
+                Label(
+                    error.localizedMessage(language: store.language),
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.agentBar(size: 12, weight: .semibold))
+                .foregroundStyle(.orange)
+                .padding(10)
+                .frame(maxWidth: 620, alignment: .leading)
+                .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            }
             Picker("", selection: $settingsSection) {
                 ForEach(SettingsSection.allCases) { section in
                     Text(section.title(store.language)).tag(section)

@@ -181,9 +181,11 @@ final class SettingsStore: ObservableObject {
     }
 
     @Published private(set) var loginItemMessage: String?
+    @Published private(set) var settingsPersistenceError: SettingsPersistenceError?
 
     private let defaults: UserDefaults
     private let persistence: SettingsPersistence?
+    private var persistenceWritesDisabled = false
     private var storedPopoverHeight = Double(PopoverLayout.defaultHeight)
     private var popoverMaximumHeight = Double(PopoverLayout.maximumHeight)
 
@@ -193,9 +195,21 @@ final class SettingsStore: ObservableObject {
 
     init(defaults: UserDefaults, persistenceURL: URL? = nil) {
         let persistence = persistenceURL.map(SettingsPersistence.init)
-        persistence?.restore(defaults: defaults, keys: Keys.all)
+        let restoreError: SettingsPersistenceError?
+        do {
+            try persistence?.restore(defaults: defaults, keys: Keys.all)
+            restoreError = nil
+        } catch let error as SettingsPersistenceError {
+            restoreError = error
+            NSLog("AgentBar settings persistence error: %@", String(describing: error))
+        } catch {
+            restoreError = .unreadableBackup
+            NSLog("AgentBar settings persistence error: %@", error.localizedDescription)
+        }
         self.defaults = defaults
         self.persistence = persistence
+        settingsPersistenceError = restoreError
+        persistenceWritesDisabled = restoreError?.stopsWrites == true
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? .english
         let savedInterval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = savedInterval >= 30 ? savedInterval : 60
@@ -236,6 +250,9 @@ final class SettingsStore: ObservableObject {
             savedPopoverHeight > 0 ? savedPopoverHeight : Double(PopoverLayout.defaultHeight),
             maximumHeight: popoverMaximumHeight
         )
+        persistence?.setErrorHandler { [weak self] error in
+            self?.recordPersistenceError(error)
+        }
         persist(popoverHeight, forKey: Keys.popoverHeight)
     }
 
@@ -293,7 +310,20 @@ final class SettingsStore: ObservableObject {
 
     private func persist(_ value: Any?, forKey key: String) {
         defaults.set(value, forKey: key)
-        persistence?.save(value, forKey: key, defaults: defaults, keys: Keys.all)
+        guard let persistence, !persistenceWritesDisabled else { return }
+        do {
+            try persistence.save(value, forKey: key, defaults: defaults, keys: Keys.all)
+        } catch let error as SettingsPersistenceError {
+            recordPersistenceError(error)
+        } catch {
+            recordPersistenceError(.writeFailed(error))
+        }
+    }
+
+    private func recordPersistenceError(_ error: SettingsPersistenceError) {
+        settingsPersistenceError = error
+        persistenceWritesDisabled = persistenceWritesDisabled || error.stopsWrites
+        NSLog("AgentBar settings persistence error: %@", String(describing: error))
     }
 
     private func applyLoginItemPreference() {
@@ -371,8 +401,54 @@ final class SettingsStore: ObservableObject {
     }
 }
 
+enum SettingsPersistenceError: Error, @unchecked Sendable {
+    case unreadableBackup
+    case corruptedBackup
+    case unsupportedSchema(Int)
+    case directoryCreationFailed(Error)
+    case writeFailed(Error)
+
+    var stopsWrites: Bool {
+        switch self {
+        case .unsupportedSchema:
+            true
+        case let .directoryCreationFailed(error), let .writeFailed(error):
+            Self.isDiskFull(error)
+        case .unreadableBackup, .corruptedBackup:
+            false
+        }
+    }
+
+    func localizedMessage(language: AppLanguage) -> String {
+        let key = switch self {
+        case .unreadableBackup:
+            "settings_backup_unreadable_warning"
+        case .corruptedBackup:
+            "settings_backup_corrupted_warning"
+        case .unsupportedSchema:
+            "settings_backup_schema_warning"
+        case let .directoryCreationFailed(error), let .writeFailed(error):
+            Self.isDiskFull(error)
+                ? "settings_backup_disk_full_warning"
+                : "settings_backup_write_warning"
+        }
+        return L.text(key, language)
+    }
+
+    private static func isDiskFull(_ error: Error) -> Bool {
+        let error = error as NSError
+        if error.domain == NSCocoaErrorDomain, error.code == NSFileWriteOutOfSpaceError {
+            return true
+        }
+        return (error.userInfo[NSUnderlyingErrorKey] as? Error).map(isDiskFull) ?? false
+    }
+}
+
 @MainActor
 private final class SettingsPersistence {
+    private static let schemaVersionKey = "_schemaVersion"
+    private static let currentSchemaVersion = 1
+
     static let defaultURL = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appending(path: "AgentBar/Settings.plist")
@@ -381,31 +457,101 @@ private final class SettingsPersistence {
     private let writer = SettingsBackupWriter()
     private var snapshot: [String: PropertyListValue]?
     private var revision = 0
+    private var errorHandler: (@MainActor @Sendable (SettingsPersistenceError) -> Void)?
 
     init(url: URL) {
         self.url = url
     }
 
-    func restore(defaults: UserDefaults, keys: [String]) {
-        guard let data = try? Data(contentsOf: url),
-              let values = try? PropertyListDecoder().decode([String: PropertyListValue].self, from: data)
-        else { return }
+    func restore(defaults: UserDefaults, keys: [String]) throws {
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            let error = error as NSError
+            guard error.domain == NSCocoaErrorDomain, error.code == NSFileReadNoSuchFileError else {
+                NSLog("AgentBar settings backup read failed: %@", error.localizedDescription)
+                throw SettingsPersistenceError.unreadableBackup
+            }
+            return
+        }
 
+        let values: [String: PropertyListValue]
+        do {
+            values = try PropertyListDecoder().decode([String: PropertyListValue].self, from: data)
+        } catch {
+            quarantineCorruptedBackup(cause: error)
+            throw SettingsPersistenceError.corruptedBackup
+        }
+
+        let schemaVersion: Int
+        if let storedSchemaVersion = values[Self.schemaVersionKey] {
+            guard case let .integer(storedSchemaVersion) = storedSchemaVersion,
+                  storedSchemaVersion >= 0
+            else {
+                quarantineCorruptedBackup(cause: SettingsPersistenceError.corruptedBackup)
+                throw SettingsPersistenceError.corruptedBackup
+            }
+            schemaVersion = storedSchemaVersion
+        } else {
+            schemaVersion = 0
+        }
+        guard schemaVersion <= Self.currentSchemaVersion else {
+            throw SettingsPersistenceError.unsupportedSchema(schemaVersion)
+        }
         for key in keys where defaults.object(forKey: key) == nil {
             defaults.set(values[key]?.propertyListObject, forKey: key)
         }
     }
 
-    func save(_ value: Any?, forKey key: String, defaults: UserDefaults, keys: [String]) {
-        var snapshot = snapshot ?? keys.reduce(into: [String: PropertyListValue]()) { values, key in
-            values[key] = PropertyListValue(defaults.object(forKey: key))
+    func setErrorHandler(
+        _ handler: @escaping @MainActor @Sendable (SettingsPersistenceError) -> Void
+    ) {
+        errorHandler = handler
+    }
+
+    func save(_ value: Any?, forKey key: String, defaults: UserDefaults, keys: [String]) throws {
+        var snapshot: [String: PropertyListValue]
+        do {
+            if let currentSnapshot = self.snapshot {
+                snapshot = currentSnapshot
+            } else {
+                snapshot = [:]
+                for key in keys {
+                    snapshot[key] = try PropertyListValue(defaults.object(forKey: key))
+                }
+            }
+            snapshot[key] = try PropertyListValue(value)
+        } catch {
+            throw SettingsPersistenceError.writeFailed(error)
         }
-        snapshot[key] = PropertyListValue(value)
+        snapshot[Self.schemaVersionKey] = .integer(Self.currentSchemaVersion)
         self.snapshot = snapshot
         revision += 1
         let revision = revision
+        let errorHandler = errorHandler
         Task {
-            await writer.scheduleSnapshot(snapshot, revision: revision, to: url)
+            await writer.scheduleSnapshot(
+                snapshot,
+                revision: revision,
+                to: url,
+                errorHandler: errorHandler
+            )
+        }
+    }
+
+    private func quarantineCorruptedBackup(cause: Error) {
+        let timestamp = Int(Date().timeIntervalSince1970 * 1_000)
+        let corruptURL = url.appendingPathExtension("corrupt-\(timestamp)")
+        do {
+            try FileManager.default.moveItem(at: url, to: corruptURL)
+            NSLog("AgentBar isolated corrupted settings backup at %@", corruptURL.path)
+        } catch {
+            NSLog(
+                "AgentBar settings backup quarantine failed after %@: %@",
+                String(describing: cause),
+                error.localizedDescription
+            )
         }
     }
 }
@@ -413,13 +559,15 @@ private final class SettingsPersistence {
 private actor SettingsBackupWriter {
     private var latestRevision = 0
     private var pendingTask: Task<Void, Never>?
+    private var writesDisabled = false
 
     func scheduleSnapshot(
         _ snapshot: [String: PropertyListValue],
         revision: Int,
-        to url: URL
+        to url: URL,
+        errorHandler: (@MainActor @Sendable (SettingsPersistenceError) -> Void)?
     ) {
-        guard revision > latestRevision else { return }
+        guard revision > latestRevision, !writesDisabled else { return }
         latestRevision = revision
         pendingTask?.cancel()
         pendingTask = Task {
@@ -429,13 +577,39 @@ private actor SettingsBackupWriter {
 
                 let encoder = PropertyListEncoder()
                 encoder.outputFormat = .binary
-                let data = try encoder.encode(snapshot)
-                try FileManager.default.createDirectory(
-                    at: url.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try data.write(to: url, options: .atomic)
-            } catch {}
+                let data: Data
+                do {
+                    data = try encoder.encode(snapshot)
+                } catch {
+                    throw SettingsPersistenceError.writeFailed(error)
+                }
+                do {
+                    try FileManager.default.createDirectory(
+                        at: url.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                } catch {
+                    throw SettingsPersistenceError.directoryCreationFailed(error)
+                }
+                do {
+                    try data.write(to: url, options: .atomic)
+                } catch {
+                    throw SettingsPersistenceError.writeFailed(error)
+                }
+            } catch is CancellationError {
+                return
+            } catch let error as SettingsPersistenceError {
+                writesDisabled = writesDisabled || error.stopsWrites
+                if let errorHandler {
+                    await errorHandler(error)
+                }
+            } catch {
+                let error = SettingsPersistenceError.writeFailed(error)
+                writesDisabled = writesDisabled || error.stopsWrites
+                if let errorHandler {
+                    await errorHandler(error)
+                }
+            }
         }
     }
 }
@@ -447,7 +621,8 @@ private enum PropertyListValue: Codable, Sendable {
     case string(String)
     case data(Data)
 
-    init?(_ value: Any?) {
+    init?(_ value: Any?) throws {
+        guard let value else { return nil }
         switch value {
         case let value as Bool:
             self = .bool(value)
@@ -460,7 +635,7 @@ private enum PropertyListValue: Codable, Sendable {
         case let value as Data:
             self = .data(value)
         default:
-            return nil
+            throw PropertyListValueError.unsupportedType(String(reflecting: type(of: value)))
         }
     }
 
@@ -502,6 +677,17 @@ private enum PropertyListValue: Codable, Sendable {
         case let .double(value): try container.encode(value)
         case let .string(value): try container.encode(value)
         case let .data(value): try container.encode(value)
+        }
+    }
+}
+
+private enum PropertyListValueError: LocalizedError {
+    case unsupportedType(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .unsupportedType(type):
+            "Unsupported settings backup value type: \(type)"
         }
     }
 }

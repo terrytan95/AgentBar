@@ -23,11 +23,11 @@ final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
     @Published var language: AppLanguage {
-        didSet { defaults.set(language.rawValue, forKey: Keys.language) }
+        didSet { persist(language.rawValue, forKey: Keys.language) }
     }
 
     @Published var refreshInterval: TimeInterval {
-        didSet { defaults.set(refreshInterval, forKey: Keys.refreshInterval) }
+        didSet { persist(refreshInterval, forKey: Keys.refreshInterval) }
     }
 
     @Published var quotaCapacityHistoryInterval: TimeInterval {
@@ -35,85 +35,84 @@ final class SettingsStore: ObservableObject {
             let clamped = Self.clampedQuotaCapacityHistoryInterval(quotaCapacityHistoryInterval)
             if clamped != quotaCapacityHistoryInterval {
                 quotaCapacityHistoryInterval = clamped
-                return
             }
-            defaults.set(clamped, forKey: Keys.quotaCapacityHistoryInterval)
+            persist(clamped, forKey: Keys.quotaCapacityHistoryInterval)
         }
     }
 
     @Published var launchAtLogin: Bool {
         didSet {
-            defaults.set(launchAtLogin, forKey: Keys.launchAtLogin)
+            persist(launchAtLogin, forKey: Keys.launchAtLogin)
             applyLoginItemPreference()
         }
     }
 
     @Published var menuBarDisplayMode: MenuBarDisplayMode {
-        didSet { defaults.set(menuBarDisplayMode.rawValue, forKey: Keys.menuBarDisplayMode) }
+        didSet { persist(menuBarDisplayMode.rawValue, forKey: Keys.menuBarDisplayMode) }
     }
 
     @Published var showCodexInMenuBar: Bool {
-        didSet { defaults.set(showCodexInMenuBar, forKey: Keys.showCodexInMenuBar) }
+        didSet { persist(showCodexInMenuBar, forKey: Keys.showCodexInMenuBar) }
     }
 
     @Published var showCodexSidebarQuotaOverlay: Bool {
-        didSet { defaults.set(showCodexSidebarQuotaOverlay, forKey: Keys.showCodexSidebarQuotaOverlay) }
+        didSet { persist(showCodexSidebarQuotaOverlay, forKey: Keys.showCodexSidebarQuotaOverlay) }
     }
 
     @Published var codexSidebarQuotaOverlayIndependent: Bool {
-        didSet { defaults.set(codexSidebarQuotaOverlayIndependent, forKey: Keys.codexSidebarQuotaOverlayIndependent) }
+        didSet { persist(codexSidebarQuotaOverlayIndependent, forKey: Keys.codexSidebarQuotaOverlayIndependent) }
     }
 
     @Published var quotaWidgetHotKey: QuotaWidgetHotKey? {
         didSet {
-            defaults.set(try? JSONEncoder().encode(quotaWidgetHotKey), forKey: Keys.quotaWidgetHotKey)
+            persist(try? JSONEncoder().encode(quotaWidgetHotKey), forKey: Keys.quotaWidgetHotKey)
         }
     }
 
     @Published var didCompleteQuotaWidgetOnboarding: Bool {
-        didSet { defaults.set(didCompleteQuotaWidgetOnboarding, forKey: Keys.didCompleteQuotaWidgetOnboarding) }
+        didSet { persist(didCompleteQuotaWidgetOnboarding, forKey: Keys.didCompleteQuotaWidgetOnboarding) }
     }
 
     @Published var showClaudeInMenuBar: Bool {
-        didSet { defaults.set(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
+        didSet { persist(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
     }
 
     @Published var useDarkAppearance: Bool {
-        didSet { defaults.set(useDarkAppearance, forKey: Keys.useDarkAppearance) }
+        didSet { persist(useDarkAppearance, forKey: Keys.useDarkAppearance) }
     }
 
     @Published var useTranslucentAppearance: Bool {
-        didSet { defaults.set(useTranslucentAppearance, forKey: Keys.useTranslucentAppearance) }
+        didSet { persist(useTranslucentAppearance, forKey: Keys.useTranslucentAppearance) }
     }
 
     @Published var accountSortMode: AccountSortMode {
-        didSet { defaults.set(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
+        didSet { persist(accountSortMode.rawValue, forKey: Keys.accountSortMode) }
     }
 
     @Published var showAggregatedAccountData: Bool {
-        didSet { defaults.set(showAggregatedAccountData, forKey: Keys.showAggregatedAccountData) }
+        didSet { persist(showAggregatedAccountData, forKey: Keys.showAggregatedAccountData) }
     }
 
     @Published var autoCodexAccountRotationEnabled: Bool {
-        didSet { defaults.set(autoCodexAccountRotationEnabled, forKey: Keys.autoCodexAccountRotationEnabled) }
+        didSet { persist(autoCodexAccountRotationEnabled, forKey: Keys.autoCodexAccountRotationEnabled) }
     }
 
     @Published var quotaResetNotificationsEnabled: Bool {
-        didSet { defaults.set(quotaResetNotificationsEnabled, forKey: Keys.quotaResetNotificationsEnabled) }
+        didSet { persist(quotaResetNotificationsEnabled, forKey: Keys.quotaResetNotificationsEnabled) }
     }
 
     @Published var taskCompletionNotificationsEnabled: Bool {
-        didSet { defaults.set(taskCompletionNotificationsEnabled, forKey: Keys.taskCompletionNotificationsEnabled) }
+        didSet { persist(taskCompletionNotificationsEnabled, forKey: Keys.taskCompletionNotificationsEnabled) }
     }
 
     @Published var accessTokenExpiryNotificationsEnabled: Bool {
-        didSet { defaults.set(accessTokenExpiryNotificationsEnabled, forKey: Keys.accessTokenExpiryNotificationsEnabled) }
+        didSet { persist(accessTokenExpiryNotificationsEnabled, forKey: Keys.accessTokenExpiryNotificationsEnabled) }
     }
 
     @Published private(set) var projectBudgets: [ProjectBudget] {
         didSet {
             guard let data = try? JSONEncoder().encode(projectBudgets) else { return }
-            defaults.set(data, forKey: Keys.projectBudgets)
+            persist(data, forKey: Keys.projectBudgets)
         }
     }
 
@@ -122,9 +121,8 @@ final class SettingsStore: ObservableObject {
             let clamped = Self.clampedRotationThreshold(codexRotationThresholdRemainingPercent)
             if clamped != codexRotationThresholdRemainingPercent {
                 codexRotationThresholdRemainingPercent = clamped
-                return
             }
-            defaults.set(clamped, forKey: Keys.codexRotationThresholdRemainingPercent)
+            persist(clamped, forKey: Keys.codexRotationThresholdRemainingPercent)
         }
     }
 
@@ -133,9 +131,8 @@ final class SettingsStore: ObservableObject {
             let clamped = Self.clampedBudgetCount(dailyTokenBudget)
             if clamped != dailyTokenBudget {
                 dailyTokenBudget = clamped
-                return
             }
-            defaults.set(clamped, forKey: Keys.dailyTokenBudget)
+            persist(clamped, forKey: Keys.dailyTokenBudget)
         }
     }
 
@@ -144,9 +141,8 @@ final class SettingsStore: ObservableObject {
             let clamped = Self.clampedBudgetCount(weeklyTokenBudget)
             if clamped != weeklyTokenBudget {
                 weeklyTokenBudget = clamped
-                return
             }
-            defaults.set(clamped, forKey: Keys.weeklyTokenBudget)
+            persist(clamped, forKey: Keys.weeklyTokenBudget)
         }
     }
 
@@ -155,9 +151,8 @@ final class SettingsStore: ObservableObject {
             let clamped = Self.clampedBudgetCost(dailyCostBudgetUSD)
             if clamped != dailyCostBudgetUSD {
                 dailyCostBudgetUSD = clamped
-                return
             }
-            defaults.set(clamped, forKey: Keys.dailyCostBudgetUSD)
+            persist(clamped, forKey: Keys.dailyCostBudgetUSD)
         }
     }
 
@@ -166,9 +161,8 @@ final class SettingsStore: ObservableObject {
             let clamped = Self.clampedBudgetCost(weeklyCostBudgetUSD)
             if clamped != weeklyCostBudgetUSD {
                 weeklyCostBudgetUSD = clamped
-                return
             }
-            defaults.set(clamped, forKey: Keys.weeklyCostBudgetUSD)
+            persist(clamped, forKey: Keys.weeklyCostBudgetUSD)
         }
     }
 
@@ -177,23 +171,31 @@ final class SettingsStore: ObservableObject {
         set {
             let clampedHeight = Self.clampedPopoverHeight(newValue, maximumHeight: popoverMaximumHeight)
             guard storedPopoverHeight != clampedHeight else {
-                defaults.set(clampedHeight, forKey: Keys.popoverHeight)
+                persist(clampedHeight, forKey: Keys.popoverHeight)
                 return
             }
             objectWillChange.send()
             storedPopoverHeight = clampedHeight
-            defaults.set(clampedHeight, forKey: Keys.popoverHeight)
+            persist(clampedHeight, forKey: Keys.popoverHeight)
         }
     }
 
     @Published private(set) var loginItemMessage: String?
 
     private let defaults: UserDefaults
+    private let persistence: SettingsPersistence?
     private var storedPopoverHeight = Double(PopoverLayout.defaultHeight)
     private var popoverMaximumHeight = Double(PopoverLayout.maximumHeight)
 
-    init(defaults: UserDefaults = .standard) {
+    convenience init() {
+        self.init(defaults: .standard, persistenceURL: SettingsPersistence.defaultURL)
+    }
+
+    init(defaults: UserDefaults, persistenceURL: URL? = nil) {
+        let persistence = persistenceURL.map(SettingsPersistence.init)
+        persistence?.restore(defaults: defaults, keys: Keys.all)
         self.defaults = defaults
+        self.persistence = persistence
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? .english
         let savedInterval = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = savedInterval >= 30 ? savedInterval : 60
@@ -234,7 +236,7 @@ final class SettingsStore: ObservableObject {
             savedPopoverHeight > 0 ? savedPopoverHeight : Double(PopoverLayout.defaultHeight),
             maximumHeight: popoverMaximumHeight
         )
-        defaults.set(popoverHeight, forKey: Keys.popoverHeight)
+        persist(popoverHeight, forKey: Keys.popoverHeight)
     }
 
     func updatePopoverMaximumHeight(_ maximumHeight: Double) {
@@ -289,6 +291,11 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    private func persist(_ value: Any?, forKey key: String) {
+        defaults.set(value, forKey: key)
+        persistence?.save(defaults: defaults, keys: Keys.all)
+    }
+
     private func applyLoginItemPreference() {
         do {
             if launchAtLogin {
@@ -331,5 +338,70 @@ final class SettingsStore: ObservableObject {
         static let dailyCostBudgetUSD = "dailyCostBudgetUSD"
         static let weeklyCostBudgetUSD = "weeklyCostBudgetUSD"
         static let popoverHeight = "popoverHeight"
+
+        static let all = [
+            language,
+            refreshInterval,
+            quotaCapacityHistoryInterval,
+            launchAtLogin,
+            menuBarDisplayMode,
+            showCodexInMenuBar,
+            showCodexSidebarQuotaOverlay,
+            codexSidebarQuotaOverlayIndependent,
+            quotaWidgetHotKey,
+            didCompleteQuotaWidgetOnboarding,
+            showClaudeInMenuBar,
+            didMigrateActiveAccountMenuBarDefault,
+            useDarkAppearance,
+            useTranslucentAppearance,
+            accountSortMode,
+            showAggregatedAccountData,
+            autoCodexAccountRotationEnabled,
+            quotaResetNotificationsEnabled,
+            taskCompletionNotificationsEnabled,
+            accessTokenExpiryNotificationsEnabled,
+            projectBudgets,
+            codexRotationThresholdRemainingPercent,
+            dailyTokenBudget,
+            weeklyTokenBudget,
+            dailyCostBudgetUSD,
+            weeklyCostBudgetUSD,
+            popoverHeight
+        ]
+    }
+}
+
+private struct SettingsPersistence {
+    static let defaultURL = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appending(path: "AgentBar/Settings.plist")
+
+    let url: URL
+
+    func restore(defaults: UserDefaults, keys: [String]) {
+        guard let data = try? Data(contentsOf: url),
+              let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return }
+
+        for key in keys where defaults.object(forKey: key) == nil {
+            defaults.set(values[key], forKey: key)
+        }
+    }
+
+    func save(defaults: UserDefaults, keys: [String]) {
+        let values = keys.reduce(into: [String: Any]()) { values, key in
+            values[key] = defaults.object(forKey: key)
+        }
+        guard let data = try? PropertyListSerialization.data(
+            fromPropertyList: values,
+            format: .binary,
+            options: 0
+        ) else { return }
+
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: url, options: .atomic)
     }
 }

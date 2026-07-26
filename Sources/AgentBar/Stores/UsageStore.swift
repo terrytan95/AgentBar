@@ -291,18 +291,27 @@ final class UsageStore: ObservableObject {
 
     var popoverHeaderQuotaTitle: String {
         guard let account = activeAccount else {
+            if summary.totalTokens > 0 {
+                return "\(DisplayFormatters.tokenString(summary.totalTokens)) \(L.text("tokens", language))"
+            }
             return "\(DisplayFormatters.percentString(lowestRemaining)) \(L.text("remaining", language))"
         }
-        return accountWindowTitles(account)
-            .map { "\($0) \(L.text("remaining", language))" }
-            .joined(separator: " · ")
+        let titles = accountWindowTitles(account)
+        guard !titles.isEmpty else {
+            return "\(DisplayFormatters.tokenString(summary.totalTokens)) \(L.text("tokens", language))"
+        }
+        return titles.map { "\($0) \(L.text("remaining", language))" }.joined(separator: " · ")
     }
 
     private var activeAccountWindowTitle: String {
         guard let account = activeAccount else {
+            if summary.totalTokens > 0 {
+                return DisplayFormatters.tokenString(summary.totalTokens)
+            }
             return DisplayFormatters.percentString(lowestRemaining)
         }
-        return accountWindowTitles(account).joined(separator: "  ")
+        let titles = accountWindowTitles(account)
+        return titles.isEmpty ? DisplayFormatters.tokenString(summary.totalTokens) : titles.joined(separator: "  ")
     }
 
     private func accountWindowTitles(_ account: UsageAccount) -> [String] {

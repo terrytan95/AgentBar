@@ -301,7 +301,7 @@ enum CodexSessionLineOutcome {
 
 struct CodexSessionParserContext {
     fileprivate let decoder = JSONDecoder()
-    fileprivate let dateParser = CodexTimestampParser()
+    fileprivate let dateParser = ISO8601TimestampParser()
 }
 
 struct CodexSessionParseAggregate: Codable {
@@ -913,13 +913,13 @@ private struct CodexSessionEvent: Decodable {
         case payload
     }
 
-    func parsedDate(using parser: CodexTimestampParser) -> Date? {
+    func parsedDate(using parser: ISO8601TimestampParser) -> Date? {
         guard let timestamp else { return nil }
         return parser.date(from: timestamp)
     }
 }
 
-private struct CodexTimestampParser {
+struct ISO8601TimestampParser {
     private let fractionalFormatter: ISO8601DateFormatter
     private let wholeSecondFormatter: ISO8601DateFormatter
 
@@ -1142,8 +1142,16 @@ private func epochMillisecondsDate(_ value: Double?) -> Date? {
 
 enum LocalFileAccessWarning {
     static func codexNote(for error: Error, path: String) -> String? {
+        note(for: "Codex", error: error, path: path)
+    }
+
+    static func claudeNote(for error: Error, path: String) -> String? {
+        note(for: "Claude Code", error: error, path: path)
+    }
+
+    private static func note(for service: String, error: Error, path: String) -> String? {
         guard isAccessDenied(error as NSError) else { return nil }
-        return "AgentBar cannot read local Codex data at \(displayPath(path)). Grant AgentBar Files and Folders or Full Disk Access in System Settings, then refresh."
+        return "AgentBar cannot read local \(service) data at \(displayPath(path)). Grant AgentBar Files and Folders or Full Disk Access in System Settings, then refresh."
     }
 
     private static func isAccessDenied(_ error: NSError) -> Bool {

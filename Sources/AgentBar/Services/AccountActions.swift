@@ -252,7 +252,7 @@ enum AccountLoginLauncher {
     }
 
     static func openLogin(for service: UsageService) {
-        let command = service == .codex ? "codex login" : "claude login"
+        let command = service == .codex ? "codex login" : "claude auth login"
         openTerminal(command: command)
     }
 

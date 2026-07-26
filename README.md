@@ -43,7 +43,7 @@ A native macOS menu bar companion for Codex usage, quotas, accounts, tasks, and 
 
 ## English
 
-AgentBar turns the usage data already available on your Mac into a compact menu bar view and a detailed dashboard. Codex is the primary live data source; Claude Code is detected safely and shown as unavailable when no authorized usage source exists.
+AgentBar turns the usage data already available on your Mac into a compact menu bar view and a detailed dashboard. Codex supplies account and quota data; Claude Code supplies local session usage after you sign in and use its CLI.
 
 ### Highlights
 
@@ -63,10 +63,11 @@ AgentBar turns the usage data already available on your Mac into a compact menu 
 AgentBar has no separate analytics backend. Network access is limited to the ChatGPT usage endpoints for the active Codex account and GitHub for update checks and downloads.
 
 - `~/.codex/sessions/**/*.jsonl` supplies local usage, task, model, token, and performance records. Source session files are not modified.
+- `~/.claude/projects/**/*.jsonl` supplies Claude Code model, token, project, and estimated-cost records. Prompts, replies, tool output, and credentials are not extracted or retained.
 - `~/.codex/accounts/registry.json`, `~/.codex/auth.json`, and per-account auth snapshots supply account identity, quota state, authentication health, and credential expiry. Token contents are used only when required for quota sync or account actions and are not retained in AgentBar reports.
 - Quota refresh and account-management actions can update Codex's local registry and auth snapshots. Parsed session metrics are cached under `~/Library/Caches/AgentBar/` for faster refreshes.
 - Audit exports contain aggregate metrics and derived thread labels, not full prompts, replies, or tool output.
-- Claude Code live usage and cost remain unavailable until an explicit supported local source or authorized Anthropic API source is provided; AgentBar does not fabricate fallback data.
+- Claude subscription quota and billing totals are not exposed by local session files; AgentBar reports local tokens and price-table estimates instead.
 
 ### Requirements
 
@@ -85,7 +86,7 @@ AgentBar has no separate analytics backend. Network access is limited to the Cha
 
 ## 简体中文
 
-AgentBar 将 Mac 上已有的用量数据整理为简洁的菜单栏视图和完整仪表盘。Codex 是当前主要的实时数据源；如果没有经过授权的用量来源，Claude Code 会明确显示为不可用，不会使用模拟数据。
+AgentBar 将 Mac 上已有的用量数据整理为简洁的菜单栏视图和完整仪表盘。Codex 提供账户与额度数据；登录并使用 Claude Code CLI 后，AgentBar 会读取其本机会话用量。
 
 ### 主要功能
 
@@ -105,10 +106,11 @@ AgentBar 将 Mac 上已有的用量数据整理为简洁的菜单栏视图和完
 AgentBar 没有独立的分析后端。网络访问仅用于通过当前 Codex 账户请求 ChatGPT 用量接口，以及通过 GitHub 检查和下载更新。
 
 - `~/.codex/sessions/**/*.jsonl` 提供本地用量、任务、模型、Token 与性能记录；AgentBar 不会修改这些会话源文件。
+- `~/.claude/projects/**/*.jsonl` 提供 Claude Code 的模型、Token、项目与预估费用记录；AgentBar 不提取或保留 prompt、回复、工具输出与凭证。
 - `~/.codex/accounts/registry.json`、`~/.codex/auth.json` 和各账户的认证快照用于识别账户、读取额度状态、认证健康状态与凭证到期时间。Token 内容只在同步额度或执行账户操作时使用，不会写入 AgentBar 报告。
 - 额度刷新和账户管理操作可能更新 Codex 的本地注册表与认证快照。解析后的会话指标会缓存在 `~/Library/Caches/AgentBar/`，用于加快后续刷新。
 - 审计导出仅包含聚合指标和派生的线程标题，不包含完整 prompt、回复或工具输出。
-- 在提供明确支持的本地来源或经过授权的 Anthropic API 来源之前，Claude Code 的实时用量与费用会显示为不可用；AgentBar 不会生成虚假的替代数据。
+- Claude 订阅额度与账单总额不会写入本机会话文件；AgentBar 仅展示本地 Token 和按内置价格表计算的预估费用。
 
 ### 系统要求
 

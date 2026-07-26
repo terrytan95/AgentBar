@@ -67,6 +67,7 @@ final class SettingsPersistenceTests: XCTestCase {
             "useTranslucentAppearance": false,
             "accountSortMode": AccountSortMode.alphabetical.rawValue,
             "showAggregatedAccountData": true,
+            "showQuotaPressureSection": false,
             "autoCodexAccountRotationEnabled": true,
             "quotaResetNotificationsEnabled": true,
             "taskCompletionNotificationsEnabled": true,
@@ -106,6 +107,7 @@ final class SettingsPersistenceTests: XCTestCase {
         XCTAssertFalse(restored.useTranslucentAppearance)
         XCTAssertEqual(restored.accountSortMode, .alphabetical)
         XCTAssertTrue(restored.showAggregatedAccountData)
+        XCTAssertFalse(restored.showQuotaPressureSection)
         XCTAssertTrue(restored.autoCodexAccountRotationEnabled)
         XCTAssertTrue(restored.quotaResetNotificationsEnabled)
         XCTAssertTrue(restored.taskCompletionNotificationsEnabled)

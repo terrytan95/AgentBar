@@ -3,7 +3,37 @@ import XCTest
 
 final class SettingsPersistenceTests: XCTestCase {
     @MainActor
-    func testAllSettingsSurviveDefaultsReset() throws {
+    func testBackupIsDebouncedAndPersistsLatestValue() async throws {
+        let suiteName = "SettingsPersistenceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let persistenceURL = directory.appending(path: "Settings.plist")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        defaults.set(60.0, forKey: "refreshInterval")
+        let store = SettingsStore(defaults: defaults, persistenceURL: persistenceURL)
+        try await Task.sleep(for: .milliseconds(700))
+        let initialData = try Data(contentsOf: persistenceURL)
+
+        store.refreshInterval = 120
+        store.refreshInterval = 180
+
+        XCTAssertEqual(try Data(contentsOf: persistenceURL), initialData)
+        try await Task.sleep(for: .milliseconds(700))
+        let values = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: Data(contentsOf: persistenceURL),
+                format: nil
+            ) as? [String: Any]
+        )
+        XCTAssertEqual(values["refreshInterval"] as? Double, 180)
+    }
+
+    @MainActor
+    func testAllSettingsSurviveDefaultsReset() async throws {
         let suiteName = "SettingsPersistenceTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -52,8 +82,9 @@ final class SettingsPersistenceTests: XCTestCase {
         seededValues.forEach { defaults.set($0.value, forKey: $0.key) }
 
         let initial = SettingsStore(defaults: defaults, persistenceURL: persistenceURL)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: persistenceURL.path))
         initial.refreshInterval = 600
+        try await Task.sleep(for: .milliseconds(700))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: persistenceURL.path))
 
         defaults.removePersistentDomain(forName: suiteName)
         let restored = SettingsStore(defaults: defaults, persistenceURL: persistenceURL)

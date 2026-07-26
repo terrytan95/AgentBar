@@ -293,7 +293,7 @@ final class SettingsStore: ObservableObject {
 
     private func persist(_ value: Any?, forKey key: String) {
         defaults.set(value, forKey: key)
-        persistence?.save(defaults: defaults, keys: Keys.all)
+        persistence?.save(value, forKey: key, defaults: defaults, keys: Keys.all)
     }
 
     private func applyLoginItemPreference() {
@@ -371,37 +371,137 @@ final class SettingsStore: ObservableObject {
     }
 }
 
-private struct SettingsPersistence {
+@MainActor
+private final class SettingsPersistence {
     static let defaultURL = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appending(path: "AgentBar/Settings.plist")
 
     let url: URL
+    private let writer = SettingsBackupWriter()
+    private var snapshot: [String: PropertyListValue]?
+    private var revision = 0
+
+    init(url: URL) {
+        self.url = url
+    }
 
     func restore(defaults: UserDefaults, keys: [String]) {
         guard let data = try? Data(contentsOf: url),
-              let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+              let values = try? PropertyListDecoder().decode([String: PropertyListValue].self, from: data)
         else { return }
 
         for key in keys where defaults.object(forKey: key) == nil {
-            defaults.set(values[key], forKey: key)
+            defaults.set(values[key]?.propertyListObject, forKey: key)
         }
     }
 
-    func save(defaults: UserDefaults, keys: [String]) {
-        let values = keys.reduce(into: [String: Any]()) { values, key in
-            values[key] = defaults.object(forKey: key)
+    func save(_ value: Any?, forKey key: String, defaults: UserDefaults, keys: [String]) {
+        var snapshot = snapshot ?? keys.reduce(into: [String: PropertyListValue]()) { values, key in
+            values[key] = PropertyListValue(defaults.object(forKey: key))
         }
-        guard let data = try? PropertyListSerialization.data(
-            fromPropertyList: values,
-            format: .binary,
-            options: 0
-        ) else { return }
+        snapshot[key] = PropertyListValue(value)
+        self.snapshot = snapshot
+        revision += 1
+        let revision = revision
+        Task {
+            await writer.scheduleSnapshot(snapshot, revision: revision, to: url)
+        }
+    }
+}
 
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try? data.write(to: url, options: .atomic)
+private actor SettingsBackupWriter {
+    private var latestRevision = 0
+    private var pendingTask: Task<Void, Never>?
+
+    func scheduleSnapshot(
+        _ snapshot: [String: PropertyListValue],
+        revision: Int,
+        to url: URL
+    ) {
+        guard revision > latestRevision else { return }
+        latestRevision = revision
+        pendingTask?.cancel()
+        pendingTask = Task {
+            do {
+                try await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+
+                let encoder = PropertyListEncoder()
+                encoder.outputFormat = .binary
+                let data = try encoder.encode(snapshot)
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try data.write(to: url, options: .atomic)
+            } catch {}
+        }
+    }
+}
+
+private enum PropertyListValue: Codable, Sendable {
+    case bool(Bool)
+    case integer(Int)
+    case double(Double)
+    case string(String)
+    case data(Data)
+
+    init?(_ value: Any?) {
+        switch value {
+        case let value as Bool:
+            self = .bool(value)
+        case let value as Int:
+            self = .integer(value)
+        case let value as Double:
+            self = .double(value)
+        case let value as String:
+            self = .string(value)
+        case let value as Data:
+            self = .data(value)
+        default:
+            return nil
+        }
+    }
+
+    var propertyListObject: Any {
+        switch self {
+        case let .bool(value): value
+        case let .integer(value): value
+        case let .double(value): value
+        case let .string(value): value
+        case let .data(value): value
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int.self) {
+            self = .integer(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .double(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode(Data.self) {
+            self = .data(value)
+        } else {
+            throw DecodingError.typeMismatch(
+                PropertyListValue.self,
+                .init(codingPath: decoder.codingPath, debugDescription: "Unsupported property list value")
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case let .bool(value): try container.encode(value)
+        case let .integer(value): try container.encode(value)
+        case let .double(value): try container.encode(value)
+        case let .string(value): try container.encode(value)
+        case let .data(value): try container.encode(value)
+        }
     }
 }

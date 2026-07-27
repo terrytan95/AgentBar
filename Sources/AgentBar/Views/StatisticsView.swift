@@ -675,7 +675,7 @@ struct StatisticsView: View {
                     )
                 }
             }
-            .frame(height: 116)
+            .frame(height: 128)
 
             if settings.showQuotaPressureSection {
                 QuotaPressurePanel(pressure: quotaPressure, language: store.language)

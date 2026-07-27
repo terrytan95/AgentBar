@@ -189,7 +189,7 @@ private struct AgentBarGlassSurfaceModifier: ViewModifier {
         if isEnabled && !reduceTransparency {
             if #available(macOS 26.0, *) {
                 content
-                    .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                    .glassEffect(.clear, in: .rect(cornerRadius: 12))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 content

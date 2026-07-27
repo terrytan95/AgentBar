@@ -198,9 +198,11 @@ private struct CodexSidebarGlassSurface: ViewModifier {
 }
 
 struct CodexSidebarMaterialView: NSViewRepresentable {
+    var material: NSVisualEffectView.Material = .sidebar
+
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = .sidebar
+        view.material = material
         view.blendingMode = .behindWindow
         view.state = .active
         return view

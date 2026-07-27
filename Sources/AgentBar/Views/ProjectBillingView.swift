@@ -20,20 +20,19 @@ struct ProjectBillingView: View {
         )
     }
 
-    private var selectedProject: ProjectUsageSummary? {
-        projects.first(where: { $0.id == selectedProjectID }) ?? projects.first
-    }
-
     var body: some View {
+        let projectSummaries = projects
+        let selectedProject = projectSummaries.first(where: { $0.id == selectedProjectID }) ?? projectSummaries.first
+
         VStack(alignment: .leading, spacing: 16) {
             header
-            overviewMetrics
+            overviewMetrics(projects: projectSummaries)
 
-            if projects.isEmpty {
+            if projectSummaries.isEmpty {
                 emptyState
             } else {
                 HStack(alignment: .top, spacing: 14) {
-                    projectList
+                    projectList(projects: projectSummaries, activeProjectID: selectedProject?.id)
                         .frame(width: 320)
                     if let selectedProject {
                         projectDetail(selectedProject)
@@ -74,7 +73,7 @@ struct ProjectBillingView: View {
         }
     }
 
-    private var overviewMetrics: some View {
+    private func overviewMetrics(projects: [ProjectUsageSummary]) -> some View {
         let tokens = projects.reduce(0) { $0 + $1.summary.totalTokens }
         let costs = projects.compactMap(\.summary.estimatedCostUSD)
         let cost = costs.isEmpty ? nil : costs.reduce(Decimal(0), +)
@@ -112,7 +111,7 @@ struct ProjectBillingView: View {
         .agentBarPanel(cornerRadius: 12)
     }
 
-    private var projectList: some View {
+    private func projectList(projects: [ProjectUsageSummary], activeProjectID: String?) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(L.text("repositories", store.language))
                 .font(.agentBar(size: 15, weight: .bold))
@@ -122,7 +121,7 @@ struct ProjectBillingView: View {
                 Button {
                     selectedProjectID = project.id
                 } label: {
-                    projectListRow(project)
+                    projectListRow(project, selected: project.id == activeProjectID)
                 }
                 .tactilePlainButton(pressedScale: 1)
                 Divider()
@@ -131,8 +130,7 @@ struct ProjectBillingView: View {
         .agentBarPanel(cornerRadius: 14)
     }
 
-    private func projectListRow(_ project: ProjectUsageSummary) -> some View {
-        let selected = selectedProject?.id == project.id
+    private func projectListRow(_ project: ProjectUsageSummary, selected: Bool) -> some View {
         let warning = project.budgetStatus.tokenSeverity != .ok || project.budgetStatus.costSeverity != .ok
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {

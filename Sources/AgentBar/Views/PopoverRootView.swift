@@ -351,6 +351,8 @@ private enum AgentBarWindowPresenter {
             backing: .buffered,
             defer: false
         )
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.title = "AgentBar"
         window.contentViewController = controller
         window.minSize = NSSize(width: 1180, height: 760)

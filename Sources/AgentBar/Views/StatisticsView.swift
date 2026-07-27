@@ -76,7 +76,11 @@ struct StatisticsView: View {
             }
         }
         .tint(AgentBarPalette.primary)
-        .background(AgentBarDesign.appBackground)
+        .background(
+            settings.useTranslucentAppearance
+                ? Color.clear
+                : AgentBarDesign.appBackground
+        )
         .onAppear {
             if let tab = DashboardNavigation.consumePendingTab() {
                 setTopTab(tab)

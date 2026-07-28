@@ -152,7 +152,9 @@ struct PopoverRootView: View {
     }
 
     private var dataSourceHealth: DataSourceHealthSummary {
-        UsageInsights.dataSourceHealth(snapshots: store.snapshots)
+        UsageInsights.dataSourceHealth(
+            snapshots: Dictionary(uniqueKeysWithValues: store.uiDataSourceSnapshots.map { ($0.service, $0) })
+        )
     }
 
     private var header: some View {

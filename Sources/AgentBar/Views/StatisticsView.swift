@@ -1045,6 +1045,19 @@ struct StatisticsView: View {
 
     private var usageSettingsContent: some View {
         VStack(alignment: .leading, spacing: 18) {
+            SettingsGroup(title: L.text("popover_overview", store.language), subtitle: L.text("popover_overview_subtitle", store.language)) {
+                SettingsToggleRow(
+                    title: L.text("show_popover_overview", store.language),
+                    subtitle: L.text("show_popover_overview_subtitle", store.language),
+                    isOn: $settings.showPopoverOverviewSection
+                )
+                if settings.showPopoverOverviewSection {
+                    PopoverMetricPicker(settings: settings, language: store.language)
+                        .padding(.horizontal, settingsControlLeadingInset)
+                        .padding(.vertical, 12)
+                }
+            }
+
             SettingsGroup(title: L.text("overview", store.language), subtitle: L.text("overview_sections_subtitle", store.language)) {
                 SettingsToggleRow(
                     title: L.text("quota_pressure", store.language),
@@ -4017,6 +4030,90 @@ private struct SettingsToggleRow: View {
                 .accessibilityHint(subtitle)
         }
         .settingsRowStyle()
+    }
+}
+
+private struct PopoverMetricPicker: View {
+    @ObservedObject var settings: SettingsStore
+    var language: AppLanguage
+
+    private var availableMetrics: [PopoverMetric] {
+        PopoverMetric.allCases.filter { !settings.popoverMetrics.contains($0) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.text("popover_metrics_subtitle", language))
+                .font(.agentBar(size: 11))
+                .foregroundStyle(Color.primary.opacity(0.62))
+
+            Text(L.text("selected_metrics", language))
+                .font(.agentBar(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            List {
+                ForEach(settings.popoverMetrics) { metric in
+                    HStack(spacing: 10) {
+                        Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                        Image(systemName: metric.systemImage)
+                            .foregroundStyle(AgentBarPalette.primary)
+                            .frame(width: 18)
+                            .accessibilityHidden(true)
+                        Text(metric.title(language))
+                            .font(.agentBar(size: 12, weight: .semibold))
+                        Spacer()
+                        Button {
+                            settings.setPopoverMetric(metric, enabled: false)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(settings.popoverMetrics.count == 1)
+                        .accessibilityLabel("\(L.text("remove_metric", language)) \(metric.title(language))")
+                    }
+                    .frame(height: 32)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
+                .onMove(perform: settings.movePopoverMetrics)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .scrollDisabled(true)
+            .frame(height: CGFloat(settings.popoverMetrics.count * 32 + 8))
+
+            if !availableMetrics.isEmpty {
+                Text(L.text("available_metrics", language))
+                    .font(.agentBar(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                ForEach(availableMetrics) { metric in
+                    Button {
+                        settings.setPopoverMetric(metric, enabled: true)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: metric.systemImage)
+                                .frame(width: 18)
+                            Text(metric.title(language))
+                                .font(.agentBar(size: 12, weight: .semibold))
+                            Spacer()
+                            Image(systemName: "plus.circle.fill")
+                        }
+                        .foregroundStyle(AgentBarPalette.primary)
+                        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(settings.popoverMetrics.count >= SettingsStore.maximumPopoverMetricCount)
+                    .opacity(settings.popoverMetrics.count >= SettingsStore.maximumPopoverMetricCount ? 0.45 : 1)
+                    .accessibilityLabel("\(L.text("add_metric", language)) \(metric.title(language))")
+                }
+            }
+        }
     }
 }
 

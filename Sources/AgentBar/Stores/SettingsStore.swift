@@ -18,9 +18,42 @@ enum AccountSortMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum PopoverMetric: String, CaseIterable, Identifiable, Sendable {
+    case tokens
+    case cost
+    case availableResets
+    case earliestRecovery
+    case currentBalance
+
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .tokens: "cylinder.split.1x2.fill"
+        case .cost: "dollarsign"
+        case .availableResets: "arrow.counterclockwise.circle.fill"
+        case .earliestRecovery: "clock.arrow.2.circlepath"
+        case .currentBalance: "gauge.medium"
+        }
+    }
+
+    func title(_ language: AppLanguage) -> String {
+        let key = switch self {
+        case .tokens: "tokens"
+        case .cost: "cost"
+        case .availableResets: "available_resets"
+        case .earliestRecovery: "earliest_recovery"
+        case .currentBalance: "current_balance"
+        }
+        return L.text(key, language)
+    }
+}
+
 @MainActor
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
+    static let maximumPopoverMetricCount = 3
+    static let defaultPopoverMetrics: [PopoverMetric] = [.tokens, .cost, .availableResets]
 
     @Published var language: AppLanguage {
         didSet { persist(language.rawValue, forKey: Keys.language) }
@@ -95,6 +128,17 @@ final class SettingsStore: ObservableObject {
 
     @Published var showQuotaPressureSection: Bool {
         didSet { persist(showQuotaPressureSection, forKey: Keys.showQuotaPressureSection) }
+    }
+
+    @Published var showPopoverOverviewSection: Bool {
+        didSet { persist(showPopoverOverviewSection, forKey: Keys.showPopoverOverviewSection) }
+    }
+
+    @Published private(set) var popoverMetrics: [PopoverMetric] {
+        didSet {
+            let rawValues = popoverMetrics.map(\.rawValue)
+            persist(try? JSONEncoder().encode(rawValues), forKey: Keys.popoverMetrics)
+        }
     }
 
     @Published var autoCodexAccountRotationEnabled: Bool {
@@ -237,6 +281,12 @@ final class SettingsStore: ObservableObject {
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
         showQuotaPressureSection = defaults.object(forKey: Keys.showQuotaPressureSection) as? Bool ?? true
+        showPopoverOverviewSection = defaults.object(forKey: Keys.showPopoverOverviewSection) as? Bool ?? true
+        let savedPopoverMetrics = defaults.data(forKey: Keys.popoverMetrics)
+            .flatMap { try? JSONDecoder().decode([String].self, from: $0) }
+            .map { $0.compactMap(PopoverMetric.init(rawValue:)) }
+            ?? Self.defaultPopoverMetrics
+        popoverMetrics = Self.normalizedPopoverMetrics(savedPopoverMetrics)
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
         taskCompletionNotificationsEnabled = defaults.object(forKey: Keys.taskCompletionNotificationsEnabled) as? Bool ?? false
@@ -288,6 +338,41 @@ final class SettingsStore: ObservableObject {
 
     static func clampedQuotaCapacityHistoryInterval(_ value: TimeInterval) -> TimeInterval {
         max(300, value)
+    }
+
+    static func normalizedPopoverMetrics(_ metrics: [PopoverMetric]) -> [PopoverMetric] {
+        let unique = metrics.reduce(into: [PopoverMetric]()) { result, metric in
+            if !result.contains(metric) {
+                result.append(metric)
+            }
+        }
+        let limited = Array(unique.prefix(maximumPopoverMetricCount))
+        return limited.isEmpty ? defaultPopoverMetrics : limited
+    }
+
+    func setPopoverMetric(_ metric: PopoverMetric, enabled: Bool) {
+        if enabled {
+            guard popoverMetrics.count < Self.maximumPopoverMetricCount,
+                  !popoverMetrics.contains(metric)
+            else { return }
+            popoverMetrics.append(metric)
+        } else {
+            guard popoverMetrics.count > 1 else { return }
+            popoverMetrics.removeAll { $0 == metric }
+        }
+    }
+
+    func movePopoverMetrics(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        let offsets = offsets.filter(popoverMetrics.indices.contains)
+        guard !offsets.isEmpty else { return }
+        let moving = offsets.map { popoverMetrics[$0] }
+        var remaining = popoverMetrics.enumerated()
+            .filter { !offsets.contains($0.offset) }
+            .map(\.element)
+        let removedBeforeDestination = offsets.filter { $0 < destination }.count
+        let insertion = min(remaining.count, max(0, destination - removedBeforeDestination))
+        remaining.insert(contentsOf: moving, at: insertion)
+        popoverMetrics = remaining
     }
 
     func projectBudget(for id: String) -> ProjectBudget {
@@ -363,6 +448,8 @@ final class SettingsStore: ObservableObject {
         static let accountSortMode = "accountSortMode"
         static let showAggregatedAccountData = "showAggregatedAccountData"
         static let showQuotaPressureSection = "showQuotaPressureSection"
+        static let showPopoverOverviewSection = "showPopoverOverviewSection"
+        static let popoverMetrics = "popoverMetrics"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
         static let taskCompletionNotificationsEnabled = "taskCompletionNotificationsEnabled"
@@ -393,6 +480,8 @@ final class SettingsStore: ObservableObject {
             accountSortMode,
             showAggregatedAccountData,
             showQuotaPressureSection,
+            showPopoverOverviewSection,
+            popoverMetrics,
             autoCodexAccountRotationEnabled,
             quotaResetNotificationsEnabled,
             taskCompletionNotificationsEnabled,

@@ -118,7 +118,9 @@ struct PopoverRootView: View {
             hairline
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    quickSummarySection
+                    if store.settings.showPopoverOverviewSection {
+                        quickSummarySection
+                    }
                     accountSection
                 }
                 .padding(.horizontal, PopoverLayout.horizontalInset)
@@ -233,27 +235,96 @@ struct PopoverRootView: View {
             Text(L.text("overview", store.language))
                 .font(.agentBar(size: 13, weight: .bold))
             HStack(spacing: 8) {
-                KPIPill(title: L.text("tokens", store.language), value: DisplayFormatters.tokenString(store.summary.totalTokens), systemImage: "cylinder.split.1x2.fill", tint: AgentBarPalette.primary)
-                KPIPill(title: L.text("cost", store.language), value: costText(store.summary.estimatedCostUSD), systemImage: "dollarsign", tint: AgentBarPalette.secondary)
-                KPIPill(title: L.text("data_sources", store.language), value: dataSourceSummaryText, systemImage: dataSourceHealth.issueCount == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill", tint: dataSourceHealth.issueCount == 0 ? .green : .orange)
+                ForEach(store.settings.popoverMetrics) { metric in
+                    quickSummaryMetric(metric)
+                }
             }
 
-            if !store.uiDataSourceSnapshots.isEmpty {
-                Text(dataSourceDetailText)
+            if dataSourceHealth.issueCount > 0 {
+                Label(dataSourceIssueText, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.orange)
                     .lineLimit(1)
             }
         }
     }
 
-    private var dataSourceSummaryText: String {
-        let total = max(dataSourceHealth.rows.count, store.uiDataSourceSnapshots.count)
-        return total > 0 ? "\(dataSourceHealth.liveCount)/\(total)" : "--"
+    @ViewBuilder
+    private func quickSummaryMetric(_ metric: PopoverMetric) -> some View {
+        switch metric {
+        case .tokens:
+            KPIPill(
+                title: metric.title(store.language),
+                value: DisplayFormatters.tokenString(store.summary.totalTokens),
+                systemImage: metric.systemImage,
+                tint: AgentBarPalette.primary
+            )
+        case .cost:
+            KPIPill(
+                title: metric.title(store.language),
+                value: costText(store.summary.estimatedCostUSD),
+                systemImage: metric.systemImage,
+                tint: AgentBarPalette.secondary
+            )
+        case .availableResets:
+            KPIPill(
+                title: metric.title(store.language),
+                value: availableResetCountText,
+                systemImage: metric.systemImage,
+                tint: .purple
+            )
+        case .earliestRecovery:
+            KPIPill(
+                title: metric.title(store.language),
+                value: earliestRecoveryText,
+                systemImage: metric.systemImage,
+                tint: AgentBarPalette.primary
+            )
+        case .currentBalance:
+            KPIPill(
+                title: metric.title(store.language),
+                value: DisplayFormatters.percentString(activeRemainingPercent),
+                systemImage: metric.systemImage,
+                tint: AgentBarPalette.quotaColor(remaining: activeRemainingPercent)
+            )
+        }
     }
 
-    private var dataSourceDetailText: String {
-        store.uiDataSourceSnapshots
+    private var activeRemainingPercent: Double? {
+        guard let account = store.activeAccount,
+              account.status == .live,
+              !account.needsLogin
+        else { return nil }
+        return account.mostConstrainedRemainingPercent
+    }
+
+    private var availableResetCountText: String {
+        let counts = store.accounts
+            .filter { $0.status == .live && !$0.needsLogin }
+            .compactMap { $0.resetCredits?.visibleCount }
+        guard !counts.isEmpty else { return "--" }
+        let count = counts.reduce(0, +)
+        return store.language == .chinese ? "\(count) 次" : "\(count)"
+    }
+
+    private var earliestRecoveryText: String {
+        guard let date = earliestRecoveryDate else { return "--" }
+        return DisplayFormatters.relativeString(for: date, language: store.language)
+    }
+
+    private var earliestRecoveryDate: Date? {
+        let now = Date()
+        return store.accounts
+            .filter { $0.status == .live && !$0.needsLogin }
+            .flatMap { [$0.fiveHourWindow?.resetsAt, $0.weeklyWindow?.resetsAt] }
+            .compactMap { $0 }
+            .filter { $0 > now }
+            .min()
+    }
+
+    private var dataSourceIssueText: String {
+        dataSourceHealth.rows
+            .filter { $0.status != .live }
             .map { "\($0.service.rawValue) \($0.status.label(language: store.language))" }
             .joined(separator: " · ")
     }

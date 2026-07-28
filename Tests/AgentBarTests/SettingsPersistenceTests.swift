@@ -3,6 +3,33 @@ import XCTest
 
 final class SettingsPersistenceTests: XCTestCase {
     @MainActor
+    func testPopoverMetricSelectionEnforcesLimitAndOrder() throws {
+        let suiteName = "SettingsPersistenceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = SettingsStore(defaults: defaults)
+
+        XCTAssertEqual(store.popoverMetrics, [.tokens, .cost, .availableResets])
+        XCTAssertEqual(
+            SettingsStore.normalizedPopoverMetrics([.cost, .cost, .tokens, .availableResets, .currentBalance]),
+            [.cost, .tokens, .availableResets]
+        )
+
+        store.setPopoverMetric(.earliestRecovery, enabled: true)
+        XCTAssertEqual(store.popoverMetrics, [.tokens, .cost, .availableResets])
+
+        store.setPopoverMetric(.cost, enabled: false)
+        store.setPopoverMetric(.currentBalance, enabled: true)
+        store.movePopoverMetrics(fromOffsets: IndexSet(integer: 2), toOffset: 0)
+        XCTAssertEqual(store.popoverMetrics, [.currentBalance, .tokens, .availableResets])
+
+        store.setPopoverMetric(.tokens, enabled: false)
+        store.setPopoverMetric(.availableResets, enabled: false)
+        store.setPopoverMetric(.currentBalance, enabled: false)
+        XCTAssertEqual(store.popoverMetrics, [.currentBalance])
+    }
+
+    @MainActor
     func testBackupIsDebouncedAndPersistsLatestValue() async throws {
         let suiteName = "SettingsPersistenceTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -68,6 +95,11 @@ final class SettingsPersistenceTests: XCTestCase {
             "accountSortMode": AccountSortMode.alphabetical.rawValue,
             "showAggregatedAccountData": true,
             "showQuotaPressureSection": false,
+            "showPopoverOverviewSection": false,
+            "popoverMetrics": try JSONEncoder().encode([
+                PopoverMetric.currentBalance.rawValue,
+                PopoverMetric.earliestRecovery.rawValue
+            ]),
             "autoCodexAccountRotationEnabled": true,
             "quotaResetNotificationsEnabled": true,
             "taskCompletionNotificationsEnabled": true,
@@ -108,6 +140,8 @@ final class SettingsPersistenceTests: XCTestCase {
         XCTAssertEqual(restored.accountSortMode, .alphabetical)
         XCTAssertTrue(restored.showAggregatedAccountData)
         XCTAssertFalse(restored.showQuotaPressureSection)
+        XCTAssertFalse(restored.showPopoverOverviewSection)
+        XCTAssertEqual(restored.popoverMetrics, [.currentBalance, .earliestRecovery])
         XCTAssertTrue(restored.autoCodexAccountRotationEnabled)
         XCTAssertTrue(restored.quotaResetNotificationsEnabled)
         XCTAssertTrue(restored.taskCompletionNotificationsEnabled)

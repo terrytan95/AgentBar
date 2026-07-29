@@ -784,19 +784,13 @@ private struct ModelEffortLabView: View {
     @State private var selectedID = ""
     @State private var startedTrialIDs: Set<String> = []
 
-    private var experiments: [ModelEffortExperiment] {
-        TokenEfficiencyAnalytics.modelEffortExperiments(
+    var body: some View {
+        let experiments = TokenEfficiencyAnalytics.modelEffortExperiments(
             points: store.usageDataDisplayPoints,
             tasks: store.auditTasks
         )
-    }
-
-    private var selected: ModelEffortExperiment? {
-        experiments.first { $0.id == selectedID } ?? experiments.first
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let selected = experiments.first { $0.id == selectedID } ?? experiments.first
+        return VStack(alignment: .leading, spacing: 16) {
             detailHeader(
                 efficiencyText("modelEffort", store.language),
                 efficiencyText("modelEffortSubtitle", store.language),

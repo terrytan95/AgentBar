@@ -5,7 +5,6 @@ enum EfficiencyCoachPage: String, CaseIterable, Identifiable {
     case coach
     case contextBurn
     case cacheHealth
-    case modelEffort
 
     var id: String { rawValue }
 
@@ -14,7 +13,6 @@ enum EfficiencyCoachPage: String, CaseIterable, Identifiable {
         case .coach: "sparkles"
         case .contextBurn: "chart.line.uptrend.xyaxis"
         case .cacheHealth: "externaldrive.fill.badge.checkmark"
-        case .modelEffort: "flask"
         }
     }
 }
@@ -50,8 +48,6 @@ struct EfficiencyCoachView: View {
                             ContextBurnEfficiencyView(store: store)
                         case .cacheHealth:
                             CacheHealthEfficiencyView(store: store)
-                        case .modelEffort:
-                            ModelEffortLabView(store: store)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -738,169 +734,6 @@ private struct CacheHealthEfficiencyView: View {
     }
 }
 
-private struct ModelEffortLabView: View {
-    @ObservedObject var store: UsageStore
-    @State private var selectedID = ""
-    @State private var startedTrialIDs: Set<String> = []
-
-    var body: some View {
-        let experiments = TokenEfficiencyAnalytics.modelEffortExperiments(
-            points: store.usageDataDisplayPoints,
-            tasks: store.auditTasks
-        )
-        let selected = experiments.first { $0.id == selectedID } ?? experiments.first
-        return VStack(alignment: .leading, spacing: 16) {
-            detailHeader(
-                efficiencyText("modelEffort", store.language),
-                efficiencyText("modelEffortSubtitle", store.language),
-                store: store
-            )
-            HStack(spacing: 12) {
-                metricPanel(
-                    efficiencyText("evaluatedGroups", store.language),
-                    "\(Set(store.auditTasks.compactMap(\.projectName)).count)",
-                    efficiencyText("localTaskGroups", store.language),
-                    AgentBarPalette.primary
-                )
-                metricPanel(
-                    efficiencyText("experimentCandidates", store.language),
-                    experiments.isEmpty ? "—" : "\(experiments.count)",
-                    efficiencyText("safeToTrial", store.language),
-                    .purple
-                )
-                metricPanel(
-                    efficiencyText("trialsStarted", store.language),
-                    "\(startedTrialIDs.count)",
-                    efficiencyText("localOnly", store.language),
-                    .green
-                )
-            }
-
-            if experiments.isEmpty {
-                efficiencyUnavailable(store.language)
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Circle()
-                            .hidden()
-                            .frame(width: 10, height: 10)
-                        Text(efficiencyText("project", store.language))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(efficiencyText("effortChange", store.language))
-                            .frame(width: 150)
-                        Text(efficiencyText("historicalTasks", store.language))
-                            .frame(width: 100, alignment: .trailing)
-                        Image(systemName: "chevron.right")
-                            .hidden()
-                    }
-                    .font(.agentBar(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-                    .frame(height: 34)
-                    Divider()
-
-                    ForEach(experiments) { experiment in
-                        Button {
-                            selectedID = experiment.id
-                        } label: {
-                            HStack {
-                                Circle()
-                                    .fill(selected?.id == experiment.id ? AgentBarPalette.primary : .clear)
-                                    .overlay(Circle().stroke(AgentBarDesign.hairline))
-                                    .frame(width: 10, height: 10)
-                                Text(experiment.scope.projectName ?? efficiencyText("unknownProject", store.language))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text("\(experiment.currentEffort) → \(experiment.suggestedTrialEffort)")
-                                    .foregroundStyle(AgentBarPalette.primary)
-                                    .frame(width: 150)
-                                Text("\(experiment.completedTaskCount) \(efficiencyText("tasks", store.language))")
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 100, alignment: .trailing)
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .font(.agentBar(size: 11, weight: .semibold))
-                            .padding(.horizontal, 16)
-                            .frame(height: 48)
-                            .contentShape(Rectangle())
-                        }
-                        .tactilePlainButton()
-                        if experiment.id != experiments.last?.id { Divider() }
-                    }
-                }
-                .agentBarPanel(cornerRadius: 14)
-
-                if let selected {
-                    experimentDetail(selected)
-                }
-            }
-        }
-    }
-
-    private func experimentDetail(_ experiment: ModelEffortExperiment) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-                Label(efficiencyText("reversibleExperiment", store.language), systemImage: "info.circle")
-                    .font(.agentBar(size: 12, weight: .bold))
-                    .foregroundStyle(AgentBarPalette.primary)
-                Text(efficiencyText("experimentWarning", store.language))
-                    .font(.agentBar(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Divider()
-                factRow(efficiencyText("service", store.language), experiment.scope.service.rawValue)
-                factRow(efficiencyText("model", store.language), experiment.scope.model ?? "—")
-                factRow(efficiencyText("sampleSize", store.language), "\(experiment.completedTaskCount)")
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
-            .agentBarPanel(cornerRadius: 14)
-
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    effortCard(
-                        efficiencyText("currentControl", store.language),
-                        experiment.currentEffort,
-                        AgentBarPalette.primary
-                    )
-                    Image(systemName: "arrow.right")
-                    effortCard(
-                        efficiencyText("trialExperiment", store.language),
-                        experiment.suggestedTrialEffort,
-                        .green
-                    )
-                }
-                Button {
-                    startedTrialIDs.insert(experiment.id)
-                } label: {
-                    Text(
-                        startedTrialIDs.contains(experiment.id)
-                            ? efficiencyText("trialQueued", store.language)
-                            : String(
-                                format: efficiencyText("startTrial", store.language),
-                                experiment.trialTaskCount
-                            )
-                    )
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .frame(maxWidth: .infinity)
-        }
-    }
-
-    private func effortCard(_ title: String, _ effort: String, _ color: Color) -> some View {
-        VStack(spacing: 8) {
-            Text(title).foregroundStyle(.secondary)
-            Text(effort)
-                .font(.agentBarMono(size: 20, weight: .bold))
-                .foregroundStyle(color)
-        }
-        .font(.agentBar(size: 11, weight: .semibold))
-        .frame(maxWidth: .infinity, minHeight: 130)
-        .agentBarPanel(cornerRadius: 14)
-    }
-}
-
 @MainActor
 private func detailHeader(_ title: String, _ subtitle: String, store: UsageStore) -> some View {
     HStack {
@@ -980,7 +813,6 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "coach": "Efficiency Guide",
         "contextBurn": "Context Burn",
         "cacheHealth": "Cache Health",
-        "modelEffort": "Model & Effort Lab",
         "coachSubtitle": "Turn usage into prioritized, explainable actions.",
         "opportunities": "Opportunities",
         "contextSessions": "Measured sessions",
@@ -1036,22 +868,6 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "measuredLocally": "Measured from local usage metadata",
         "cacheByService": "Cache reuse by service",
         "lowestCacheSessions": "Sessions with lowest cache reuse",
-        "modelEffortSubtitle": "Build a small manual trial from local project, model, and effort history.",
-        "evaluatedGroups": "Projects observed",
-        "localTaskGroups": "Project labels in task history",
-        "experimentCandidates": "Manual trial candidates",
-        "safeToTrial": "Meets the six-task history floor",
-        "trialsStarted": "Trials started",
-        "localOnly": "Local UI state; no automatic model change",
-        "effortChange": "Effort (current → trial)",
-        "historicalTasks": "Historical tasks",
-        "unknownProject": "Unknown project",
-        "reversibleExperiment": "Manual experiment — not a quality recommendation",
-        "experimentWarning": "These tasks share provider, project, model, and effort only. AgentBar cannot tell whether they are similar or whether lower effort preserves quality. Choose comparable future tasks and judge quality yourself.",
-        "sampleSize": "Sample size",
-        "currentControl": "Current (control)",
-        "trialExperiment": "Trial (experiment)",
-        "startTrial": "Start %d-task trial",
         "unavailable": "Data unavailable",
         "unavailableDetail": "The selected range does not contain enough compatible local usage metadata."
     ]
@@ -1059,7 +875,6 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "coach": "效率指南",
         "contextBurn": "上下文消耗",
         "cacheHealth": "缓存健康",
-        "modelEffort": "模型与推理强度实验室",
         "coachSubtitle": "把用量转化为有优先级、可解释的行动。",
         "opportunities": "优化机会",
         "contextSessions": "已测会话",
@@ -1115,22 +930,6 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "measuredLocally": "根据本地用量元数据测量",
         "cacheByService": "各服务缓存复用率",
         "lowestCacheSessions": "缓存复用率最低的会话",
-        "modelEffortSubtitle": "根据本地项目、模型与推理强度历史，手动设计小规模实验。",
-        "evaluatedGroups": "已观察项目",
-        "localTaskGroups": "任务历史中的项目标签",
-        "experimentCandidates": "手动实验候选",
-        "safeToTrial": "达到六个任务的历史门槛",
-        "trialsStarted": "已开始试验",
-        "localOnly": "仅本地界面状态，不自动切换模型",
-        "effortChange": "推理强度（当前 → 试验）",
-        "historicalTasks": "历史任务数",
-        "unknownProject": "未知项目",
-        "reversibleExperiment": "手动实验，不代表质量建议",
-        "experimentWarning": "这些任务只共享提供商、项目、模型与推理强度。AgentBar 无法判断任务是否相似，也无法确认较低强度是否保持质量。请自行选择可比较的未来任务并评估质量。",
-        "sampleSize": "样本量",
-        "currentControl": "当前（对照）",
-        "trialExperiment": "试验",
-        "startTrial": "开始 %d 个任务试验",
         "unavailable": "数据不可用",
         "unavailableDetail": "所选时间范围内没有足够的兼容本地用量元数据。"
     ]

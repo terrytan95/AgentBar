@@ -74,17 +74,6 @@ struct SessionEfficiencyOutlier: Equatable, Identifiable, Sendable {
     var confidence: TokenEfficiencyConfidence
 }
 
-struct ModelEffortExperiment: Equatable, Identifiable, Sendable {
-    var id: String
-    var scope: TokenEfficiencyScope
-    var completedTaskCount: Int
-    var currentEffort: String
-    var suggestedTrialEffort: String
-    var controlTaskCount: Int
-    var trialTaskCount: Int
-    var confidence: TokenEfficiencyConfidence
-}
-
 enum EfficiencyCoachInsightKind: String, Sendable {
     case contextPressure
     case cacheReuseExperiment
@@ -114,7 +103,6 @@ struct TokenEfficiencyNudge: Equatable, Identifiable, Sendable {
 enum TokenEfficiencyAnalytics {
     static let minimumCacheSessions = 6
     static let minimumOutlierBaseline = 8
-    static let minimumExperimentTasks = 6
 
     static func contextBurn(
         points: [UsagePoint],
@@ -273,52 +261,6 @@ enum TokenEfficiencyAnalytics {
             )
         }
         .sorted { $0.uncachedInputTokens > $1.uncachedInputTokens }
-    }
-
-    static func modelEffortExperiments(
-        points: [UsagePoint],
-        tasks: [AgentTask],
-        now: Date = Date()
-    ) -> [ModelEffortExperiment] {
-        let pointsBySession = Dictionary(grouping: points.filter { $0.sessionID != nil }, by: { $0.sessionID! })
-        let completed = tasks.filter { $0.state(at: now) == .completed }
-        let candidates = completed.compactMap { task -> TaskSample? in
-            guard let effort = task.reasoningEffort?.trimmedNonEmpty,
-                  lowerEffort(than: effort) != nil,
-                  let sessionPoints = pointsBySession[task.sessionID],
-                  Set(sessionPoints.map(\.service)).count == 1,
-                  let point = sessionPoints.first
-            else { return nil }
-            return TaskSample(
-                task: task,
-                scope: scope(for: point, task: task),
-                projectID: ProjectUsageAnalytics.projectID(for: point),
-                model: task.models.sorted().joined(separator: "+"),
-                uncachedInputTokens: task.uncachedInputTokens
-            )
-        }
-
-        return Dictionary(grouping: candidates) {
-            "\($0.scope.service.rawValue)|\($0.projectID)|\($0.model)|\($0.task.reasoningEffort ?? "")"
-        }.compactMap { key, cohort in
-            guard cohort.count >= minimumExperimentTasks,
-                  let sample = cohort.first,
-                  let effort = sample.task.reasoningEffort,
-                  let lower = lowerEffort(than: effort)
-            else { return nil }
-            let trialCount = max(1, min(3, cohort.count / 3))
-            return ModelEffortExperiment(
-                id: key,
-                scope: sample.scope,
-                completedTaskCount: cohort.count,
-                currentEffort: effort,
-                suggestedTrialEffort: lower,
-                controlTaskCount: trialCount,
-                trialTaskCount: trialCount,
-                confidence: confidence(sampleSize: cohort.count, minimum: minimumExperimentTasks)
-            )
-        }
-        .sorted { $0.completedTaskCount > $1.completedTaskCount }
     }
 
     static func coachInsights(
@@ -494,17 +436,6 @@ enum TokenEfficiencyAnalytics {
             customEnd: customEnd
         ) else { return tasks }
         return tasks.filter { interval.contains($0.auditDate) }
-    }
-
-    private static func lowerEffort(than effort: String) -> String? {
-        switch effort.lowercased() {
-        case "ultra": "max"
-        case "max": "xhigh"
-        case "xhigh": "high"
-        case "high": "medium"
-        case "medium": "low"
-        default: nil
-        }
     }
 
     private static func confidence(sampleSize: Int, minimum: Int) -> TokenEfficiencyConfidence {

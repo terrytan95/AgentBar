@@ -33,6 +33,7 @@ struct EfficiencyCoachView: View {
     @State private var selectedService = "all"
     @State private var dismissedInsightIDs: Set<String> = []
     @State private var trialInsightIDs: Set<String> = []
+    @State private var navigationAnchor: EfficiencyCoachPage = .coach
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -65,27 +66,62 @@ struct EfficiencyCoachView: View {
     }
 
     private var pageNavigation: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                ForEach(EfficiencyCoachPage.allCases) { item in
-                    Button {
-                        page = item
-                    } label: {
-                        Label(efficiencyText(item.rawValue, store.language), systemImage: item.icon)
-                            .font(.agentBar(size: 11, weight: .bold))
-                            .foregroundStyle(page == item ? .white : .secondary)
-                            .padding(.horizontal, 11)
-                            .frame(height: 32)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(page == item ? AgentBarPalette.primary : AgentBarDesign.panelHighlight)
-                            )
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(EfficiencyCoachPage.allCases) { item in
+                        Button {
+                            page = item
+                            navigationAnchor = item
+                            withAnimation {
+                                proxy.scrollTo(item, anchor: .center)
+                            }
+                        } label: {
+                            Label(efficiencyText(item.rawValue, store.language), systemImage: item.icon)
+                                .font(.agentBar(size: 11, weight: .bold))
+                                .foregroundStyle(page == item ? .white : .secondary)
+                                .padding(.horizontal, 11)
+                                .frame(height: 32)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(page == item ? AgentBarPalette.primary : AgentBarDesign.panelHighlight)
+                                )
+                        }
+                        .id(item)
+                        .tactilePlainButton()
+                        .accessibilityAddTraits(page == item ? .isSelected : [])
                     }
-                    .tactilePlainButton()
-                    .accessibilityAddTraits(page == item ? .isSelected : [])
+                }
+            }
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onEnded { value in
+                        guard abs(value.translation.width) > abs(value.translation.height),
+                              abs(value.translation.width) > 12
+                        else { return }
+                        navigationAnchor = adjacentPage(
+                            to: navigationAnchor,
+                            towardEnd: value.translation.width < 0
+                        )
+                        withAnimation {
+                            proxy.scrollTo(navigationAnchor, anchor: .center)
+                        }
+                    }
+            )
+            .onChange(of: page) { _, newPage in
+                navigationAnchor = newPage
+                withAnimation {
+                    proxy.scrollTo(newPage, anchor: .center)
                 }
             }
         }
+    }
+
+    private func adjacentPage(to current: EfficiencyCoachPage, towardEnd: Bool) -> EfficiencyCoachPage {
+        let pages = EfficiencyCoachPage.allCases
+        guard let index = pages.firstIndex(of: current) else { return page }
+        return pages[min(max(index + (towardEnd ? 1 : -1), pages.startIndex), pages.index(before: pages.endIndex))]
     }
 
     private var coach: some View {

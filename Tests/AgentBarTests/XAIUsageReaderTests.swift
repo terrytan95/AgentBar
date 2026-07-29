@@ -22,6 +22,14 @@ final class XAIUsageReaderTests: XCTestCase {
         """
         try Data(auth.utf8).write(to: authDirectory.appendingPathComponent("auth.json"))
 
+        let sessionDirectory = authDirectory
+            .appendingPathComponent("sessions/project/session-123", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
+        try Data(#"{"current_model_id":"grok-4.5","generated_title":"Fix usage","reasoning_effort":"high","info":{"id":"session-123","cwd":"/tmp/project"}}"#.utf8)
+            .write(to: sessionDirectory.appendingPathComponent("summary.json"))
+        try Data(#"{"method":"_x.ai/session/update","timestamp":1775000100,"params":{"update":{"sessionUpdate":"turn_completed","usage":{"inputTokens":1200,"cachedReadTokens":800,"outputTokens":300,"reasoningTokens":100,"totalTokens":1500,"costUsdTicks":1250000000,"modelUsage":{"grok-4.5-build":{"inputTokens":1200,"cachedReadTokens":800,"outputTokens":300,"reasoningTokens":100,"totalTokens":1500,"costUsdTicks":1250000000}}}}}}"#.utf8)
+            .write(to: sessionDirectory.appendingPathComponent("updates.jsonl"))
+
         let reader = XAIUsageReader(
             homeDirectory: home,
             now: { Date(timeIntervalSince1970: 1_775_000_000) },
@@ -63,5 +71,15 @@ final class XAIUsageReaderTests: XCTestCase {
         XCTAssertEqual(account.grokSubscriptionUsage?.prepaidBalanceUSD, Decimal(string: "7.5"))
         XCTAssertEqual(account.grokSubscriptionUsage?.onDemandUsedUSD, Decimal(string: "1.2"))
         XCTAssertEqual(account.grokSubscriptionUsage?.onDemandCapUSD, Decimal(string: "5"))
+        XCTAssertEqual(account.tokens.total, 1_500)
+        XCTAssertEqual(account.estimatedCostUSD, Decimal(string: "0.125"))
+        let point = try XCTUnwrap(snapshot.points.first)
+        XCTAssertEqual(point.model, "grok-4.5-build")
+        XCTAssertEqual(point.tokens, TokenTotals(input: 1_200, cachedInput: 800, output: 300, reasoningOutput: 100, total: 1_500))
+        XCTAssertEqual(point.estimatedCostUSD, Decimal(string: "0.125"))
+        XCTAssertEqual(point.sessionID, "session-123")
+        XCTAssertEqual(point.sessionTitle, "Fix usage")
+        XCTAssertEqual(point.cwd, "/tmp/project")
+        XCTAssertEqual(point.reasoningEffort, "high")
     }
 }

@@ -118,6 +118,8 @@ enum GrokCLISessionRefresher {
 struct XAIUsageReader {
     typealias Client = @Sendable (URLRequest, TimeInterval) async throws -> (statusCode: Int, data: Data)
 
+    // ponytail: whole-file parsing stays bounded; stream if Grok session logs routinely exceed 20 MB.
+    private static let maximumSessionFileBytes = 20 * 1024 * 1024
     var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     var now: @Sendable () -> Date = Date.init
     var client: Client = Self.defaultClient
@@ -126,6 +128,7 @@ struct XAIUsageReader {
 
     func read() async -> UsageSnapshot? {
         let refreshedAt = now()
+        let localPoints = readLocalUsage()
         var credential: GrokCLICredential
 
         do {
@@ -140,6 +143,7 @@ struct XAIUsageReader {
                 status: .unavailable,
                 credential: nil,
                 refreshedAt: refreshedAt,
+                localPoints: localPoints,
                 note: "AgentBar could not read the Grok CLI login at ~/.grok/auth.json: \(error.localizedDescription.redactedForCredentialWords)"
             )
         }
@@ -161,13 +165,15 @@ struct XAIUsageReader {
                     data: response.data,
                     settings: settings,
                     credential: credential,
-                    refreshedAt: refreshedAt
+                    refreshedAt: refreshedAt,
+                    localPoints: localPoints
                 )
             case 401, 403:
                 return issueSnapshot(
                     status: .needsAuthorization,
                     credential: credential,
                     refreshedAt: refreshedAt,
+                    localPoints: localPoints,
                     note: "The Grok CLI session is no longer authorized (HTTP \(response.statusCode)). Run `grok login`, then refresh AgentBar."
                 )
             default:
@@ -175,6 +181,7 @@ struct XAIUsageReader {
                     status: .unavailable,
                     credential: credential,
                     refreshedAt: refreshedAt,
+                    localPoints: localPoints,
                     note: "Grok subscription usage is unavailable (HTTP \(response.statusCode))."
                 )
             }
@@ -183,6 +190,7 @@ struct XAIUsageReader {
                 status: .unavailable,
                 credential: credential,
                 refreshedAt: refreshedAt,
+                localPoints: localPoints,
                 note: "Grok subscription usage could not be refreshed: \(error.localizedDescription.redactedForCredentialWords)"
             )
         }
@@ -209,7 +217,8 @@ struct XAIUsageReader {
         data: Data,
         settings: GrokRemoteSettings?,
         credential: GrokCLICredential,
-        refreshedAt: Date
+        refreshedAt: Date,
+        localPoints: [UsagePoint]
     ) throws -> UsageSnapshot {
         let response = try JSONDecoder().decode(GrokBillingResponse.self, from: data)
         let config = response.config
@@ -236,15 +245,17 @@ struct XAIUsageReader {
             status: .live,
             weeklyWindow: weeklyWindow,
             subscription: subscription,
-            lastUpdated: refreshedAt
+            tokens: Self.totalTokens(localPoints),
+            estimatedCostUSD: Self.totalCost(localPoints),
+            lastUpdated: localPoints.map(\.date).max() ?? refreshedAt
         )
         return UsageSnapshot(
             service: .xaiAPI,
             status: .live,
             accounts: [account],
-            points: [],
+            points: localPoints,
             securityNotes: [
-                "Read-only Grok subscription usage from the authenticated Grok CLI session. AgentBar never stores or logs the OAuth token."
+                "Read-only Grok subscription usage and local session token totals. AgentBar never stores or logs the OAuth token or conversation content."
             ],
             refreshedAt: refreshedAt,
             pricingFingerprint: "grok-cli-subscription-v1"
@@ -255,6 +266,7 @@ struct XAIUsageReader {
         status: DataSourceStatus,
         credential: GrokCLICredential?,
         refreshedAt: Date,
+        localPoints: [UsagePoint] = [],
         note: String
     ) -> UsageSnapshot {
         UsageSnapshot(
@@ -267,10 +279,12 @@ struct XAIUsageReader {
                     status: status,
                     weeklyWindow: nil,
                     subscription: nil,
-                    lastUpdated: nil
+                    tokens: Self.totalTokens(localPoints),
+                    estimatedCostUSD: Self.totalCost(localPoints),
+                    lastUpdated: localPoints.map(\.date).max()
                 )
             ],
-            points: [],
+            points: localPoints,
             securityNotes: [note],
             refreshedAt: refreshedAt,
             pricingFingerprint: "grok-cli-subscription-v1"
@@ -283,6 +297,8 @@ struct XAIUsageReader {
         status: DataSourceStatus,
         weeklyWindow: UsageWindow?,
         subscription: GrokSubscriptionUsage?,
+        tokens: TokenTotals,
+        estimatedCostUSD: Decimal?,
         lastUpdated: Date?
     ) -> UsageAccount {
         UsageAccount(
@@ -292,12 +308,12 @@ struct XAIUsageReader {
             username: nil,
             maskedEmail: nil,
             plan: plan?.trimmedNonEmpty ?? "Subscription",
-            sourceDescription: "Grok CLI · subscription usage",
+            sourceDescription: "Grok CLI · subscription and local sessions",
             status: status,
             fiveHourWindow: nil,
             weeklyWindow: weeklyWindow,
-            tokens: .zero,
-            estimatedCostUSD: nil,
+            tokens: tokens,
+            estimatedCostUSD: estimatedCostUSD,
             lastUpdated: lastUpdated,
             isActive: true,
             workspaceName: nil,
@@ -305,6 +321,107 @@ struct XAIUsageReader {
             accessTokenExpiresAt: credential?.expiresAt,
             grokSubscriptionUsage: subscription
         )
+    }
+
+    private func readLocalUsage() -> [UsagePoint] {
+        let root = homeDirectory.appendingPathComponent(".grok/sessions", isDirectory: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var points: [UsagePoint] = []
+        for case let file as URL in enumerator where file.lastPathComponent == "updates.jsonl" {
+            guard !Task.isCancelled,
+                  let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true,
+                  (values.fileSize ?? 0) <= Self.maximumSessionFileBytes,
+                  let data = try? Data(contentsOf: file, options: .mappedIfSafe)
+            else { continue }
+
+            let summary = file
+                .deletingLastPathComponent()
+                .appendingPathComponent("summary.json")
+            let metadata = (try? Data(contentsOf: summary))
+                .flatMap { try? JSONDecoder().decode(GrokSessionSummary.self, from: $0) }
+            let sessionID = metadata?.info?.id?.trimmedNonEmpty
+                ?? file.deletingLastPathComponent().lastPathComponent
+
+            for (index, line) in data.split(separator: UInt8(ascii: "\n")).enumerated() {
+                guard let event = try? JSONDecoder().decode(GrokSessionEvent.self, from: Data(line)),
+                      let timestamp = event.timestamp,
+                      let update = event.params?.update,
+                      update.sessionUpdate == "turn_completed",
+                      let usage = update.usage
+                else { continue }
+
+                let modelUsage = usage.modelUsage?.sorted { $0.key < $1.key } ?? []
+                if modelUsage.isEmpty {
+                    points.append(Self.point(
+                        usage: usage,
+                        model: metadata?.currentModelID ?? "Grok",
+                        timestamp: timestamp,
+                        metadata: metadata,
+                        sessionID: sessionID,
+                        sourceFile: file.path,
+                        sourceLine: index + 1,
+                        trustsCost: usage.usageIsIncomplete != true
+                    ))
+                } else {
+                    points.append(contentsOf: modelUsage.map { model, usage in
+                        Self.point(
+                            usage: usage,
+                            model: model,
+                            timestamp: timestamp,
+                            metadata: metadata,
+                            sessionID: sessionID,
+                            sourceFile: file.path,
+                            sourceLine: index + 1,
+                            trustsCost: usage.usageIsIncomplete != true
+                        )
+                    })
+                }
+            }
+        }
+        return points.sorted { $0.date < $1.date }
+    }
+
+    private static func point(
+        usage: GrokSessionUsage,
+        model: String,
+        timestamp: Double,
+        metadata: GrokSessionSummary?,
+        sessionID: String,
+        sourceFile: String,
+        sourceLine: Int,
+        trustsCost: Bool
+    ) -> UsagePoint {
+        let cwd = metadata?.info?.cwd?.trimmedNonEmpty
+        return UsagePoint(
+            service: .xaiAPI,
+            model: model,
+            date: Date(timeIntervalSince1970: timestamp),
+            tokens: usage.tokens,
+            estimatedCostUSD: trustsCost ? usage.costUSD : nil,
+            sessionID: sessionID,
+            sessionTitle: metadata?.generatedTitle?.trimmedNonEmpty,
+            projectName: cwd.map { URL(fileURLWithPath: $0).lastPathComponent },
+            cwd: cwd,
+            repositoryPath: metadata?.gitRootDirectory?.trimmedNonEmpty,
+            sourceFile: sourceFile,
+            sourceLine: sourceLine,
+            reasoningEffort: metadata?.reasoningEffort?.trimmedNonEmpty
+        )
+    }
+
+    private static func totalTokens(_ points: [UsagePoint]) -> TokenTotals {
+        points.reduce(.zero) { $0 + $1.tokens }
+    }
+
+    private static func totalCost(_ points: [UsagePoint]) -> Decimal? {
+        let costs = points.compactMap(\.estimatedCostUSD)
+        return costs.isEmpty ? nil : costs.reduce(0, +)
     }
 
     fileprivate static func apiDate(_ value: String?) -> Date? {
@@ -342,6 +459,73 @@ struct XAIUsageReader {
             throw GrokCLIUsageError.invalidResponse
         }
         return (response.statusCode, data)
+    }
+}
+
+private struct GrokSessionSummary: Decodable {
+    var currentModelID: String?
+    var generatedTitle: String?
+    var reasoningEffort: String?
+    var gitRootDirectory: String?
+    var info: GrokSessionInfo?
+
+    enum CodingKeys: String, CodingKey {
+        case currentModelID = "current_model_id"
+        case generatedTitle = "generated_title"
+        case reasoningEffort = "reasoning_effort"
+        case gitRootDirectory = "git_root_dir"
+        case info
+    }
+}
+
+private struct GrokSessionInfo: Decodable {
+    var id: String?
+    var cwd: String?
+}
+
+private struct GrokSessionEvent: Decodable {
+    var timestamp: Double?
+    var params: GrokSessionEventParams?
+}
+
+private struct GrokSessionEventParams: Decodable {
+    var update: GrokSessionUpdate?
+}
+
+private struct GrokSessionUpdate: Decodable {
+    var sessionUpdate: String?
+    var usage: GrokSessionUsage?
+}
+
+private struct GrokSessionUsage: Decodable {
+    var inputTokens: Int?
+    var cachedReadTokens: Int?
+    var outputTokens: Int?
+    var reasoningTokens: Int?
+    var totalTokens: Int?
+    var costUsdTicks: Int64?
+    var costIsPartial: Bool?
+    var usageIsIncomplete: Bool?
+    var modelUsage: [String: GrokSessionUsage]?
+
+    var tokens: TokenTotals {
+        let input = max(0, inputTokens ?? 0)
+        let output = max(0, outputTokens ?? 0)
+        return TokenTotals(
+            input: input,
+            cachedInput: min(input, max(0, cachedReadTokens ?? 0)),
+            output: output,
+            reasoningOutput: min(output, max(0, reasoningTokens ?? 0)),
+            total: max(0, totalTokens ?? input + output)
+        )
+    }
+
+    var costUSD: Decimal? {
+        guard costIsPartial != true,
+              let costUsdTicks, costUsdTicks >= 0,
+              let ticks = Decimal(string: String(costUsdTicks))
+        else { return nil }
+        return ticks / 10_000_000_000
     }
 }
 

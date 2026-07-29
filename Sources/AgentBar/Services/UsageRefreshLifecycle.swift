@@ -26,6 +26,7 @@ final class UsageRefreshLifecycle {
     private let codexUsageSynchronizer: @Sendable () async -> CodexUsageSyncResult
     private let codexUsageReader: @Sendable () -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
+    private let xaiUsageReader: @Sendable () async -> UsageSnapshot?
     private let refreshTimeout: Duration
     private var generation: UInt64 = 0
     private var inFlight: Run?
@@ -35,11 +36,13 @@ final class UsageRefreshLifecycle {
         codexUsageSynchronizer: @escaping @Sendable () async -> CodexUsageSyncResult,
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot,
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot,
+        xaiUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
         refreshTimeout: Duration = .seconds(60)
     ) {
         self.codexUsageSynchronizer = codexUsageSynchronizer
         self.codexUsageReader = codexUsageReader
         self.claudeUsageReader = claudeUsageReader
+        self.xaiUsageReader = xaiUsageReader
         self.refreshTimeout = refreshTimeout
     }
 
@@ -70,9 +73,11 @@ final class UsageRefreshLifecycle {
         let codexUsageSynchronizer = codexUsageSynchronizer
         let codexUsageReader = codexUsageReader
         let claudeUsageReader = claudeUsageReader
+        let xaiUsageReader = xaiUsageReader
         inFlight = Run(generation: runGeneration)
 
         let workTask = Task.detached(priority: .utility) { [weak self] in
+            async let xaiUsage = xaiUsageReader()
             let syncResult = await codexUsageSynchronizer()
             guard !Task.isCancelled else { return }
             var codex = codexUsageReader()
@@ -82,10 +87,16 @@ final class UsageRefreshLifecycle {
             }
             let claude = claudeUsageReader()
             guard !Task.isCancelled else { return }
+            let xai = await xaiUsage
+            guard !Task.isCancelled else { return }
+            var snapshots: [UsageService: UsageSnapshot] = [.codex: codex, .claudeCode: claude]
+            if let xai {
+                snapshots[.xaiAPI] = xai
+            }
             let result = Result(
-                snapshots: [.codex: codex, .claudeCode: claude],
-                accounts: codex.accounts + claude.accounts,
-                points: codex.points + claude.points,
+                snapshots: snapshots,
+                accounts: codex.accounts + claude.accounts + (xai?.accounts ?? []),
+                points: codex.points + claude.points + (xai?.points ?? []),
                 tasks: codex.tasks,
                 generation: runGeneration
             )

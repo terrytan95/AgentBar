@@ -670,13 +670,13 @@ struct StatisticsView: View {
                         accent: .green,
                     )
                     DashboardKPI(
-                        title: L.text(overviewService == .codex ? "openai_overview" : "anthropic_overview", store.language),
+                        title: L.text(serviceOverviewTitleKey(overviewService), store.language),
                         value: serviceCostText(overviewService),
                         delta: serviceShareText(overviewService),
                         subtitle: L.text("share_of_total_cost", store.language),
                         systemImage: "sparkles",
-                        marker: overviewService == .codex ? AgentBarPalette.tertiary : AgentBarPalette.secondary,
-                        accent: overviewService == .codex ? AgentBarPalette.tertiary : AgentBarPalette.secondary,
+                        marker: serviceColor(overviewService),
+                        accent: serviceColor(overviewService),
                     )
                 }
             }
@@ -863,6 +863,27 @@ struct StatisticsView: View {
                         Label(L.text("login_claude_terminal", store.language), systemImage: "terminal")
                     }
                     .pointingHandCursor()
+                }
+                SettingsRow(title: "xAI API", subtitle: xaiProviderSubtitle) {
+                    HStack(spacing: 10) {
+                        Button {
+                            store.configureXAI()
+                        } label: {
+                            Label(
+                                L.text(store.hasXAIConfiguration ? "update_xai" : "configure_xai", store.language),
+                                systemImage: "key.fill"
+                            )
+                        }
+                        .pointingHandCursor()
+                        if store.hasXAIConfiguration {
+                            Button(role: .destructive) {
+                                store.disconnectXAI()
+                            } label: {
+                                Text(L.text("disconnect", store.language))
+                            }
+                            .pointingHandCursor()
+                        }
+                    }
                 }
             }
 
@@ -1273,8 +1294,29 @@ struct StatisticsView: View {
         !claudeAccounts.isEmpty || store.points.contains { $0.service == .claudeCode }
     }
 
+    private var xaiAccounts: [UsageAccount] {
+        store.accounts.filter { $0.service == .xaiAPI }
+    }
+
+    private var hasXAIData: Bool {
+        !xaiAccounts.isEmpty || store.points.contains { $0.service == .xaiAPI }
+    }
+
+    private var xaiProviderSubtitle: String {
+        if let snapshot = store.snapshots[.xaiAPI] {
+            return "\(snapshot.status.label(language: store.language)) · \(L.text("xai_api_cost_only", store.language))"
+        }
+        return L.text(
+            store.hasXAIConfiguration ? "xai_waiting_for_refresh" : "xai_not_configured",
+            store.language
+        )
+    }
+
     private var overviewService: UsageService {
-        codexAccounts.isEmpty && hasClaudeData ? .claudeCode : .codex
+        if !codexAccounts.isEmpty { return .codex }
+        if hasClaudeData { return .claudeCode }
+        if hasXAIData { return .xaiAPI }
+        return .codex
     }
 
     private func kpiColumns(for width: CGFloat) -> [GridItem] {
@@ -1378,15 +1420,18 @@ struct StatisticsView: View {
         let total = max(1, summary.serviceBreakdown.values.reduce(0, +))
         return UsageService.allCases.compactMap { service in
             let tokens = summary.serviceBreakdown[service, default: 0]
-            guard tokens > 0 || (service == .codex && !codexAccounts.isEmpty) || (service == .claudeCode && hasClaudeData) else { return nil }
-            let color = service == .codex ? AgentBarPalette.tertiary : AgentBarPalette.secondary
+            guard tokens > 0 ||
+                (service == .codex && !codexAccounts.isEmpty) ||
+                (service == .claudeCode && hasClaudeData) ||
+                (service == .xaiAPI && hasXAIData)
+            else { return nil }
             return ServiceMixRow(
                 service: service,
-                title: service == .codex ? "Codex" : "Claude Code",
-                subtitle: service == .codex ? "OpenAI" : "Anthropic",
+                title: serviceTitle(service),
+                subtitle: serviceProvider(service),
                 tokens: tokens,
                 share: Double(tokens) / Double(total),
-                color: color
+                color: serviceColor(service)
             )
         }
     }
@@ -1610,11 +1655,35 @@ struct StatisticsView: View {
     }
 
     private func serviceTitle(_ service: UsageService) -> String {
-        service == .codex ? "Codex" : "Claude"
+        switch service {
+        case .codex: "Codex"
+        case .claudeCode: "Claude"
+        case .xaiAPI: "xAI API"
+        }
+    }
+
+    private func serviceProvider(_ service: UsageService) -> String {
+        switch service {
+        case .codex: "OpenAI"
+        case .claudeCode: "Anthropic"
+        case .xaiAPI: "xAI · \(L.text("cost_only", store.language))"
+        }
+    }
+
+    private func serviceOverviewTitleKey(_ service: UsageService) -> String {
+        switch service {
+        case .codex: "openai_overview"
+        case .claudeCode: "anthropic_overview"
+        case .xaiAPI: "xai_overview"
+        }
     }
 
     private func serviceColor(_ service: UsageService) -> Color {
-        service == .codex ? AgentBarPalette.tertiary : AgentBarPalette.secondary
+        switch service {
+        case .codex: AgentBarPalette.tertiary
+        case .claudeCode: AgentBarPalette.secondary
+        case .xaiAPI: .purple
+        }
     }
 
     private func resetExpiryColor(_ date: Date?) -> Color {
@@ -1856,7 +1925,7 @@ private struct DashboardStackedBars: View {
     @State private var hoverLocation: CGPoint?
     @State private var hoverPlotSize: CGSize = .zero
 
-    private let calloutSize = CGSize(width: 238, height: 126)
+    private let calloutSize = CGSize(width: 238, height: 146)
 
     var body: some View {
         GeometryReader { proxy in
@@ -2033,11 +2102,13 @@ private struct DashboardStackedBars: View {
     }
 
     private func tokenValue(_ bar: DailyUsageBar) -> Double {
-        Double(bar.codexTokens + bar.claudeTokens)
+        Double(bar.codexTokens + bar.claudeTokens + bar.xaiTokens)
     }
 
     private func costValue(_ bar: DailyUsageBar) -> Double {
-        (bar.codexCostUSD as NSDecimalNumber).doubleValue + (bar.claudeCostUSD as NSDecimalNumber).doubleValue
+        (bar.codexCostUSD as NSDecimalNumber).doubleValue +
+            (bar.claudeCostUSD as NSDecimalNumber).doubleValue +
+            (bar.xaiCostUSD as NSDecimalNumber).doubleValue
     }
 
     private func tokenAxisText(_ value: Double) -> String {
@@ -2375,7 +2446,7 @@ private struct YearActivityPanel: View {
     }
 
     private func totalTokens(for bar: DailyUsageBar) -> Int {
-        bar.codexTokens + bar.claudeTokens
+        bar.codexTokens + bar.claudeTokens + bar.xaiTokens
     }
 
     private func monthText(_ date: Date) -> String {
@@ -2411,13 +2482,16 @@ private struct ChartHoverCallout: View {
                 .font(.agentBar(size: 11, weight: .bold))
             metricRow("Codex", tokens: bar.codexTokens, cost: bar.codexCostUSD, color: AgentBarPalette.tertiary)
             metricRow("Claude", tokens: bar.claudeTokens, cost: bar.claudeCostUSD, color: AgentBarPalette.secondary)
+            if bar.xaiTokens > 0 || bar.xaiCostUSD != 0 {
+                metricRow("xAI", tokens: bar.xaiTokens, cost: bar.xaiCostUSD, color: .purple)
+            }
             Divider()
             HStack {
                 Text(L.text("total", language))
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text(tokenText(bar.codexTokens + bar.claudeTokens))
-                    Text(DisplayFormatters.costString(bar.codexCostUSD + bar.claudeCostUSD))
+                    Text(tokenText(bar.codexTokens + bar.claudeTokens + bar.xaiTokens))
+                    Text(DisplayFormatters.costString(bar.codexCostUSD + bar.claudeCostUSD + bar.xaiCostUSD))
                         .foregroundStyle(.secondary)
                 }
                 .monospacedDigit()

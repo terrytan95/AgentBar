@@ -114,6 +114,9 @@ final class UsageStore: ObservableObject {
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot = {
             ClaudeUsageReader.discover(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
         },
+        xaiUsageReader: @escaping @Sendable () async -> UsageSnapshot? = {
+            await XAIUsageReader().read()
+        },
         codexAccountSwitcher: @escaping @Sendable (String) throws -> Void = { accountID in
             try CodexAccountSwitcher().switchActiveAccount(accountID: accountID)
         },
@@ -153,6 +156,7 @@ final class UsageStore: ObservableObject {
             codexUsageSynchronizer: codexUsageSynchronizer,
             codexUsageReader: codexUsageReader,
             claudeUsageReader: claudeUsageReader,
+            xaiUsageReader: xaiUsageReader,
             refreshTimeout: refreshTimeout
         )
         self.codexTaskReader = codexTaskReader
@@ -334,6 +338,7 @@ final class UsageStore: ObservableObject {
             switch account.service {
             case .codex: settings.showCodexInMenuBar
             case .claudeCode: settings.showClaudeInMenuBar
+            case .xaiAPI: true
             }
         }
     }
@@ -673,14 +678,46 @@ final class UsageStore: ObservableObject {
     }
 
     func openLogin(for service: UsageService) {
+        if service == .xaiAPI {
+            configureXAI()
+            return
+        }
         AccountLoginLauncher.openLogin(for: service)
     }
 
     func openLogin(for account: UsageAccount) {
-        if account.service == .codex {
+        if account.service == .xaiAPI {
+            configureXAI()
+        } else if account.service == .codex {
             AccountLoginLauncher.openCodexRecoveryLogin(accountID: account.id, accountLabel: account.displayName)
         } else {
             AccountLoginLauncher.openLogin(for: account.service)
+        }
+    }
+
+    var hasXAIConfiguration: Bool {
+        XAIConfigurationStore.isConfigured
+    }
+
+    func configureXAI() {
+        do {
+            if try XAIConfigurationPrompter.prompt(language: language) {
+                settings.persistXAITeamID()
+                refresh(force: true, showManualFeedback: true)
+            }
+        } catch {
+            lastError = error.localizedDescription.redactedForCredentialWords
+        }
+    }
+
+    func disconnectXAI() {
+        guard XAIConfigurationPrompter.confirmRemoval(language: language) else { return }
+        do {
+            try XAIConfigurationStore.clear()
+            settings.persistXAITeamID()
+            refresh(force: true, showManualFeedback: true)
+        } catch {
+            lastError = error.localizedDescription.redactedForCredentialWords
         }
     }
 

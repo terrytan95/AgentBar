@@ -580,7 +580,7 @@ struct AccountRowView: View {
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
                             .background(AgentBarPalette.primary, in: Capsule())
-                    } else {
+                    } else if account.service == .codex {
                         Button {
                             isConfirmingSwitch = true
                         } label: {
@@ -599,16 +599,18 @@ struct AccountRowView: View {
                         .pointingHandCursor(enabled: !isSwitching)
                     }
 
-                    Button(role: .destructive) {
-                        isConfirmingRemoval = true
-                    } label: {
-                        Image(systemName: "trash")
+                    if account.service == .codex {
+                        Button(role: .destructive) {
+                            isConfirmingRemoval = true
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                        .foregroundStyle(.red)
+                        .help(L.text("remove_account", language))
+                        .pointingHandCursor()
                     }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                    .foregroundStyle(.red)
-                    .help(L.text("remove_account", language))
-                    .pointingHandCursor()
                 }
             }
 

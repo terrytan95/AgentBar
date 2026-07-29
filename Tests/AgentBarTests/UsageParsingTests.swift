@@ -1118,7 +1118,8 @@ final class UsageParsingTests: XCTestCase {
                 recorder.record("claude-read")
                 expectation.fulfill()
                 return UsageSnapshot(service: .claudeCode, status: .unavailable, accounts: [], points: [claudePoint], securityNotes: ["test"], refreshedAt: now, pricingFingerprint: Pricing.fingerprint)
-            }
+            },
+            xaiUsageReader: { nil }
         )
         store.refresh(force: true)
 
@@ -2013,6 +2014,7 @@ final class UsageParsingTests: XCTestCase {
                     pricingFingerprint: Pricing.fingerprint
                 )
             },
+            xaiUsageReader: { nil },
             accessTokenExpiryReminderReconciler: { accounts, enabled, language in
                 recorder.record(accounts: accounts, enabled: enabled, language: language)
             }

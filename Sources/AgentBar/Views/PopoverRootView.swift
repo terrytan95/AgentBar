@@ -653,6 +653,19 @@ struct AccountRowView: View {
                 .minimumScaleFactor(0.8)
             }
 
+            if let usage = account.grokSubscriptionUsage {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                        Label(line, systemImage: "creditcard")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+
             HStack(spacing: 6) {
                 Text(account.accountTypeValue(language: language))
                 Text("·")

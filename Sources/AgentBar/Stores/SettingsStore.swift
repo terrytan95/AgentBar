@@ -395,10 +395,6 @@ final class SettingsStore: ObservableObject {
         popoverMetrics = remaining
     }
 
-    func persistXAITeamID() {
-        persist(XAIConfigurationStore.teamID, forKey: Keys.xaiTeamID)
-    }
-
     func projectBudget(for id: String) -> ProjectBudget {
         projectBudgets.first(where: { $0.id == id }) ?? ProjectBudget(id: id)
     }
@@ -466,7 +462,7 @@ final class SettingsStore: ObservableObject {
         static let quotaWidgetHotKey = "quotaWidgetHotKey"
         static let didCompleteQuotaWidgetOnboarding = "didCompleteQuotaWidgetOnboarding"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
-        static let xaiTeamID = XAIConfigurationStore.teamIDDefaultsKey
+        static let xaiTeamID = "xaiTeamID"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"
         static let useTranslucentAppearance = "useTranslucentAppearance"

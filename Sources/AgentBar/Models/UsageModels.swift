@@ -164,7 +164,11 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var cursorSubscriptionUsage: CursorSubscriptionUsage? = nil
 
     var mostConstrainedRemainingPercent: Double? {
-        [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]
+        [
+            fiveHourWindow?.remainingPercent,
+            weeklyWindow?.remainingPercent,
+            cursorSubscriptionUsage?.includedRemainingPercent
+        ]
             .compactMap { $0 }
             .min()
     }

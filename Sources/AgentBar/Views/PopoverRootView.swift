@@ -785,7 +785,7 @@ struct CursorSubscriptionGauge: View {
     }
 
     private var remainingPercent: Double {
-        100 - min(max(usage.includedUsedPercent, 0), 100)
+        usage.includedRemainingPercent
     }
 }
 

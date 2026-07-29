@@ -2,20 +2,26 @@ import Foundation
 
 struct CursorSubscriptionUsage: Codable, Equatable, Sendable {
     var includedUsedPercent: Double
-    var autoUsedPercent: Double
-    var apiUsedPercent: Double
+    var autoUsedPercent: Double?
+    var apiUsedPercent: Double?
     var onDemandUsedUSD: Decimal?
     var onDemandLimitUSD: Decimal?
     var periodEndsAt: Date?
+
+    var includedRemainingPercent: Double {
+        100 - min(max(includedUsedPercent, 0), 100)
+    }
 
     func summaryLines(language: AppLanguage, includesIncludedUsage: Bool = true) -> [String] {
         var lines = includesIncludedUsage ? [
             "\(L.text("included_usage", language)): \(DisplayFormatters.percentString(includedUsedPercent)) \(L.text("used", language))"
         ] : []
-        lines += [
-            "\(L.text("auto_usage", language)): \(DisplayFormatters.percentString(autoUsedPercent)) \(L.text("used", language))",
-            "\(L.text("api_usage", language)): \(DisplayFormatters.percentString(apiUsedPercent)) \(L.text("used", language))"
-        ]
+        if let autoUsedPercent {
+            lines.append("\(L.text("auto_usage", language)): \(DisplayFormatters.percentString(autoUsedPercent)) \(L.text("used", language))")
+        }
+        if let apiUsedPercent {
+            lines.append("\(L.text("api_usage", language)): \(DisplayFormatters.percentString(apiUsedPercent)) \(L.text("used", language))")
+        }
         if let onDemandUsedUSD {
             let value = onDemandLimitUSD.map {
                 "\(DisplayFormatters.costString(onDemandUsedUSD)) / \(DisplayFormatters.costString($0))"
@@ -172,9 +178,11 @@ struct CursorAgentUsageReader {
         let hardLimit = response.hardLimit
             .flatMap { $0.statusCode == 200 ? $0.data : nil }
             .flatMap { try? JSONDecoder().decode(CursorHardLimitResponse.self, from: $0) }
-        let includedPercent = planUsage.totalPercentUsed
+        guard let includedPercent = planUsage.totalPercentUsed
             ?? Self.percent(used: planUsage.includedSpend, limit: planUsage.limit)
-            ?? 0
+        else {
+            throw CursorAgentUsageError.usageDetailsUnavailable
+        }
         let onDemandUsed = usage.spendLimitUsage?.individualUsed.map(Self.dollarsFromCents)
         let personalHardLimit: Decimal? = hardLimit.flatMap {
             guard $0.noUsageBasedAllowed != true,
@@ -188,8 +196,8 @@ struct CursorAgentUsageReader {
             ?? (usage.spendLimitUsage?.limitType == "team" ? nil : personalHardLimit)
         let subscription = CursorSubscriptionUsage(
             includedUsedPercent: includedPercent,
-            autoUsedPercent: planUsage.autoPercentUsed ?? 0,
-            apiUsedPercent: planUsage.apiPercentUsed ?? 0,
+            autoUsedPercent: planUsage.autoPercentUsed,
+            apiUsedPercent: planUsage.apiPercentUsed,
             onDemandUsedUSD: onDemandUsed,
             onDemandLimitUSD: onDemandLimit,
             periodEndsAt: Self.date(milliseconds: usage.billingCycleEnd ?? planInfo?.billingCycleEnd)

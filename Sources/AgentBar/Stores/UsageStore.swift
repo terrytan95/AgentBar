@@ -330,7 +330,8 @@ final class UsageStore: ObservableObject {
     private func accountWindowTitles(_ account: UsageAccount) -> [String] {
         [
             account.fiveHourWindow.map { "5H \(DisplayFormatters.percentString($0.remainingPercent))" },
-            account.weeklyWindow.map { "WK \(DisplayFormatters.percentString($0.remainingPercent))" }
+            account.weeklyWindow.map { "WK \(DisplayFormatters.percentString($0.remainingPercent))" },
+            account.cursorSubscriptionUsage.map { "Cursor \(DisplayFormatters.percentString($0.includedRemainingPercent))" }
         ].compactMap { $0 }
     }
 

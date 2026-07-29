@@ -773,15 +773,19 @@ struct CursorSubscriptionGauge: View {
             HStack {
                 Text(L.text("included_usage", language))
                 Spacer()
-                Text("\(DisplayFormatters.percentString(usage.includedUsedPercent)) \(L.text("used", language))")
+                Text("\(DisplayFormatters.percentString(remainingPercent)) \(L.text("remaining", language))")
                     .monospacedDigit()
             }
             .font(.caption2)
-            ProgressView(value: min(max(usage.includedUsedPercent, 0), 100) / 100)
-                .tint(AgentBarPalette.primary)
+            ProgressView(value: remainingPercent / 100)
+                .tint(AgentBarPalette.quotaColor(remaining: remainingPercent))
                 .accessibilityLabel(L.text("included_usage", language))
-                .accessibilityValue("\(DisplayFormatters.percentString(usage.includedUsedPercent)) \(L.text("used", language))")
+                .accessibilityValue("\(DisplayFormatters.percentString(remainingPercent)) \(L.text("remaining", language))")
         }
+    }
+
+    private var remainingPercent: Double {
+        100 - min(max(usage.includedUsedPercent, 0), 100)
     }
 }
 

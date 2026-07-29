@@ -32,7 +32,7 @@ struct StatisticsView: View {
     @ObservedObject private var updates: AppUpdateStore
     @ObservedObject private var codexOverlay = CodexSidebarQuotaOverlayController.shared
     @ObservedObject private var quotaWidgetHotKey = QuotaWidgetHotKeyController.shared
-    @State private var viewMode: DashboardViewMode = .efficiency
+    @State private var viewMode: DashboardViewMode = .overview
     @State private var topTab: DashboardTopTab
     @State private var showsSidebarNavigation = true
     @State private var selectedSessionLabel: String?

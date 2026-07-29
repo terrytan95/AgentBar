@@ -964,7 +964,7 @@ private func shortSession(_ value: String) -> String {
 
 private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
     let english: [String: String] = [
-        "coach": "Efficiency Coach",
+        "coach": "Efficiency Guide",
         "contextBurn": "Context Burn",
         "cacheHealth": "Cache Health",
         "modelEffort": "Model & Effort Lab",
@@ -1051,7 +1051,7 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "unavailableDetail": "The selected range does not contain enough compatible local usage metadata."
     ]
     let chinese: [String: String] = [
-        "coach": "效率教练",
+        "coach": "效率指南",
         "contextBurn": "上下文消耗",
         "cacheHealth": "缓存健康",
         "modelEffort": "模型与推理强度实验室",

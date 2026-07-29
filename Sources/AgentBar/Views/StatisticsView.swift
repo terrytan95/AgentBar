@@ -145,7 +145,7 @@ struct StatisticsView: View {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
                 }
-                sidebarItem(store.language == .chinese ? "效率教练" : "Efficiency Coach", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
+                sidebarItem(store.language == .chinese ? "效率指南" : "Efficiency Guide", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
                     setPage(tab: .usage, viewMode: .efficiency)
                 }
                 sidebarItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {
@@ -312,7 +312,7 @@ struct StatisticsView: View {
                 topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
                 }
-                topNavigationItem(store.language == .chinese ? "效率教练" : "Efficiency Coach", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
+                topNavigationItem(store.language == .chinese ? "效率指南" : "Efficiency Guide", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
                     setPage(tab: .usage, viewMode: .efficiency)
                 }
                 topNavigationItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {

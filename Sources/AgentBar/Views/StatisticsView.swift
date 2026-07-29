@@ -636,7 +636,10 @@ struct StatisticsView: View {
             rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
             autoRotationEnabled: settings.autoCodexAccountRotationEnabled
         )
-        let topUsage = UsageInsights.topUsage(points: filteredPoints)
+        let topUsage = UsageInsights.topUsage(
+            points: filteredPoints,
+            limit: settings.topUsageRowCount
+        )
 
         VStack(alignment: .leading, spacing: 16) {
             dashboardOverviewHeader
@@ -1061,6 +1064,19 @@ struct StatisticsView: View {
                     subtitle: L.text("quota_pressure_section_subtitle", store.language),
                     isOn: $settings.showQuotaPressureSection
                 )
+                SettingsRow(
+                    title: L.text("top_usage_row_count", store.language),
+                    subtitle: L.text("top_usage_row_count_subtitle", store.language)
+                ) {
+                    Picker("", selection: $settings.topUsageRowCount) {
+                        ForEach(1...SettingsStore.maximumTopUsageRowCount, id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
+                    }
+                    .labelsHidden()
+                    .settingsControl(width: settingsControlCompactPickerWidth)
+                    .accessibilityLabel(L.text("top_usage_row_count", store.language))
+                }
             }
 
             SettingsGroup(title: budgetLocalized("budgets"), subtitle: budgetLocalized("budget_subtitle")) {
@@ -3256,7 +3272,7 @@ private struct TopUsagePanel: View {
     }
 
     private var visibleRows: [TopUsageRow] {
-        Array(selectedRows.prefix(3))
+        selectedRows
     }
 
     private var selectedColor: Color {

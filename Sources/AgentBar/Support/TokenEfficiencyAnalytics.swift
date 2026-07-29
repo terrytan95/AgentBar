@@ -74,19 +74,6 @@ struct SessionEfficiencyOutlier: Equatable, Identifiable, Sendable {
     var confidence: TokenEfficiencyConfidence
 }
 
-struct ProjectEfficiencySummary: Equatable, Identifiable, Sendable {
-    var id: String
-    var name: String
-    var path: String?
-    var service: UsageService
-    var completedTaskCount: Int
-    var tokensPerCompletedTask: Double?
-    var cacheRatio: Double?
-    var longContextSessionCount: Int?
-    var reasoningShare: Double?
-    var confidence: TokenEfficiencyConfidence
-}
-
 struct ModelEffortExperiment: Equatable, Identifiable, Sendable {
     var id: String
     var scope: TokenEfficiencyScope
@@ -96,28 +83,6 @@ struct ModelEffortExperiment: Equatable, Identifiable, Sendable {
     var controlTaskCount: Int
     var trialTaskCount: Int
     var confidence: TokenEfficiencyConfidence
-}
-
-enum ContextSourceLoadTiming: String, Sendable {
-    case always
-    case session
-    case onDemand
-    case unknown
-}
-
-struct ContextSourceCandidate: Equatable, Sendable {
-    var url: URL
-    var service: UsageService
-    var loadTiming: ContextSourceLoadTiming
-}
-
-struct ContextSourceStat: Equatable, Identifiable, Sendable {
-    var id: String { url.standardizedFileURL.path }
-    var url: URL
-    var service: UsageService
-    var byteCount: Int
-    var estimatedTokenCount: Int
-    var loadTiming: ContextSourceLoadTiming
 }
 
 enum EfficiencyCoachInsightKind: String, Sendable {
@@ -310,77 +275,6 @@ enum TokenEfficiencyAnalytics {
         .sorted { $0.uncachedInputTokens > $1.uncachedInputTokens }
     }
 
-    static func projectEfficiency(
-        points: [UsagePoint],
-        tasks: [AgentTask],
-        range: UsageRange = .all,
-        customStart: Date? = nil,
-        customEnd: Date? = nil,
-        now: Date = Date(),
-        calendar: Calendar = .current
-    ) -> [ProjectEfficiencySummary] {
-        let visiblePoints = UsageRangeProjection.filteredPoints(
-            points: points,
-            range: range,
-            now: now,
-            calendar: calendar,
-            customStart: customStart,
-            customEnd: customEnd
-        )
-        let visibleTasks = filteredTasks(
-            tasks,
-            range: range,
-            customStart: customStart,
-            customEnd: customEnd,
-            now: now,
-            calendar: calendar
-        )
-        let taskBySession = Dictionary(grouping: visibleTasks, by: \.sessionID)
-        let completedSessionIDs = Set(taskBySession.compactMap { sessionID, sessionTasks in
-            sessionTasks.allSatisfy { $0.state(at: now) == .completed } ? sessionID : nil
-        })
-
-        return Dictionary(grouping: visiblePoints, by: { point in
-            "\(point.service.rawValue)|\(ProjectUsageAnalytics.projectID(for: point))"
-        }).compactMap { key, projectPoints in
-            guard let sample = projectPoints.first else { return nil }
-            let projectID = ProjectUsageAnalytics.projectID(for: sample)
-            guard projectID != "project:unknown" else { return nil }
-            let completedPoints = projectPoints.filter {
-                $0.sessionID.map(completedSessionIDs.contains) == true
-            }
-            let sessions = Set(completedPoints.compactMap(\.sessionID))
-            let completedTasks = sessions.flatMap { taskBySession[$0, default: []] }
-            let input = completedPoints.reduce(0) { $0 + $1.tokens.input }
-            let cached = completedPoints.reduce(0) { $0 + min($1.tokens.cachedInput, $1.tokens.input) }
-            let output = completedPoints.reduce(0) { $0 + $1.tokens.output }
-            let reasoning = completedPoints.reduce(0) { $0 + $1.tokens.reasoningOutput }
-            let contextSessions = contextBurn(points: completedPoints)
-            let longContextCount = contextSessions.isEmpty
-                ? nil
-                : contextSessions.filter { $0.peakOccupancyRatio >= 0.70 }.count
-            let path = sample.repositoryPath ?? sample.cwd
-
-            return ProjectEfficiencySummary(
-                id: key,
-                name: sample.projectName?.trimmedNonEmpty
-                    ?? path.map { URL(fileURLWithPath: $0).lastPathComponent }
-                    ?? projectID,
-                path: path,
-                service: sample.service,
-                completedTaskCount: completedTasks.count,
-                tokensPerCompletedTask: completedTasks.isEmpty
-                    ? nil
-                    : Double(completedPoints.reduce(0) { $0 + $1.tokens.total }) / Double(completedTasks.count),
-                cacheRatio: input > 0 ? Double(cached) / Double(input) : nil,
-                longContextSessionCount: longContextCount,
-                reasoningShare: output + reasoning > 0 ? Double(reasoning) / Double(output + reasoning) : nil,
-                confidence: confidence(sampleSize: completedTasks.count, minimum: minimumExperimentTasks)
-            )
-        }
-        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
     static func modelEffortExperiments(
         points: [UsagePoint],
         tasks: [AgentTask],
@@ -425,25 +319,6 @@ enum TokenEfficiencyAnalytics {
             )
         }
         .sorted { $0.completedTaskCount > $1.completedTaskCount }
-    }
-
-    static func contextSourceStats(_ candidates: [ContextSourceCandidate]) -> [ContextSourceStat] {
-        candidates.compactMap { candidate in
-            guard candidate.url.isFileURL,
-                  let values = try? candidate.url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
-                  values.isRegularFile == true,
-                  let bytes = values.fileSize,
-                  bytes >= 0
-            else { return nil }
-            return ContextSourceStat(
-                url: candidate.url.standardizedFileURL,
-                service: candidate.service,
-                byteCount: bytes,
-                estimatedTokenCount: Int(ceil(Double(bytes) / 4)),
-                loadTiming: candidate.loadTiming
-            )
-        }
-        .sorted { $0.byteCount > $1.byteCount }
     }
 
     static func coachInsights(

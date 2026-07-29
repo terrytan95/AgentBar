@@ -6,10 +6,6 @@ enum EfficiencyCoachPage: String, CaseIterable, Identifiable {
     case contextBurn
     case cacheHealth
     case modelEffort
-    case contextSources
-    case sessionOutliers
-    case projectEfficiency
-    case smartNudge
 
     var id: String { rawValue }
 
@@ -19,10 +15,6 @@ enum EfficiencyCoachPage: String, CaseIterable, Identifiable {
         case .contextBurn: "chart.line.uptrend.xyaxis"
         case .cacheHealth: "externaldrive.fill.badge.checkmark"
         case .modelEffort: "flask"
-        case .contextSources: "doc.on.doc"
-        case .sessionOutliers: "exclamationmark.magnifyingglass"
-        case .projectEfficiency: "folder.badge.gearshape"
-        case .smartNudge: "bell.badge"
         }
     }
 }
@@ -60,14 +52,6 @@ struct EfficiencyCoachView: View {
                             CacheHealthEfficiencyView(store: store)
                         case .modelEffort:
                             ModelEffortLabView(store: store)
-                        case .contextSources:
-                            ContextSourcesEfficiencyView(store: store)
-                        case .sessionOutliers:
-                            SessionOutliersEfficiencyView(store: store)
-                        case .projectEfficiency:
-                            ProjectEfficiencyView(store: store)
-                        case .smartNudge:
-                            smartNudge
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -235,50 +219,6 @@ struct EfficiencyCoachView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private var smartNudge: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header(
-                title: efficiencyText("smartNudge", store.language),
-                subtitle: efficiencyText("smartNudgeSubtitle", store.language)
-            )
-            if let nudge = TokenEfficiencyAnalytics.smartNudge(points: servicePoints) {
-                HStack(spacing: 16) {
-                    Image(systemName: "bell.badge.fill")
-                        .font(.agentBar(size: 28, weight: .bold))
-                        .foregroundStyle(.orange)
-                        .frame(width: 58, height: 58)
-                        .background(Circle().fill(.orange.opacity(0.12)))
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(efficiencyText("contextNudge", store.language))
-                            .font(.agentBar(size: 16, weight: .bold))
-                        Text(
-                            String(
-                                format: efficiencyText("nudgeDetail", store.language),
-                                Int(nudge.contextOccupancyRatio * 100),
-                                nudge.service.rawValue
-                            )
-                        )
-                        .font(.agentBar(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(efficiencyText("reviewEvidence", store.language)) {
-                        page = .contextBurn
-                    }
-                    .tactilePlainButton()
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(18)
-                .agentBarPanel(cornerRadius: 14)
-            } else {
-                unavailablePanel(
-                    efficiencyText("noNudge", store.language),
-                    efficiencyText("noNudgeDetail", store.language)
-                )
-            }
-        }
-    }
-
     private var servicePoints: [UsagePoint] {
         guard selectedService != "all",
               let service = UsageService(rawValue: selectedService)
@@ -413,7 +353,7 @@ struct EfficiencyCoachView: View {
                 "exclamationmark.magnifyingglass",
                 .purple,
                 "mediumImpact",
-                .sessionOutliers
+                .cacheHealth
             )
         }
     }
@@ -1022,10 +962,6 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "contextBurn": "Context Burn",
         "cacheHealth": "Cache Health",
         "modelEffort": "Model & Effort Lab",
-        "contextSources": "Context Sources",
-        "sessionOutliers": "Session Outliers",
-        "projectEfficiency": "Project Efficiency",
-        "smartNudge": "Smart Nudge",
         "coachSubtitle": "Turn usage into prioritized, explainable actions.",
         "opportunities": "Opportunities",
         "contextSessions": "Measured sessions",
@@ -1038,12 +974,6 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "noInsights": "No high-confidence opportunities yet",
         "noInsightsDetail": "AgentBar will show suggestions when enough comparable local usage is available.",
         "privacyNote": "Computed locally from usage metadata. Prompt, reply, code, and tool-output content is not retained.",
-        "smartNudgeSubtitle": "A timely local signal when a session approaches its context limit.",
-        "contextNudge": "Context pressure detected",
-        "nudgeDetail": "This session is using %d%% of its context window in %@.",
-        "reviewEvidence": "Review evidence",
-        "noNudge": "No active nudge",
-        "noNudgeDetail": "No session currently meets the evidence and context-pressure thresholds.",
         "samples": "samples",
         "sessions": "sessions",
         "tasks": "tasks",
@@ -1109,10 +1039,6 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "contextBurn": "上下文消耗",
         "cacheHealth": "缓存健康",
         "modelEffort": "模型与推理强度实验室",
-        "contextSources": "上下文来源",
-        "sessionOutliers": "会话异常",
-        "projectEfficiency": "项目效率",
-        "smartNudge": "智能提醒",
         "coachSubtitle": "把用量转化为有优先级、可解释的行动。",
         "opportunities": "优化机会",
         "contextSessions": "已测会话",
@@ -1125,12 +1051,6 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "noInsights": "暂时没有高可信优化机会",
         "noInsightsDetail": "当本地可比较用量足够时，AgentBar 会显示建议。",
         "privacyNote": "仅根据本地用量元数据计算，不保留提示、回复、代码或工具输出内容。",
-        "smartNudgeSubtitle": "当会话接近上下文上限时给出及时的本地信号。",
-        "contextNudge": "检测到上下文压力",
-        "nudgeDetail": "此会话已使用 %d%% 的上下文窗口（%@）。",
-        "reviewEvidence": "查看证据",
-        "noNudge": "暂无提醒",
-        "noNudgeDetail": "当前没有会话同时达到证据与上下文压力门槛。",
         "samples": "个样本",
         "sessions": "个会话",
         "tasks": "个任务",

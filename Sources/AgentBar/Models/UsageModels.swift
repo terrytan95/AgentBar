@@ -4,6 +4,7 @@ enum UsageService: String, Codable, CaseIterable, Hashable, Identifiable, Sendab
     case codex = "Codex"
     case claudeCode = "Claude Code"
     case xaiAPI = "Grok"
+    case cursorAgent = "Cursor Agent"
 
     var id: String { rawValue }
 }
@@ -160,9 +161,14 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var workspaces: [UsageWorkspace] = []
     var accessTokenExpiresAt: Date? = nil
     var grokSubscriptionUsage: GrokSubscriptionUsage? = nil
+    var cursorSubscriptionUsage: CursorSubscriptionUsage? = nil
 
     var mostConstrainedRemainingPercent: Double? {
-        [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]
+        [
+            fiveHourWindow?.remainingPercent,
+            weeklyWindow?.remainingPercent,
+            cursorSubscriptionUsage?.includedRemainingPercent
+        ]
             .compactMap { $0 }
             .min()
     }

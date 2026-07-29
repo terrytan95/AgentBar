@@ -653,9 +653,11 @@ struct AccountRowView: View {
                     .lineLimit(1)
             }
 
-            HStack(spacing: 10) {
-                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
-                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
+            if account.fiveHourWindow != nil || account.weeklyWindow != nil {
+                HStack(spacing: 10) {
+                    UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
+                    UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
+                }
             }
 
             if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
@@ -676,6 +678,20 @@ struct AccountRowView: View {
             if let usage = account.grokSubscriptionUsage {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                        Label(line, systemImage: "creditcard")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+
+            if let usage = account.cursorSubscriptionUsage {
+                CursorSubscriptionGauge(usage: usage, language: language)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(usage.summaryLines(language: language, includesIncludedUsage: false), id: \.self) { line in
                         Label(line, systemImage: "creditcard")
                             .labelStyle(.titleAndIcon)
                     }
@@ -745,6 +761,31 @@ struct AccountRowView: View {
         if remaining <= 0 { return .red }
         if remaining <= AccessTokenExpiryReminderPlanner.warningInterval { return .orange }
         return .secondary
+    }
+}
+
+struct CursorSubscriptionGauge: View {
+    var usage: CursorSubscriptionUsage
+    var language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(L.text("included_usage", language))
+                Spacer()
+                Text("\(DisplayFormatters.percentString(remainingPercent)) \(L.text("remaining", language))")
+                    .monospacedDigit()
+            }
+            .font(.caption2)
+            ProgressView(value: remainingPercent / 100)
+                .tint(AgentBarPalette.quotaColor(remaining: remainingPercent))
+                .accessibilityLabel(L.text("included_usage", language))
+                .accessibilityValue("\(DisplayFormatters.percentString(remainingPercent)) \(L.text("remaining", language))")
+        }
+    }
+
+    private var remainingPercent: Double {
+        usage.includedRemainingPercent
     }
 }
 

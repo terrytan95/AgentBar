@@ -903,6 +903,14 @@ struct StatisticsView: View {
                     }
                     .pointingHandCursor()
                 }
+                SettingsRow(title: "Cursor Agent", subtitle: cursorProviderSubtitle) {
+                    Button {
+                        store.openLogin(for: .cursorAgent)
+                    } label: {
+                        Label(L.text("login_cursor_terminal", store.language), systemImage: "terminal")
+                    }
+                    .pointingHandCursor()
+                }
             }
 
             if !codexAccounts.isEmpty {
@@ -1320,6 +1328,14 @@ struct StatisticsView: View {
         !xaiAccounts.isEmpty || store.points.contains { $0.service == .xaiAPI }
     }
 
+    private var cursorAccounts: [UsageAccount] {
+        store.accounts.filter { $0.service == .cursorAgent }
+    }
+
+    private var hasCursorData: Bool {
+        !cursorAccounts.isEmpty
+    }
+
     private var xaiProviderSubtitle: String {
         if let snapshot = store.snapshots[.xaiAPI] {
             return "\(snapshot.status.label(language: store.language)) · \(L.text("grok_subscription_usage", store.language))"
@@ -1327,10 +1343,18 @@ struct StatisticsView: View {
         return L.text("grok_cli_not_logged_in", store.language)
     }
 
+    private var cursorProviderSubtitle: String {
+        if let snapshot = store.snapshots[.cursorAgent] {
+            return "\(snapshot.status.label(language: store.language)) · \(L.text("cursor_subscription_usage", store.language))"
+        }
+        return L.text("cursor_agent_not_logged_in", store.language)
+    }
+
     private var overviewService: UsageService {
         if !codexAccounts.isEmpty { return .codex }
         if hasClaudeData { return .claudeCode }
         if hasXAIData { return .xaiAPI }
+        if hasCursorData { return .cursorAgent }
         return .codex
     }
 
@@ -1571,7 +1595,8 @@ struct StatisticsView: View {
         store.accounts.filter { account in
             account.fiveHourWindow != nil ||
                 account.weeklyWindow != nil ||
-                account.resetCredits?.hasAvailableCredits == true
+                account.resetCredits?.hasAvailableCredits == true ||
+                account.cursorSubscriptionUsage != nil
         }
         .sorted(using: settings.accountSortMode)
     }
@@ -1674,6 +1699,7 @@ struct StatisticsView: View {
         case .codex: "Codex"
         case .claudeCode: "Claude"
         case .xaiAPI: "Grok"
+        case .cursorAgent: "Cursor Agent"
         }
     }
 
@@ -1682,6 +1708,7 @@ struct StatisticsView: View {
         case .codex: "OpenAI"
         case .claudeCode: "Anthropic"
         case .xaiAPI: "xAI · \(L.text("subscription_quota", store.language))"
+        case .cursorAgent: "Cursor · \(L.text("subscription_quota", store.language))"
         }
     }
 
@@ -1690,6 +1717,7 @@ struct StatisticsView: View {
         case .codex: "openai_overview"
         case .claudeCode: "anthropic_overview"
         case .xaiAPI: "xai_overview"
+        case .cursorAgent: "cursor_overview"
         }
     }
 
@@ -1698,6 +1726,7 @@ struct StatisticsView: View {
         case .codex: AgentBarPalette.tertiary
         case .claudeCode: AgentBarPalette.secondary
         case .xaiAPI: .purple
+        case .cursorAgent: .blue
         }
     }
 
@@ -3632,6 +3661,11 @@ private struct SidebarAccountPopover: View {
                         infoRow("Grok", line)
                     }
                 }
+                if let usage = account.cursorSubscriptionUsage {
+                    ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                        infoRow("Cursor", line)
+                    }
+                }
                 infoRow(L.text("total_tokens", language), DisplayFormatters.compactTokenString(account.tokens.total, language: language))
                 infoRow(L.text("cost", language), account.estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
                 infoRow(L.text("last_activity", language), account.lastActivityLine(language: language).replacingOccurrences(of: "\(L.text("last_activity", language)): ", with: ""))
@@ -3877,9 +3911,11 @@ private struct AccountLimitGroupView: View {
                     .background(.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
 
-            HStack(spacing: 12) {
-                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
-                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
+            if account.fiveHourWindow != nil || account.weeklyWindow != nil {
+                HStack(spacing: 12) {
+                    UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
+                    UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
+                }
             }
 
             if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
@@ -3900,6 +3936,20 @@ private struct AccountLimitGroupView: View {
             if let usage = account.grokSubscriptionUsage {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                        Label(line, systemImage: "creditcard")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .font(.agentBar(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+
+            if let usage = account.cursorSubscriptionUsage {
+                CursorSubscriptionGauge(usage: usage, language: language)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(usage.summaryLines(language: language, includesIncludedUsage: false), id: \.self) { line in
                         Label(line, systemImage: "creditcard")
                             .labelStyle(.titleAndIcon)
                     }

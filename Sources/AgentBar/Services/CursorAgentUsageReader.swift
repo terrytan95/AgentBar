@@ -61,6 +61,31 @@ enum CursorAgentCredentialStore {
     }
 }
 
+private enum CursorAgentAccountStore {
+    private static let maximumConfigFileBytes = 1_000_000
+
+    static func accountName(homeDirectory: URL) -> String? {
+        let configFile = homeDirectory.appendingPathComponent(".cursor/cli-config.json")
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: configFile.path),
+              let size = attributes[.size] as? NSNumber,
+              size.intValue <= maximumConfigFileBytes,
+              let data = try? Data(contentsOf: configFile),
+              let config = try? JSONDecoder().decode(CursorCLIConfig.self, from: data)
+        else { return nil }
+        return config.authInfo?.email?.trimmedNonEmpty
+            ?? config.authInfo?.displayName?.trimmedNonEmpty
+    }
+}
+
+private struct CursorCLIConfig: Decodable {
+    var authInfo: CursorCLIAuthInfo?
+}
+
+private struct CursorCLIAuthInfo: Decodable {
+    var email: String?
+    var displayName: String?
+}
+
 enum CursorAgentSessionRefresher {
     static func refresh(homeDirectory: URL) -> Bool {
         guard let executable = executableURL(homeDirectory: homeDirectory) else { return false }
@@ -206,7 +231,7 @@ struct CursorAgentUsageReader {
             id: "cursor-agent",
             service: .cursorAgent,
             displayName: "Cursor Agent",
-            username: nil,
+            username: CursorAgentAccountStore.accountName(homeDirectory: homeDirectory),
             maskedEmail: nil,
             plan: planInfo?.planName.flatMap {
                 let value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -248,7 +273,7 @@ struct CursorAgentUsageReader {
                     id: "cursor-agent",
                     service: .cursorAgent,
                     displayName: "Cursor Agent",
-                    username: nil,
+                    username: CursorAgentAccountStore.accountName(homeDirectory: homeDirectory),
                     maskedEmail: nil,
                     plan: nil,
                     sourceDescription: "Cursor Agent CLI · subscription usage",

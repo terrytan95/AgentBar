@@ -32,7 +32,7 @@ struct StatisticsView: View {
     @ObservedObject private var updates: AppUpdateStore
     @ObservedObject private var codexOverlay = CodexSidebarQuotaOverlayController.shared
     @ObservedObject private var quotaWidgetHotKey = QuotaWidgetHotKeyController.shared
-    @State private var viewMode: DashboardViewMode = .overview
+    @State private var viewMode: DashboardViewMode = .efficiency
     @State private var topTab: DashboardTopTab
     @State private var showsSidebarNavigation = true
     @State private var selectedSessionLabel: String?
@@ -83,6 +83,9 @@ struct StatisticsView: View {
             if let tab = DashboardNavigation.consumePendingTab() {
                 setTopTab(tab)
             }
+            if DashboardNavigation.consumePendingEfficiencyCoach() {
+                setPage(tab: .usage, viewMode: .efficiency)
+            }
             if !settings.didCompleteQuotaWidgetOnboarding {
                 showsQuotaWidgetOnboarding = true
             }
@@ -93,6 +96,10 @@ struct StatisticsView: View {
             else { return }
             setTopTab(tab)
             _ = DashboardNavigation.consumePendingTab()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: DashboardNavigation.efficiencyCoachRequestNotification)) { _ in
+            setPage(tab: .usage, viewMode: .efficiency)
+            _ = DashboardNavigation.consumePendingEfficiencyCoach()
         }
         .sheet(isPresented: $showsQuotaWidgetOnboarding) {
             QuotaWidgetOnboardingView(
@@ -137,6 +144,9 @@ struct StatisticsView: View {
             sidebarGroup(title: L.text("usage_statistics", store.language)) {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
+                }
+                sidebarItem(store.language == .chinese ? "效率指南" : "Efficiency Guide", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
+                    setPage(tab: .usage, viewMode: .efficiency)
                 }
                 sidebarItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {
                     setPage(tab: .usage, viewMode: .liveTasks)
@@ -301,6 +311,9 @@ struct StatisticsView: View {
             HStack(spacing: 8) {
                 topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
+                }
+                topNavigationItem(store.language == .chinese ? "效率指南" : "Efficiency Guide", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
+                    setPage(tab: .usage, viewMode: .efficiency)
                 }
                 topNavigationItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {
                     setPage(tab: .usage, viewMode: .liveTasks)
@@ -573,30 +586,48 @@ struct StatisticsView: View {
     }
 
     private var usageContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            Group {
-                switch viewMode {
-                case .overview:
-                    dashboardContent
-                case .liveTasks:
-                    LiveTaskCenterView(store: store)
-                case .projects:
-                    ProjectBillingView(store: store)
-                case .resets:
-                    resetsContent
-                case .audit:
-                    AuditView(
-                        store: store,
-                        points: filteredPoints,
-                        selectedSessionLabel: selectedSessionLabel,
-                        dataSourceHealth: dataSourceHealth,
-                        onClearSessionSelection: { selectedSessionLabel = nil }
-                    )
+        Group {
+            if viewMode == .efficiency {
+                EfficiencyCoachView(store: store)
+                    .padding(.top, Self.dashboardContentTopPadding)
+                    .padding(.horizontal, 26)
+                    .padding(.bottom, Self.dashboardContentBottomPadding)
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if store.isLoadingSessionData {
+                            LoadingAccountPanel(
+                                title: L.text("loading_session_data", store.language),
+                                subtitle: L.text("loading_session_data_subtitle", store.language)
+                            )
+                        }
+                        switch viewMode {
+                        case .overview:
+                            dashboardContent
+                        case .efficiency:
+                            EmptyView()
+                        case .liveTasks:
+                            LiveTaskCenterView(store: store)
+                        case .projects:
+                            ProjectBillingView(store: store)
+                        case .resets:
+                            resetsContent
+                        case .audit:
+                            AuditView(
+                                store: store,
+                                points: filteredPoints,
+                                selectedSessionLabel: selectedSessionLabel,
+                                dataSourceHealth: dataSourceHealth,
+                                onClearSessionSelection: { selectedSessionLabel = nil }
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.top, Self.dashboardContentTopPadding)
+                    .padding(.horizontal, 26)
+                    .padding(.bottom, Self.dashboardContentBottomPadding)
                 }
             }
-            .padding(.top, Self.dashboardContentTopPadding)
-            .padding(.horizontal, 26)
-            .padding(.bottom, Self.dashboardContentBottomPadding)
         }
     }
 
@@ -1693,6 +1724,7 @@ enum DashboardTopTab: String, Hashable {
 
 private enum DashboardViewMode: Hashable {
     case overview
+    case efficiency
     case liveTasks
     case projects
     case resets
@@ -2665,7 +2697,7 @@ private struct EmptyPanelMessage: View {
     }
 }
 
-private struct LoadingAccountPanel: View {
+struct LoadingAccountPanel: View {
     var title: String
     var subtitle: String
 

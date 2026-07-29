@@ -4,6 +4,8 @@ struct CodexUsageReader {
     var homeDirectory: URL
     var fileManager: FileManager = .default
     var now: @Sendable () -> Date = Date.init
+    var sessionFileLimit: Int
+    var prunesSessionCache: Bool
     static let maximumSessionFileBytes = 10 * 1024 * 1024
     static let maximumReasonableSessionFileBytes = 512 * 1024 * 1024
     static let maximumSessionFiles = 1_000
@@ -13,9 +15,16 @@ struct CodexUsageReader {
     static let sessionParserVersion = 1
     static let sessionMetricsCacheDirectoryName = "AgentBar/CodexSessionMetrics-v6"
 
-    init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser, now: @escaping @Sendable () -> Date = Date.init) {
+    init(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        now: @escaping @Sendable () -> Date = Date.init,
+        sessionFileLimit: Int = Self.maximumSessionFiles,
+        prunesSessionCache: Bool = true
+    ) {
         self.homeDirectory = homeDirectory
         self.now = now
+        self.sessionFileLimit = sessionFileLimit
+        self.prunesSessionCache = prunesSessionCache
     }
 
     func read() -> UsageSnapshot {
@@ -75,10 +84,11 @@ struct CodexUsageReader {
         let metrics = CodexSessionMetricsReader(fileManager: fileManager).read(
             root: sessionRoot,
             maximumSessionFileBytes: Self.maximumSessionFileBytes,
-            maximumSessionFiles: Self.maximumSessionFiles,
-            cacheDirectory: sessionCacheDirectory
+            maximumSessionFiles: sessionFileLimit,
+            cacheDirectory: sessionCacheDirectory,
+            prunesCache: prunesSessionCache
         )
-        if let sessionScanNote = Self.sessionScanNote(metrics) {
+        if let sessionScanNote = Self.sessionScanNote(metrics, maximumSessionFiles: sessionFileLimit) {
             notes.insert(sessionScanNote, at: 0)
         }
         if let note = metrics.accessIssueNote ?? accessIssueNote {
@@ -251,7 +261,10 @@ struct CodexUsageReader {
         CodexSessionMetricsReader.resetCacheForTesting()
     }
 
-    private static func sessionScanNote(_ metrics: CodexSessionMetrics) -> String? {
+    private static func sessionScanNote(
+        _ metrics: CodexSessionMetrics,
+        maximumSessionFiles: Int
+    ) -> String? {
         let skipped = metrics.skippedOversizedSessionFileCount + metrics.skippedSessionFileCapCount
         guard skipped > 0 else { return nil }
 

@@ -44,6 +44,7 @@ private struct AppSnapshot: Equatable {
     var isRefreshing = false
     var isManualRefreshFeedbackVisible = false
     var hasLoadedAccountInformation = false
+    var hasFinishedInitialSessionLoad = false
     var generation: UInt64 = 0
 }
 
@@ -105,6 +106,7 @@ final class UsageStore: ObservableObject {
         codexUsageSynchronizer: @escaping @Sendable () async -> CodexUsageSyncResult = {
             await CodexUsageAPISyncer().refreshUsage()
         },
+        codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)? = nil,
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot = {
             CodexUsageReader().read()
         },
@@ -148,12 +150,13 @@ final class UsageStore: ObservableObject {
             AccessTokenExpiryDesktopScheduler.shared.reconcile(accounts: accounts, enabled: enabled, language: language)
         },
         quotaCapacityHistoryStore: QuotaCapacityHistoryStore = QuotaCapacityHistoryStore(),
-        refreshTimeout: Duration = .seconds(60)
+        refreshTimeout: Duration = .seconds(180)
     ) {
         self.settings = settings
         self.quotaCapacityHistoryStore = quotaCapacityHistoryStore
         refreshLifecycle = UsageRefreshLifecycle(
             codexUsageSynchronizer: codexUsageSynchronizer,
+            codexUsagePreviewReader: codexUsagePreviewReader,
             codexUsageReader: codexUsageReader,
             claudeUsageReader: claudeUsageReader,
             xaiUsageReader: xaiUsageReader,
@@ -278,6 +281,10 @@ final class UsageStore: ObservableObject {
 
     var isLoadingAccountInformation: Bool {
         !hasLoadedAccountInformation
+    }
+
+    var isLoadingSessionData: Bool {
+        !appSnapshot.hasFinishedInitialSessionLoad
     }
 
     var menuBarTitle: String {
@@ -464,10 +471,23 @@ final class UsageStore: ObservableObject {
     }
 
     private func finishRefresh(_ completion: UsageRefreshLifecycle.Completion) {
+        if case let .progress(result) = completion {
+            var next = appSnapshot
+            next.snapshots = result.snapshots
+            next.accounts = Self.accountsForDisplay(result.accounts)
+            next.points = result.points
+            next.tasks = Self.visibleTasks(result.tasks, now: Date())
+            next.auditTasks = Self.sortedAuditTasks(result.tasks)
+            next.hasLoadedAccountInformation = true
+            next.generation = result.generation
+            publish(next)
+            return
+        }
         guard case let .result(result) = completion else {
             var next = appSnapshot
             next.isRefreshing = false
             next.isManualRefreshFeedbackVisible = false
+            next.hasFinishedInitialSessionLoad = true
             publish(next)
             NSLog("AgentBar usage refresh timed out")
             return
@@ -492,6 +512,7 @@ final class UsageStore: ObservableObject {
         next.isRefreshing = false
         next.isManualRefreshFeedbackVisible = false
         next.hasLoadedAccountInformation = true
+        next.hasFinishedInitialSessionLoad = true
         next.generation = result.generation
         publish(next)
 
@@ -704,6 +725,7 @@ final class UsageStore: ObservableObject {
         next.tasks = tasks
         next.auditTasks = tasks
         next.hasLoadedAccountInformation = true
+        next.hasFinishedInitialSessionLoad = true
         next.isRefreshing = false
         next.isManualRefreshFeedbackVisible = false
         publish(next)

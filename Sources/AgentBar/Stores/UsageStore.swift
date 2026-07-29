@@ -678,46 +678,14 @@ final class UsageStore: ObservableObject {
     }
 
     func openLogin(for service: UsageService) {
-        if service == .xaiAPI {
-            configureXAI()
-            return
-        }
         AccountLoginLauncher.openLogin(for: service)
     }
 
     func openLogin(for account: UsageAccount) {
-        if account.service == .xaiAPI {
-            configureXAI()
-        } else if account.service == .codex {
+        if account.service == .codex {
             AccountLoginLauncher.openCodexRecoveryLogin(accountID: account.id, accountLabel: account.displayName)
         } else {
             AccountLoginLauncher.openLogin(for: account.service)
-        }
-    }
-
-    var hasXAIConfiguration: Bool {
-        XAIConfigurationStore.isConfigured
-    }
-
-    func configureXAI() {
-        do {
-            if try XAIConfigurationPrompter.prompt(language: language) {
-                settings.persistXAITeamID()
-                refresh(force: true, showManualFeedback: true)
-            }
-        } catch {
-            lastError = error.localizedDescription.redactedForCredentialWords
-        }
-    }
-
-    func disconnectXAI() {
-        guard XAIConfigurationPrompter.confirmRemoval(language: language) else { return }
-        do {
-            try XAIConfigurationStore.clear()
-            settings.persistXAITeamID()
-            refresh(force: true, showManualFeedback: true)
-        } catch {
-            lastError = error.localizedDescription.redactedForCredentialWords
         }
     }
 

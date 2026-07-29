@@ -1,290 +1,259 @@
-import AppKit
 import Foundation
-import Security
 
-struct XAIConfiguration: Sendable {
-    var teamID: String
-    var managementKey: String
+struct GrokSubscriptionUsage: Codable, Equatable, Sendable {
+    var prepaidBalanceUSD: Decimal?
+    var onDemandUsedUSD: Decimal?
+    var onDemandCapUSD: Decimal?
+    var periodEndsAt: Date?
+
+    func summaryLines(language: AppLanguage) -> [String] {
+        var lines: [String] = []
+        if let prepaidBalanceUSD {
+            lines.append(
+                "\(L.text("extra_usage_credits", language)): \(DisplayFormatters.costString(prepaidBalanceUSD))"
+            )
+        }
+        if let onDemandUsedUSD {
+            let value = onDemandCapUSD.map {
+                "\(DisplayFormatters.costString(onDemandUsedUSD)) / \(DisplayFormatters.costString($0))"
+            } ?? DisplayFormatters.costString(onDemandUsedUSD)
+            lines.append("\(L.text("on_demand_usage", language)): \(value)")
+        }
+        if let periodEndsAt {
+            let timestamp = DisplayFormatters.shortDateTimeString(for: periodEndsAt, language: language)
+            let relative = DisplayFormatters.relativeString(for: periodEndsAt, language: language)
+            lines.append("\(L.text("reset", language)): \(timestamp) (\(relative))")
+        }
+        return lines
+    }
 }
 
-enum XAIConfigurationStore {
-    static let teamIDDefaultsKey = "xaiTeamID"
+struct GrokCLICredential: Sendable {
+    var token: String
+    var userID: String
+    var teamID: String?
+    var expiresAt: Date?
+}
 
-    private static let keychainService = "com.terrytan.AgentBar.xai"
-    private static let keychainAccount = "management-api-key"
+enum GrokCLIAuthStore {
+    private static let maximumAuthFileBytes = 1_000_000
 
-    static var teamID: String? {
-        UserDefaults.standard.string(forKey: teamIDDefaultsKey)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nonEmpty
-    }
-
-    static var isConfigured: Bool {
-        configuration != nil
-    }
-
-    static var configuration: XAIConfiguration? {
-        guard let teamID, let managementKey = try? readManagementKey(), !managementKey.isEmpty else {
-            return nil
+    static func credential(homeDirectory: URL) throws -> GrokCLICredential? {
+        let authFile = homeDirectory.appendingPathComponent(".grok/auth.json")
+        let attributes = try FileManager.default.attributesOfItem(atPath: authFile.path)
+        if let size = attributes[.size] as? NSNumber, size.intValue > maximumAuthFileBytes {
+            throw GrokCLIUsageError.authFileTooLarge
         }
-        return XAIConfiguration(teamID: teamID, managementKey: managementKey)
+
+        let data = try Data(contentsOf: authFile)
+        let records = try JSONDecoder().decode([String: GrokCLIAuthRecord].self, from: data)
+        return records
+            .filter { $0.key.hasPrefix("https://auth.x.ai::") }
+            .sorted { $0.key < $1.key }
+            .compactMap { _, record in record.credential }
+            .first
+    }
+}
+
+private struct GrokCLIAuthRecord: Decodable {
+    var key: String?
+    var userID: String?
+    var teamID: String?
+    var expiresAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case userID = "user_id"
+        case teamID = "team_id"
+        case expiresAt = "expires_at"
     }
 
-    static func save(teamID: String, managementKey: String?) throws {
-        let teamID = teamID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !teamID.isEmpty else { throw XAIConfigurationError.missingTeamID }
-        if let managementKey {
-            let managementKey = managementKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !managementKey.isEmpty else { throw XAIConfigurationError.missingManagementKey }
-            try saveManagementKey(managementKey)
-        } else if (try? readManagementKey())?.isEmpty != false {
-            throw XAIConfigurationError.missingManagementKey
+    var credential: GrokCLICredential? {
+        guard let token = key?.trimmedNonEmpty,
+              let userID = userID?.trimmedNonEmpty
+        else { return nil }
+        return GrokCLICredential(
+            token: token,
+            userID: userID,
+            teamID: teamID?.trimmedNonEmpty,
+            expiresAt: expiresAt.flatMap(XAIUsageReader.apiDate)
+        )
+    }
+}
+
+enum GrokCLISessionRefresher {
+    static func refresh(homeDirectory: URL) -> Bool {
+        guard let executable = executableURL(homeDirectory: homeDirectory) else { return false }
+
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = ["models"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
+        do {
+            try process.run()
+        } catch {
+            return false
         }
-        UserDefaults.standard.set(teamID, forKey: teamIDDefaultsKey)
-    }
-
-    static func clear() throws {
-        let status = SecItemDelete(keychainQuery as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw XAIConfigurationError.keychain(status)
+        guard finished.wait(timeout: .now() + 10) == .success else {
+            process.terminate()
+            return false
         }
-        UserDefaults.standard.removeObject(forKey: teamIDDefaultsKey)
+        return process.terminationStatus == 0
     }
 
-    private static var keychainQuery: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount,
-            kSecAttrSynchronizable as String: kCFBooleanFalse as Any
+    private static func executableURL(homeDirectory: URL) -> URL? {
+        let candidates = [
+            homeDirectory.appendingPathComponent(".local/bin/grok"),
+            URL(fileURLWithPath: "/opt/homebrew/bin/grok"),
+            URL(fileURLWithPath: "/usr/local/bin/grok")
         ]
-    }
-
-    private static func readManagementKey() throws -> String {
-        var query = keychainQuery
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return "" }
-        guard status == errSecSuccess, let data = item as? Data, let value = String(data: data, encoding: .utf8) else {
-            throw XAIConfigurationError.keychain(status)
-        }
-        return value
-    }
-
-    private static func saveManagementKey(_ value: String) throws {
-        let data = Data(value.utf8)
-        let updateStatus = SecItemUpdate(
-            keychainQuery as CFDictionary,
-            [kSecValueData as String: data] as CFDictionary
-        )
-        if updateStatus == errSecSuccess { return }
-        guard updateStatus == errSecItemNotFound else {
-            throw XAIConfigurationError.keychain(updateStatus)
-        }
-
-        var item = keychainQuery
-        item[kSecValueData as String] = data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
-        let addStatus = SecItemAdd(item as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            throw XAIConfigurationError.keychain(addStatus)
-        }
-    }
-}
-
-enum XAIConfigurationError: LocalizedError {
-    case missingTeamID
-    case missingManagementKey
-    case keychain(OSStatus)
-
-    var errorDescription: String? {
-        switch self {
-        case .missingTeamID:
-            "Enter the xAI team ID."
-        case .missingManagementKey:
-            "Enter an xAI Management API key."
-        case let .keychain(status):
-            "The xAI Management API key could not be stored in Keychain (status \(status))."
-        }
-    }
-}
-
-@MainActor
-enum XAIConfigurationPrompter {
-    static func prompt(language: AppLanguage) throws -> Bool {
-        let alert = NSAlert()
-        alert.messageText = L.text("configure_xai", language)
-        alert.informativeText = L.text("configure_xai_message", language)
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: L.text("save", language))
-        alert.addButton(withTitle: L.text("cancel", language))
-
-        let teamField = NSTextField(string: XAIConfigurationStore.teamID ?? "")
-        teamField.placeholderString = L.text("xai_team_id", language)
-        let keyField = NSSecureTextField(string: "")
-        keyField.placeholderString = XAIConfigurationStore.isConfigured
-            ? L.text("xai_key_keep_placeholder", language)
-            : L.text("xai_management_key", language)
-
-        let stack = NSStackView(views: [teamField, keyField])
-        stack.orientation = .vertical
-        stack.spacing = 8
-        stack.frame = NSRect(x: 0, y: 0, width: 420, height: 54)
-        alert.accessoryView = stack
-        alert.window.initialFirstResponder = teamField
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return false }
-        let key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        try XAIConfigurationStore.save(
-            teamID: teamField.stringValue,
-            managementKey: key.isEmpty ? nil : key
-        )
-        return true
-    }
-
-    static func confirmRemoval(language: AppLanguage) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = L.text("disconnect_xai", language)
-        alert.informativeText = L.text("disconnect_xai_message", language)
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: L.text("disconnect", language))
-        alert.addButton(withTitle: L.text("cancel", language))
-        return alert.runModal() == .alertFirstButtonReturn
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 }
 
 struct XAIUsageReader {
     typealias Client = @Sendable (URLRequest, TimeInterval) async throws -> (statusCode: Int, data: Data)
 
+    var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     var now: @Sendable () -> Date = Date.init
     var client: Client = Self.defaultClient
+    var sessionRefresher: @Sendable (URL) -> Bool = GrokCLISessionRefresher.refresh
     var timeout: TimeInterval = 15
 
     func read() async -> UsageSnapshot? {
-        guard let configuration = XAIConfigurationStore.configuration else { return nil }
         let refreshedAt = now()
+        var credential: GrokCLICredential
 
         do {
-            let request = try makeRequest(configuration: configuration, refreshedAt: refreshedAt)
-            let response = try await client(request, timeout)
+            guard let storedCredential = try GrokCLIAuthStore.credential(homeDirectory: homeDirectory) else {
+                return nil
+            }
+            credential = storedCredential
+        } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            return nil
+        } catch {
+            return issueSnapshot(
+                status: .unavailable,
+                credential: nil,
+                refreshedAt: refreshedAt,
+                note: "AgentBar could not read the Grok CLI login at ~/.grok/auth.json: \(error.localizedDescription.redactedForCredentialWords)"
+            )
+        }
+
+        do {
+            var response = try await client(makeRequest(path: "/billing?format=credits", credential: credential), timeout)
+            if response.statusCode == 401 || response.statusCode == 403,
+               sessionRefresher(homeDirectory),
+               let refreshedCredential = try? GrokCLIAuthStore.credential(homeDirectory: homeDirectory)
+            {
+                credential = refreshedCredential
+                response = try await client(makeRequest(path: "/billing?format=credits", credential: credential), timeout)
+            }
+
             switch response.statusCode {
             case 200:
+                let settings = try? await readSettings(credential: credential)
                 return try liveSnapshot(
                     data: response.data,
-                    configuration: configuration,
+                    settings: settings,
+                    credential: credential,
                     refreshedAt: refreshedAt
                 )
             case 401, 403:
                 return issueSnapshot(
                     status: .needsAuthorization,
-                    configuration: configuration,
+                    credential: credential,
                     refreshedAt: refreshedAt,
-                    note: "xAI Management API rejected the configured credentials (HTTP \(response.statusCode)). Update the management key and verify its billing read access."
+                    note: "The Grok CLI session is no longer authorized (HTTP \(response.statusCode)). Run `grok login`, then refresh AgentBar."
                 )
             default:
                 return issueSnapshot(
                     status: .unavailable,
-                    configuration: configuration,
+                    credential: credential,
                     refreshedAt: refreshedAt,
-                    note: "xAI Management API usage is unavailable (HTTP \(response.statusCode))."
+                    note: "Grok subscription usage is unavailable (HTTP \(response.statusCode))."
                 )
             }
         } catch {
             return issueSnapshot(
                 status: .unavailable,
-                configuration: configuration,
+                credential: credential,
                 refreshedAt: refreshedAt,
-                note: "xAI Management API usage could not be refreshed: \(error.localizedDescription.redactedForCredentialWords)"
+                note: "Grok subscription usage could not be refreshed: \(error.localizedDescription.redactedForCredentialWords)"
             )
         }
     }
 
-    private func makeRequest(configuration: XAIConfiguration, refreshedAt: Date) throws -> URLRequest {
-        let encodedTeamID = configuration.teamID.addingPercentEncoding(withAllowedCharacters: Self.urlPathSegmentAllowed)
-            ?? configuration.teamID
-        guard let url = URL(string: "https://management-api.x.ai/v1/billing/teams/\(encodedTeamID)/usage") else {
-            throw XAIUsageError.invalidTeamID
+    private func readSettings(credential: GrokCLICredential) async throws -> GrokRemoteSettings? {
+        let response = try await client(makeRequest(path: "/settings", credential: credential), timeout)
+        guard response.statusCode == 200 else { return nil }
+        return try JSONDecoder().decode(GrokRemoteSettings.self, from: response.data)
+    }
+
+    private func makeRequest(path: String, credential: GrokCLICredential) throws -> URLRequest {
+        guard let url = URL(string: "https://cli-chat-proxy.grok.com/v1\(path)") else {
+            throw GrokCLIUsageError.invalidResponse
         }
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: refreshedAt)) ?? refreshedAt
-        let start = calendar.date(byAdding: .day, value: -365, to: end) ?? refreshedAt
-
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(configuration.managementKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(
-            XAIUsageRequest(
-                analyticsRequest: .init(
-                    timeRange: .init(
-                        startTime: Self.apiDate(start),
-                        endTime: Self.apiDate(end),
-                        timezone: "Etc/GMT"
-                    ),
-                    timeUnit: "TIME_UNIT_DAY",
-                    values: [.init(name: "usd", aggregation: "AGGREGATION_SUM")],
-                    groupBy: ["description"],
-                    filters: []
-                )
-            )
-        )
+        request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("xai-grok-cli", forHTTPHeaderField: "X-XAI-Token-Auth")
+        request.setValue(credential.userID, forHTTPHeaderField: "x-userid")
         return request
     }
 
     private func liveSnapshot(
         data: Data,
-        configuration: XAIConfiguration,
+        settings: GrokRemoteSettings?,
+        credential: GrokCLICredential,
         refreshedAt: Date
     ) throws -> UsageSnapshot {
-        let response = try JSONDecoder().decode(XAIUsageResponse.self, from: data)
-        let points = response.timeSeries.flatMap { series -> [UsagePoint] in
-            let model = series.groupLabels.first ?? series.group.first ?? "xAI API"
-            return series.dataPoints.compactMap { point in
-                guard let date = ISO8601DateFormatter().date(from: point.timestamp),
-                      let cost = point.values.first,
-                      cost != 0
-                else { return nil }
-                return UsagePoint(
-                    service: .xaiAPI,
-                    model: model,
-                    date: date,
-                    tokens: .zero,
-                    estimatedCostUSD: cost,
-                    sessionID: "xai-api-\(point.timestamp)",
-                    sessionTitle: "xAI API billing",
-                    projectName: model
-                )
-            }
+        let response = try JSONDecoder().decode(GrokBillingResponse.self, from: data)
+        let config = response.config
+        let periodStart = Self.apiDate(config?.currentPeriod?.start ?? config?.billingPeriodStart)
+        let periodEnd = Self.apiDate(config?.currentPeriod?.end ?? config?.billingPeriodEnd)
+        let usedPercent = Self.usedPercent(config)
+        let weeklyWindow = usedPercent.map {
+            UsageWindow(
+                kind: .weekly,
+                usedPercent: $0,
+                windowMinutes: Self.windowMinutes(start: periodStart, end: periodEnd),
+                resetsAt: periodEnd
+            )
         }
-        .sorted { $0.date < $1.date }
-        let totalCost = points.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
-        let note = response.limitReached
-            ? "xAI Management API returned a cardinality-limited cost result; totals may be incomplete."
-            : "Exact billed xAI API cost from the Management API; the management key is stored in macOS Keychain and is never retained in usage records."
+        let subscription = GrokSubscriptionUsage(
+            prepaidBalanceUSD: config?.prepaidBalance?.usd,
+            onDemandUsedUSD: config?.onDemandUsed?.usd,
+            onDemandCapUSD: config?.onDemandCap?.usd,
+            periodEndsAt: periodEnd
+        )
         let account = account(
-            configuration: configuration,
+            credential: credential,
+            plan: settings?.subscriptionTierDisplay,
             status: .live,
-            estimatedCostUSD: totalCost,
-            lastUpdated: points.last?.date ?? refreshedAt
+            weeklyWindow: weeklyWindow,
+            subscription: subscription,
+            lastUpdated: refreshedAt
         )
         return UsageSnapshot(
             service: .xaiAPI,
             status: .live,
             accounts: [account],
-            points: points,
-            securityNotes: [note],
+            points: [],
+            securityNotes: [
+                "Read-only Grok subscription usage from the authenticated Grok CLI session. AgentBar never stores or logs the OAuth token."
+            ],
             refreshedAt: refreshedAt,
-            pricingFingerprint: "xai-management-api-billed-usd-v1"
+            pricingFingerprint: "grok-cli-subscription-v1"
         )
     }
 
     private func issueSnapshot(
         status: DataSourceStatus,
-        configuration: XAIConfiguration,
+        credential: GrokCLICredential?,
         refreshedAt: Date,
         note: String
     ) -> UsageSnapshot {
@@ -293,56 +262,73 @@ struct XAIUsageReader {
             status: status,
             accounts: [
                 account(
-                    configuration: configuration,
+                    credential: credential,
+                    plan: nil,
                     status: status,
-                    estimatedCostUSD: nil,
+                    weeklyWindow: nil,
+                    subscription: nil,
                     lastUpdated: nil
                 )
             ],
             points: [],
             securityNotes: [note],
             refreshedAt: refreshedAt,
-            pricingFingerprint: "xai-management-api-billed-usd-v1"
+            pricingFingerprint: "grok-cli-subscription-v1"
         )
     }
 
     private func account(
-        configuration: XAIConfiguration,
+        credential: GrokCLICredential?,
+        plan: String?,
         status: DataSourceStatus,
-        estimatedCostUSD: Decimal?,
+        weeklyWindow: UsageWindow?,
+        subscription: GrokSubscriptionUsage?,
         lastUpdated: Date?
     ) -> UsageAccount {
         UsageAccount(
-            id: "xai-\(configuration.teamID)",
+            id: "grok-\(credential?.userID ?? "cli")",
             service: .xaiAPI,
-            displayName: "xAI API",
+            displayName: "Grok",
             username: nil,
             maskedEmail: nil,
-            plan: "API",
-            sourceDescription: "xAI Management API · billed USD",
+            plan: plan?.trimmedNonEmpty ?? "Subscription",
+            sourceDescription: "Grok CLI · subscription usage",
             status: status,
             fiveHourWindow: nil,
-            weeklyWindow: nil,
+            weeklyWindow: weeklyWindow,
             tokens: .zero,
-            estimatedCostUSD: estimatedCostUSD,
+            estimatedCostUSD: nil,
             lastUpdated: lastUpdated,
-            isActive: false,
-            workspaceName: "Team",
-            workspaceID: configuration.teamID
+            isActive: true,
+            workspaceName: nil,
+            workspaceID: credential?.teamID,
+            accessTokenExpiresAt: credential?.expiresAt,
+            grokSubscriptionUsage: subscription
         )
     }
 
-    private static func apiDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.string(from: date)
+    fileprivate static func apiDate(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 
-    private static var urlPathSegmentAllowed: CharacterSet {
-        CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+    private static func usedPercent(_ config: GrokBillingConfig?) -> Double? {
+        if let value = config?.creditUsagePercent {
+            return min(100, max(0, value))
+        }
+        guard let used = config?.used?.val,
+              let limit = config?.monthlyLimit?.val,
+              limit > 0
+        else { return nil }
+        let percent = NSDecimalNumber(decimal: used / limit * 100).doubleValue
+        return min(100, max(0, percent))
+    }
+
+    private static func windowMinutes(start: Date?, end: Date?) -> Int {
+        guard let start, let end, end > start else { return 7 * 24 * 60 }
+        return max(1, Int(end.timeIntervalSince(start) / 60))
     }
 
     private static func defaultClient(
@@ -353,65 +339,69 @@ struct XAIUsageReader {
         request.timeoutInterval = timeout
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let response = response as? HTTPURLResponse else {
-            throw XAIUsageError.invalidResponse
+            throw GrokCLIUsageError.invalidResponse
         }
         return (response.statusCode, data)
     }
 }
 
-private enum XAIUsageError: LocalizedError {
-    case invalidTeamID
+private enum GrokCLIUsageError: LocalizedError {
+    case authFileTooLarge
     case invalidResponse
 
     var errorDescription: String? {
         switch self {
-        case .invalidTeamID: "The xAI team ID is invalid."
-        case .invalidResponse: "xAI returned an invalid response."
+        case .authFileTooLarge:
+            "The Grok CLI authentication file is unexpectedly large."
+        case .invalidResponse:
+            "Grok returned an invalid response."
         }
     }
 }
 
-private struct XAIUsageRequest: Encodable {
-    struct AnalyticsRequest: Encodable {
-        struct TimeRange: Encodable {
-            var startTime: String
-            var endTime: String
-            var timezone: String
-        }
-
-        struct Value: Encodable {
-            var name: String
-            var aggregation: String
-        }
-
-        var timeRange: TimeRange
-        var timeUnit: String
-        var values: [Value]
-        var groupBy: [String]
-        var filters: [String]
-    }
-
-    var analyticsRequest: AnalyticsRequest
+private struct GrokBillingResponse: Decodable {
+    var config: GrokBillingConfig?
 }
 
-private struct XAIUsageResponse: Decodable {
-    struct TimeSeries: Decodable {
-        struct DataPoint: Decodable {
-            var timestamp: String
-            var values: [Decimal]
-        }
-
-        var group: [String]
-        var groupLabels: [String]
-        var dataPoints: [DataPoint]
-    }
-
-    var timeSeries: [TimeSeries]
-    var limitReached: Bool
+private struct GrokBillingConfig: Decodable {
+    var creditUsagePercent: Double?
+    var currentPeriod: GrokUsagePeriod?
+    var monthlyLimit: GrokCent?
+    var used: GrokCent?
+    var onDemandCap: GrokCent?
+    var onDemandUsed: GrokCent?
+    var prepaidBalance: GrokCent?
+    var billingPeriodStart: String?
+    var billingPeriodEnd: String?
 }
 
-private extension String {
-    var nonEmpty: String? {
-        isEmpty ? nil : self
+private struct GrokUsagePeriod: Decodable {
+    var type: String?
+    var start: String?
+    var end: String?
+}
+
+private struct GrokCent: Decodable {
+    var val: Decimal
+
+    enum CodingKeys: String, CodingKey {
+        case val
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        val = try container.decodeIfPresent(Decimal.self, forKey: .val) ?? 0
+    }
+
+    var usd: Decimal {
+        val / 100
+    }
+}
+
+private struct GrokRemoteSettings: Decodable {
+    var subscriptionTierDisplay: String?
+
+    enum CodingKeys: String, CodingKey {
+        case subscriptionTierDisplay = "subscription_tier_display"
     }
 }

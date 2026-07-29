@@ -258,8 +258,7 @@ enum AccountLoginLauncher {
         case .claudeCode:
             openTerminal(command: "claude auth login")
         case .xaiAPI:
-            guard let url = URL(string: "https://console.x.ai/team/default/settings/management-keys") else { return }
-            NSWorkspace.shared.open(url)
+            openTerminal(command: "grok login")
         }
     }
 

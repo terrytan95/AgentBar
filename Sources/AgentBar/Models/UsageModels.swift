@@ -3,7 +3,7 @@ import Foundation
 enum UsageService: String, Codable, CaseIterable, Hashable, Identifiable, Sendable {
     case codex = "Codex"
     case claudeCode = "Claude Code"
-    case xaiAPI = "xAI API"
+    case xaiAPI = "Grok"
 
     var id: String { rawValue }
 }
@@ -159,6 +159,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var workspaceID: String? = nil
     var workspaces: [UsageWorkspace] = []
     var accessTokenExpiresAt: Date? = nil
+    var grokSubscriptionUsage: GrokSubscriptionUsage? = nil
 
     var mostConstrainedRemainingPercent: Double? {
         [fiveHourWindow?.remainingPercent, weeklyWindow?.remainingPercent]

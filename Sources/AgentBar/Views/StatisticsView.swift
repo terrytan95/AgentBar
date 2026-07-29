@@ -864,26 +864,13 @@ struct StatisticsView: View {
                     }
                     .pointingHandCursor()
                 }
-                SettingsRow(title: "xAI API", subtitle: xaiProviderSubtitle) {
-                    HStack(spacing: 10) {
-                        Button {
-                            store.configureXAI()
-                        } label: {
-                            Label(
-                                L.text(store.hasXAIConfiguration ? "update_xai" : "configure_xai", store.language),
-                                systemImage: "key.fill"
-                            )
-                        }
-                        .pointingHandCursor()
-                        if store.hasXAIConfiguration {
-                            Button(role: .destructive) {
-                                store.disconnectXAI()
-                            } label: {
-                                Text(L.text("disconnect", store.language))
-                            }
-                            .pointingHandCursor()
-                        }
+                SettingsRow(title: "Grok", subtitle: xaiProviderSubtitle) {
+                    Button {
+                        store.openLogin(for: .xaiAPI)
+                    } label: {
+                        Label(L.text("login_grok_terminal", store.language), systemImage: "terminal")
                     }
+                    .pointingHandCursor()
                 }
             }
 
@@ -1291,12 +1278,9 @@ struct StatisticsView: View {
 
     private var xaiProviderSubtitle: String {
         if let snapshot = store.snapshots[.xaiAPI] {
-            return "\(snapshot.status.label(language: store.language)) · \(L.text("xai_api_cost_only", store.language))"
+            return "\(snapshot.status.label(language: store.language)) · \(L.text("grok_subscription_usage", store.language))"
         }
-        return L.text(
-            store.hasXAIConfiguration ? "xai_waiting_for_refresh" : "xai_not_configured",
-            store.language
-        )
+        return L.text("grok_cli_not_logged_in", store.language)
     }
 
     private var overviewService: UsageService {
@@ -1641,7 +1625,7 @@ struct StatisticsView: View {
         switch service {
         case .codex: "Codex"
         case .claudeCode: "Claude"
-        case .xaiAPI: "xAI API"
+        case .xaiAPI: "Grok"
         }
     }
 
@@ -1649,7 +1633,7 @@ struct StatisticsView: View {
         switch service {
         case .codex: "OpenAI"
         case .claudeCode: "Anthropic"
-        case .xaiAPI: "xAI · \(L.text("cost_only", store.language))"
+        case .xaiAPI: "xAI · \(L.text("subscription_quota", store.language))"
         }
     }
 
@@ -3621,6 +3605,11 @@ private struct SidebarAccountPopover: View {
                 if let resetCredits = account.resetCredits {
                     infoRow(L.text("resets", language), resetCredits.summaryLine(language: language))
                 }
+                if let usage = account.grokSubscriptionUsage {
+                    ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                        infoRow("Grok", line)
+                    }
+                }
                 infoRow(L.text("total_tokens", language), DisplayFormatters.compactTokenString(account.tokens.total, language: language))
                 infoRow(L.text("cost", language), account.estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
                 infoRow(L.text("last_activity", language), account.lastActivityLine(language: language).replacingOccurrences(of: "\(L.text("last_activity", language)): ", with: ""))
@@ -3878,6 +3867,19 @@ private struct AccountLimitGroupView: View {
                     ForEach(Array(resetCredits.expirationLines(language: language).enumerated()), id: \.offset) { _, line in
                         Text(line)
                             .padding(.leading, 17)
+                    }
+                }
+                .font(.agentBar(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+
+            if let usage = account.grokSubscriptionUsage {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                        Label(line, systemImage: "creditcard")
+                            .labelStyle(.titleAndIcon)
                     }
                 }
                 .font(.agentBar(size: 10, weight: .semibold))

@@ -8,9 +8,11 @@ struct CursorSubscriptionUsage: Codable, Equatable, Sendable {
     var onDemandLimitUSD: Decimal?
     var periodEndsAt: Date?
 
-    func summaryLines(language: AppLanguage) -> [String] {
-        var lines = [
-            "\(L.text("included_usage", language)): \(DisplayFormatters.percentString(includedUsedPercent)) \(L.text("used", language))",
+    func summaryLines(language: AppLanguage, includesIncludedUsage: Bool = true) -> [String] {
+        var lines = includesIncludedUsage ? [
+            "\(L.text("included_usage", language)): \(DisplayFormatters.percentString(includedUsedPercent)) \(L.text("used", language))"
+        ] : []
+        lines += [
             "\(L.text("auto_usage", language)): \(DisplayFormatters.percentString(autoUsedPercent)) \(L.text("used", language))",
             "\(L.text("api_usage", language)): \(DisplayFormatters.percentString(apiUsedPercent)) \(L.text("used", language))"
         ]

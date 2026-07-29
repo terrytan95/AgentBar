@@ -3947,8 +3947,9 @@ private struct AccountLimitGroupView: View {
             }
 
             if let usage = account.cursorSubscriptionUsage {
+                CursorSubscriptionGauge(usage: usage, language: language)
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                    ForEach(usage.summaryLines(language: language, includesIncludedUsage: false), id: \.self) { line in
                         Label(line, systemImage: "creditcard")
                             .labelStyle(.titleAndIcon)
                     }

@@ -689,8 +689,9 @@ struct AccountRowView: View {
             }
 
             if let usage = account.cursorSubscriptionUsage {
+                CursorSubscriptionGauge(usage: usage, language: language)
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                    ForEach(usage.summaryLines(language: language, includesIncludedUsage: false), id: \.self) { line in
                         Label(line, systemImage: "creditcard")
                             .labelStyle(.titleAndIcon)
                     }
@@ -760,6 +761,27 @@ struct AccountRowView: View {
         if remaining <= 0 { return .red }
         if remaining <= AccessTokenExpiryReminderPlanner.warningInterval { return .orange }
         return .secondary
+    }
+}
+
+struct CursorSubscriptionGauge: View {
+    var usage: CursorSubscriptionUsage
+    var language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(L.text("included_usage", language))
+                Spacer()
+                Text("\(DisplayFormatters.percentString(usage.includedUsedPercent)) \(L.text("used", language))")
+                    .monospacedDigit()
+            }
+            .font(.caption2)
+            ProgressView(value: min(max(usage.includedUsedPercent, 0), 100) / 100)
+                .tint(AgentBarPalette.primary)
+                .accessibilityLabel(L.text("included_usage", language))
+                .accessibilityValue("\(DisplayFormatters.percentString(usage.includedUsedPercent)) \(L.text("used", language))")
+        }
     }
 }
 

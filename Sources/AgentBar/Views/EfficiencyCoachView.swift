@@ -457,7 +457,7 @@ private struct ContextBurnEfficiencyView: View {
             HStack {
                 Picker(efficiencyText("session", store.language), selection: $selectedSessionID) {
                     ForEach(sessions) { session in
-                        Text(session.scope.projectName ?? shortSession(session.sessionID))
+                        Text(session.title ?? shortSession(session.sessionID))
                             .tag(session.id)
                     }
                 }

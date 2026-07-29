@@ -26,6 +26,7 @@ struct ContextBurnSession: Equatable, Identifiable, Sendable {
     var id: String
     var scope: TokenEfficiencyScope
     var sessionID: String
+    var title: String?
     var latestInputTokens: Int
     var contextWindowTokens: Int
     var latestOccupancyRatio: Double
@@ -189,6 +190,7 @@ enum TokenEfficiencyAnalytics {
                 id: key,
                 scope: scope(for: latest),
                 sessionID: latest.sessionID ?? key,
+                title: ordered.reversed().compactMap { $0.sessionTitle?.trimmedNonEmpty }.first,
                 latestInputTokens: latest.tokens.input,
                 contextWindowTokens: window,
                 latestOccupancyRatio: Double(latest.tokens.input) / Double(window),

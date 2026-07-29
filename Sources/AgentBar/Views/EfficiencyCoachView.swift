@@ -780,6 +780,25 @@ private struct ModelEffortLabView: View {
                 efficiencyUnavailable(store.language)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Circle()
+                            .hidden()
+                            .frame(width: 10, height: 10)
+                        Text(efficiencyText("project", store.language))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(efficiencyText("effortChange", store.language))
+                            .frame(width: 150)
+                        Text(efficiencyText("historicalTasks", store.language))
+                            .frame(width: 100, alignment: .trailing)
+                        Image(systemName: "chevron.right")
+                            .hidden()
+                    }
+                    .font(.agentBar(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
+                    .frame(height: 34)
+                    Divider()
+
                     ForEach(experiments) { experiment in
                         Button {
                             selectedID = experiment.id
@@ -1024,6 +1043,8 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "safeToTrial": "Meets the six-task history floor",
         "trialsStarted": "Trials started",
         "localOnly": "Local UI state; no automatic model change",
+        "effortChange": "Effort (current → trial)",
+        "historicalTasks": "Historical tasks",
         "unknownProject": "Unknown project",
         "reversibleExperiment": "Manual experiment — not a quality recommendation",
         "experimentWarning": "These tasks share provider, project, model, and effort only. AgentBar cannot tell whether they are similar or whether lower effort preserves quality. Choose comparable future tasks and judge quality yourself.",
@@ -1101,6 +1122,8 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "safeToTrial": "达到六个任务的历史门槛",
         "trialsStarted": "已开始试验",
         "localOnly": "仅本地界面状态，不自动切换模型",
+        "effortChange": "推理强度（当前 → 试验）",
+        "historicalTasks": "历史任务数",
         "unknownProject": "未知项目",
         "reversibleExperiment": "手动实验，不代表质量建议",
         "experimentWarning": "这些任务只共享提供商、项目、模型与推理强度。AgentBar 无法判断任务是否相似，也无法确认较低强度是否保持质量。请自行选择可比较的未来任务并评估质量。",

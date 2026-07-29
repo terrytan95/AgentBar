@@ -9,7 +9,10 @@ enum SmokeReporter {
         let accounts = codex.accounts + claude.accounts
         let points = codex.points + claude.points
         let summary = UsageStatistics.summarize(points: points, range: .all)
-        let menuStore = UsageStore(settings: settings)
+        let menuStore = UsageStore(
+            settings: settings,
+            cursorUsageReader: { await CursorAgentUsageReader().read() }
+        )
         menuStore.applyTestData(snapshots: [.codex: codex, .claudeCode: claude], accounts: accounts, points: points)
         let displayedAccounts = menuStore.accounts
 

@@ -653,9 +653,11 @@ struct AccountRowView: View {
                     .lineLimit(1)
             }
 
-            HStack(spacing: 10) {
-                UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
-                UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
+            if account.fiveHourWindow != nil || account.weeklyWindow != nil {
+                HStack(spacing: 10) {
+                    UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
+                    UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
+                }
             }
 
             if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
@@ -674,6 +676,19 @@ struct AccountRowView: View {
             }
 
             if let usage = account.grokSubscriptionUsage {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(usage.summaryLines(language: language), id: \.self) { line in
+                        Label(line, systemImage: "creditcard")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+
+            if let usage = account.cursorSubscriptionUsage {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(usage.summaryLines(language: language), id: \.self) { line in
                         Label(line, systemImage: "creditcard")

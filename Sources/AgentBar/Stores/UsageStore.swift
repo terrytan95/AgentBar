@@ -119,6 +119,7 @@ final class UsageStore: ObservableObject {
         xaiUsageReader: @escaping @Sendable () async -> UsageSnapshot? = {
             await XAIUsageReader().read()
         },
+        cursorUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
         codexAccountSwitcher: @escaping @Sendable (String) throws -> Void = { accountID in
             try CodexAccountSwitcher().switchActiveAccount(accountID: accountID)
         },
@@ -160,6 +161,7 @@ final class UsageStore: ObservableObject {
             codexUsageReader: codexUsageReader,
             claudeUsageReader: claudeUsageReader,
             xaiUsageReader: xaiUsageReader,
+            cursorUsageReader: cursorUsageReader,
             refreshTimeout: refreshTimeout
         )
         self.codexTaskReader = codexTaskReader
@@ -346,6 +348,7 @@ final class UsageStore: ObservableObject {
             case .codex: settings.showCodexInMenuBar
             case .claudeCode: settings.showClaudeInMenuBar
             case .xaiAPI: true
+            case .cursorAgent: true
             }
         }
     }

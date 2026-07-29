@@ -29,6 +29,7 @@ final class UsageRefreshLifecycle {
     private let codexUsageReader: @Sendable () -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let xaiUsageReader: @Sendable () async -> UsageSnapshot?
+    private let cursorUsageReader: @Sendable () async -> UsageSnapshot?
     private let refreshTimeout: Duration
     private var generation: UInt64 = 0
     private var inFlight: Run?
@@ -40,6 +41,7 @@ final class UsageRefreshLifecycle {
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot,
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot,
         xaiUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
+        cursorUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
         refreshTimeout: Duration = .seconds(180)
     ) {
         self.codexUsageSynchronizer = codexUsageSynchronizer
@@ -47,6 +49,7 @@ final class UsageRefreshLifecycle {
         self.codexUsageReader = codexUsageReader
         self.claudeUsageReader = claudeUsageReader
         self.xaiUsageReader = xaiUsageReader
+        self.cursorUsageReader = cursorUsageReader
         self.refreshTimeout = refreshTimeout
     }
 
@@ -79,10 +82,12 @@ final class UsageRefreshLifecycle {
         let codexUsageReader = codexUsageReader
         let claudeUsageReader = claudeUsageReader
         let xaiUsageReader = xaiUsageReader
+        let cursorUsageReader = cursorUsageReader
         inFlight = Run(generation: runGeneration)
 
         let workTask = Task.detached(priority: .utility) { [weak self] in
             async let xaiUsage = xaiUsageReader()
+            async let cursorUsage = cursorUsageReader()
             let syncResult: CodexUsageSyncResult
             var previewClaude: UsageSnapshot?
             if let codexUsagePreviewReader {
@@ -113,14 +118,19 @@ final class UsageRefreshLifecycle {
             guard !Task.isCancelled else { return }
             let xai = await xaiUsage
             guard !Task.isCancelled else { return }
+            let cursor = await cursorUsage
+            guard !Task.isCancelled else { return }
             var snapshots: [UsageService: UsageSnapshot] = [.codex: codex, .claudeCode: claude]
             if let xai {
                 snapshots[.xaiAPI] = xai
             }
+            if let cursor {
+                snapshots[.cursorAgent] = cursor
+            }
             let result = Result(
                 snapshots: snapshots,
-                accounts: codex.accounts + claude.accounts + (xai?.accounts ?? []),
-                points: codex.points + claude.points + (xai?.points ?? []),
+                accounts: codex.accounts + claude.accounts + (xai?.accounts ?? []) + (cursor?.accounts ?? []),
+                points: codex.points + claude.points + (xai?.points ?? []) + (cursor?.points ?? []),
                 tasks: codex.tasks,
                 generation: runGeneration
             )

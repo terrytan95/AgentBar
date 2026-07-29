@@ -259,6 +259,8 @@ enum AccountLoginLauncher {
             openTerminal(command: "claude auth login")
         case .xaiAPI:
             openTerminal(command: "grok login")
+        case .cursorAgent:
+            openTerminal(command: "cursor-agent login")
         }
     }
 

@@ -183,7 +183,7 @@ struct CursorAgentUsageReader {
         else {
             throw CursorAgentUsageError.usageDetailsUnavailable
         }
-        let onDemandUsed = usage.spendLimitUsage?.individualUsed.map(Self.dollarsFromCents)
+        let onDemandUsed = usage.spendLimitUsage.map { Self.dollarsFromCents($0.individualUsed ?? 0) }
         let personalHardLimit: Decimal? = hardLimit.flatMap {
             guard $0.noUsageBasedAllowed != true,
                   let value = $0.hardLimit,

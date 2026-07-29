@@ -493,7 +493,7 @@ private struct ContextBurnEfficiencyView: View {
             HStack {
                 Picker(efficiencyText("session", store.language), selection: $selectedSessionID) {
                     ForEach(sessions) { session in
-                        Text(session.title ?? shortSession(session.sessionID))
+                        Text(sessionDropdownTitle(session))
                             .tag(session.id)
                     }
                 }
@@ -622,6 +622,11 @@ private struct ContextBurnEfficiencyView: View {
             Text(value).fontWeight(.semibold)
         }
         .font(.agentBar(size: 11, weight: .medium))
+    }
+
+    private func sessionDropdownTitle(_ session: ContextBurnSession) -> String {
+        guard let title = session.title else { return shortSession(session.sessionID) }
+        return title.count > 50 ? "\(title.prefix(50))…" : title
     }
 }
 

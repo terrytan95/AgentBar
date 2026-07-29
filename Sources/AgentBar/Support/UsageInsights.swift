@@ -232,7 +232,7 @@ enum UsageInsights {
                 AccountHealthCenter.Row(
                     id: "login-\(account.id)",
                     kind: .login,
-                    title: account.displayName,
+                    title: account.providerAccountDisplayName,
                     detail: account.loginWarningLine(language: language) ?? "",
                     workspaceLines: account.workspaceLines(language: language),
                     accountID: account.id,
@@ -289,12 +289,12 @@ enum UsageInsights {
         let activeWeekly = DisplayFormatters.percentString(active.weeklyWindow?.remainingPercent)
         let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
         guard active.fiveHourWindow != nil else {
-            return "active weekly \(activeWeekly); \(recommended.displayName) weekly \(recommendedWeekly)"
+            return "active weekly \(activeWeekly); \(recommended.providerAccountDisplayName) weekly \(recommendedWeekly)"
         }
         let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
         let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
         let reset = recommended.fiveHourWindow?.resetsAt.map { ", resets \(DisplayFormatters.relativeString(for: $0, language: .english))" } ?? ""
-        return "active 5H \(activeFive), weekly \(activeWeekly); \(recommended.displayName) 5H \(recommendedFive), weekly \(recommendedWeekly)\(reset)"
+        return "active 5H \(activeFive), weekly \(activeWeekly); \(recommended.providerAccountDisplayName) 5H \(recommendedFive), weekly \(recommendedWeekly)\(reset)"
     }
 
     private static func topRows(

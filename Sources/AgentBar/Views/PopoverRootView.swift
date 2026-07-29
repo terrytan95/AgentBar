@@ -566,7 +566,7 @@ struct AccountRowView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(account.displayName)
+                    Text(account.providerAccountDisplayName)
                         .font(.callout.weight(.semibold))
                         .lineLimit(1)
                     Text(secondaryIdentity)

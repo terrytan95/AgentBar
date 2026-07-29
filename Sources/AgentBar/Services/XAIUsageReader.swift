@@ -33,6 +33,8 @@ struct GrokCLICredential: Sendable {
     var userID: String
     var teamID: String?
     var expiresAt: Date?
+    var email: String?
+    var username: String?
 }
 
 enum GrokCLIAuthStore {
@@ -60,12 +62,16 @@ private struct GrokCLIAuthRecord: Decodable {
     var userID: String?
     var teamID: String?
     var expiresAt: String?
+    var email: String?
+    var firstName: String?
 
     enum CodingKeys: String, CodingKey {
         case key
         case userID = "user_id"
         case teamID = "team_id"
         case expiresAt = "expires_at"
+        case email
+        case firstName = "first_name"
     }
 
     var credential: GrokCLICredential? {
@@ -76,7 +82,9 @@ private struct GrokCLIAuthRecord: Decodable {
             token: token,
             userID: userID,
             teamID: teamID?.trimmedNonEmpty,
-            expiresAt: expiresAt.flatMap(XAIUsageReader.apiDate)
+            expiresAt: expiresAt.flatMap(XAIUsageReader.apiDate),
+            email: email?.trimmedNonEmpty,
+            username: firstName?.trimmedNonEmpty
         )
     }
 }
@@ -305,7 +313,7 @@ struct XAIUsageReader {
             id: "grok-\(credential?.userID ?? "cli")",
             service: .xaiAPI,
             displayName: "Grok",
-            username: nil,
+            username: credential?.email ?? credential?.username ?? credential?.userID,
             maskedEmail: nil,
             plan: plan?.trimmedNonEmpty ?? "Subscription",
             sourceDescription: "Grok CLI · subscription and local sessions",

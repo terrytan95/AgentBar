@@ -193,6 +193,13 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         return values.isEmpty ? [] : values
     }
 
+    var providerAccountDisplayName: String {
+        guard service != .claudeCode,
+              let identity = username.trimmedNonEmpty ?? maskedEmail.trimmedNonEmpty
+        else { return displayName }
+        return "\(service.rawValue) • \(identity)"
+    }
+
     func workspaceLine(language: AppLanguage) -> String? {
         workspaceLines(language: language).first
     }
@@ -212,8 +219,10 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     }
 
     func displayNameWithWorkspace(language: AppLanguage) -> String {
-        guard let workspaceDisplayValue, workspaceDisplayValue != displayName else { return displayName }
-        return "\(displayName) · \(workspaceDisplayValue)"
+        guard let workspaceDisplayValue, workspaceDisplayValue != displayName else {
+            return providerAccountDisplayName
+        }
+        return "\(providerAccountDisplayName) · \(workspaceDisplayValue)"
     }
 
     func accountTypeValue(language: AppLanguage) -> String {

@@ -383,9 +383,9 @@ struct StatisticsView: View {
             showsAccountPopover.toggle()
         } label: {
             HStack(spacing: 10) {
-                AccountAvatar(text: account?.displayName ?? "A", color: AgentBarPalette.primary, size: 34)
+                AccountAvatar(text: account?.providerAccountDisplayName ?? "A", color: AgentBarPalette.primary, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(account?.displayName ?? "--")
+                    Text(account?.providerAccountDisplayName ?? "--")
                         .font(.agentBar(size: 12, weight: .bold))
                         .lineLimit(1)
                     Text(account?.workspaceLine(language: store.language) ?? L.text("current_account", store.language))
@@ -2830,7 +2830,7 @@ private struct QuotaPressurePanel: View {
                         .font(.agentBar(size: 9, weight: .bold))
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
-                    Text(recommendedAccount.displayName)
+                    Text(recommendedAccount.providerAccountDisplayName)
                         .font(.agentBar(size: 12, weight: .bold))
                         .lineLimit(1)
                     ForEach(recommendedAccount.workspaceLines(language: language), id: \.self) { line in
@@ -2905,7 +2905,7 @@ private struct QuotaPressurePanel: View {
     }
 
     private var detailLine: String {
-        let active = pressure.activeAccount?.displayName ?? "--"
+        let active = pressure.activeAccount?.providerAccountDisplayName ?? "--"
         if pressure.recommendationReason != nil, pressure.severity != .ok {
             return recommendationReason
         }
@@ -2930,18 +2930,18 @@ private struct QuotaPressurePanel: View {
         guard active.fiveHourWindow != nil else {
             switch language {
             case .chinese:
-                return "当前本周 \(activeWeekly)；\(recommended.displayName) 本周 \(recommendedWeekly)"
+                return "当前本周 \(activeWeekly)；\(recommended.providerAccountDisplayName) 本周 \(recommendedWeekly)"
             case .english:
-                return pressure.recommendationReason ?? "active weekly \(activeWeekly); \(recommended.displayName) weekly \(recommendedWeekly)"
+                return pressure.recommendationReason ?? "active weekly \(activeWeekly); \(recommended.providerAccountDisplayName) weekly \(recommendedWeekly)"
             }
         }
         let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
         let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
         switch language {
         case .chinese:
-            return "当前 5H \(activeFive)，本周 \(activeWeekly)；\(recommended.displayName) 5H \(recommendedFive)，本周 \(recommendedWeekly)"
+            return "当前 5H \(activeFive)，本周 \(activeWeekly)；\(recommended.providerAccountDisplayName) 5H \(recommendedFive)，本周 \(recommendedWeekly)"
         case .english:
-            return pressure.recommendationReason ?? "active 5H \(activeFive), weekly \(activeWeekly); \(recommended.displayName) 5H \(recommendedFive), weekly \(recommendedWeekly)"
+            return pressure.recommendationReason ?? "active 5H \(activeFive), weekly \(activeWeekly); \(recommended.providerAccountDisplayName) 5H \(recommendedFive), weekly \(recommendedWeekly)"
         }
     }
 
@@ -3626,9 +3626,9 @@ private struct SidebarAccountPopover: View {
         VStack(alignment: .leading, spacing: 12) {
             if let account {
                 HStack(spacing: 10) {
-                    AccountAvatar(text: account.displayName, color: AgentBarPalette.primary, size: 38)
+                    AccountAvatar(text: account.providerAccountDisplayName, color: AgentBarPalette.primary, size: 38)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(account.displayName)
+                        Text(account.providerAccountDisplayName)
                             .font(.agentBar(size: 14, weight: .bold))
                             .lineLimit(1)
                         Text(account.accountTypeLine(language: language))
@@ -3833,10 +3833,10 @@ private struct AccountLimitGroupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                AccountAvatar(text: account.displayName, color: account.isActive ? AgentBarPalette.primary : AgentBarPalette.secondary, size: 34)
+                AccountAvatar(text: account.providerAccountDisplayName, color: account.isActive ? AgentBarPalette.primary : AgentBarPalette.secondary, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(account.displayName)
+                        Text(account.providerAccountDisplayName)
                             .font(.agentBar(size: 13, weight: .bold))
                             .lineLimit(1)
                         if account.isActive {
@@ -4001,7 +4001,7 @@ private struct SettingsAccountDropdown: View {
             }
             .tactilePlainButton(pressedScale: 1)
             .accessibilityLabel(L.text("manage_loaded_accounts", language))
-            .accessibilityValue(currentAccount?.displayName ?? "--")
+            .accessibilityValue(currentAccount?.providerAccountDisplayName ?? "--")
             .help(L.text("manage_loaded_accounts_subtitle", language))
 
             if isExpanded {
@@ -4031,7 +4031,7 @@ private struct SettingsAccountSummary: View {
                 Text(L.text("current_account", language))
                     .font(.agentBar(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
-                Text(account?.displayName ?? "--")
+                Text(account?.providerAccountDisplayName ?? "--")
                     .font(.agentBar(size: 13, weight: .semibold))
                     .lineLimit(1)
                 if let workspaceLine = account?.workspaceLine(language: language) {
@@ -4057,7 +4057,7 @@ private struct SettingsAccountDeleteRow: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(account.displayName)
+                    Text(account.providerAccountDisplayName)
                         .font(.agentBar(size: 12, weight: .semibold))
                         .lineLimit(1)
                     if account.isActive {
@@ -4375,7 +4375,7 @@ private struct LimitRow: Identifiable {
         self.kind = kind
         self.title = "\(account.service.rawValue) \(kind)"
         self.subtitle = subtitle
-        self.accountName = account.displayName
+        self.accountName = account.providerAccountDisplayName
         self.accountDetail = LimitRow.detailText(for: account)
         self.percent = percent
         self.color = color

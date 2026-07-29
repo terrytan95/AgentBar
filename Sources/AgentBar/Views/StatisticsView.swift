@@ -586,32 +586,41 @@ struct StatisticsView: View {
     }
 
     private var usageContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            Group {
-                switch viewMode {
-                case .overview:
-                    dashboardContent
-                case .efficiency:
-                    EfficiencyCoachView(store: store)
-                case .liveTasks:
-                    LiveTaskCenterView(store: store)
-                case .projects:
-                    ProjectBillingView(store: store)
-                case .resets:
-                    resetsContent
-                case .audit:
-                    AuditView(
-                        store: store,
-                        points: filteredPoints,
-                        selectedSessionLabel: selectedSessionLabel,
-                        dataSourceHealth: dataSourceHealth,
-                        onClearSessionSelection: { selectedSessionLabel = nil }
-                    )
+        Group {
+            if viewMode == .efficiency {
+                EfficiencyCoachView(store: store)
+                    .padding(.top, Self.dashboardContentTopPadding)
+                    .padding(.horizontal, 26)
+                    .padding(.bottom, Self.dashboardContentBottomPadding)
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    Group {
+                        switch viewMode {
+                        case .overview:
+                            dashboardContent
+                        case .efficiency:
+                            EmptyView()
+                        case .liveTasks:
+                            LiveTaskCenterView(store: store)
+                        case .projects:
+                            ProjectBillingView(store: store)
+                        case .resets:
+                            resetsContent
+                        case .audit:
+                            AuditView(
+                                store: store,
+                                points: filteredPoints,
+                                selectedSessionLabel: selectedSessionLabel,
+                                dataSourceHealth: dataSourceHealth,
+                                onClearSessionSelection: { selectedSessionLabel = nil }
+                            )
+                        }
+                    }
+                    .padding(.top, Self.dashboardContentTopPadding)
+                    .padding(.horizontal, 26)
+                    .padding(.bottom, Self.dashboardContentBottomPadding)
                 }
             }
-            .padding(.top, Self.dashboardContentTopPadding)
-            .padding(.horizontal, 26)
-            .padding(.bottom, Self.dashboardContentBottomPadding)
         }
     }
 

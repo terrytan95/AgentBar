@@ -39,28 +39,34 @@ struct EfficiencyCoachView: View {
         VStack(alignment: .leading, spacing: 14) {
             pageNavigation
 
-            Group {
-                switch page {
-                case .coach:
-                    coach
-                case .contextBurn:
-                    ContextBurnEfficiencyView(store: store)
-                case .cacheHealth:
-                    CacheHealthEfficiencyView(store: store)
-                case .modelEffort:
-                    ModelEffortLabView(store: store)
-                case .contextSources:
-                    ContextSourcesEfficiencyView(store: store)
-                case .sessionOutliers:
-                    SessionOutliersEfficiencyView(store: store)
-                case .projectEfficiency:
-                    ProjectEfficiencyView(store: store)
-                case .smartNudge:
-                    smartNudge
+            if page == .coach {
+                coach
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    Group {
+                        switch page {
+                        case .coach:
+                            EmptyView()
+                        case .contextBurn:
+                            ContextBurnEfficiencyView(store: store)
+                        case .cacheHealth:
+                            CacheHealthEfficiencyView(store: store)
+                        case .modelEffort:
+                            ModelEffortLabView(store: store)
+                        case .contextSources:
+                            ContextSourcesEfficiencyView(store: store)
+                        case .sessionOutliers:
+                            SessionOutliersEfficiencyView(store: store)
+                        case .projectEfficiency:
+                            ProjectEfficiencyView(store: store)
+                        case .smartNudge:
+                            smartNudge
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.bottom, 24)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -199,21 +205,27 @@ struct EfficiencyCoachView: View {
                 )
             }
 
-            if insights.isEmpty {
-                unavailablePanel(
-                    efficiencyText("noInsights", store.language),
-                    efficiencyText("noInsightsDetail", store.language)
-                )
-            } else {
-                ForEach(insights) { insight in
-                    insightCard(insight)
-                }
-            }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    if insights.isEmpty {
+                        unavailablePanel(
+                            efficiencyText("noInsights", store.language),
+                            efficiencyText("noInsightsDetail", store.language)
+                        )
+                    } else {
+                        ForEach(insights) { insight in
+                            insightCard(insight)
+                        }
+                    }
 
-            Label(efficiencyText("privacyNote", store.language), systemImage: "lock.shield")
-                .font(.agentBar(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
+                    Label(efficiencyText("privacyNote", store.language), systemImage: "lock.shield")
+                        .font(.agentBar(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 24)
+            }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var smartNudge: some View {

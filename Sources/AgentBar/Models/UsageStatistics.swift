@@ -129,12 +129,15 @@ enum UsageStatistics {
     private static func makeBar(date: Date, points: [UsagePoint]) -> DailyUsageBar {
         let codexPoints = points.filter { $0.service == .codex }
         let claudePoints = points.filter { $0.service == .claudeCode }
+        let xaiPoints = points.filter { $0.service == .xaiAPI }
         return DailyUsageBar(
             day: date,
             codexTokens: codexPoints.reduce(0) { $0 + $1.tokens.total },
             claudeTokens: claudePoints.reduce(0) { $0 + $1.tokens.total },
+            xaiTokens: xaiPoints.reduce(0) { $0 + $1.tokens.total },
             codexCostUSD: codexPoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +),
-            claudeCostUSD: claudePoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
+            claudeCostUSD: claudePoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +),
+            xaiCostUSD: xaiPoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
         )
     }
 }

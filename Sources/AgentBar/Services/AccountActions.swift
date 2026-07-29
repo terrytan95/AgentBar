@@ -252,8 +252,15 @@ enum AccountLoginLauncher {
     }
 
     static func openLogin(for service: UsageService) {
-        let command = service == .codex ? "codex login" : "claude auth login"
-        openTerminal(command: command)
+        switch service {
+        case .codex:
+            openTerminal(command: "codex login")
+        case .claudeCode:
+            openTerminal(command: "claude auth login")
+        case .xaiAPI:
+            guard let url = URL(string: "https://console.x.ai/team/default/settings/management-keys") else { return }
+            NSWorkspace.shared.open(url)
+        }
     }
 
     static func openCodexRecoveryLogin(accountID: String, accountLabel: String) {

@@ -99,6 +99,7 @@ struct PopoverRootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isConfirmingQuit = false
+    @State private var dismissedEfficiencyNudgeID: String?
 
     private var stateSwapAnimation: Animation {
         .timingCurve(0.22, 1, 0.36, 1, duration: AgentBarDesign.durationNormal)
@@ -120,6 +121,14 @@ struct PopoverRootView: View {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     if store.settings.showPopoverOverviewSection {
                         quickSummarySection
+                    }
+                    if let nudge = efficiencyNudge, dismissedEfficiencyNudgeID != nudge.id {
+                        EfficiencySmartNudgeCard(
+                            nudge: nudge,
+                            language: store.language,
+                            onDismiss: { dismissedEfficiencyNudgeID = nudge.id },
+                            onOpen: showEfficiencyCoach
+                        )
                     }
                     accountSection
                 }
@@ -157,6 +166,10 @@ struct PopoverRootView: View {
         UsageInsights.dataSourceHealth(
             snapshots: Dictionary(uniqueKeysWithValues: store.uiDataSourceSnapshots.map { ($0.service, $0) })
         )
+    }
+
+    private var efficiencyNudge: TokenEfficiencyNudge? {
+        TokenEfficiencyAnalytics.smartNudge(points: store.usageDataDisplayPoints)
     }
 
     private var header: some View {
@@ -400,6 +413,13 @@ struct PopoverRootView: View {
             DispatchQueue.main.async {
                 DashboardNavigation.request(tab)
             }
+        }
+    }
+
+    private func showEfficiencyCoach() {
+        showStatisticsWindow()
+        DispatchQueue.main.async {
+            DashboardNavigation.requestEfficiencyCoach()
         }
     }
 }

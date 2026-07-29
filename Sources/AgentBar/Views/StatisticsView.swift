@@ -32,7 +32,7 @@ struct StatisticsView: View {
     @ObservedObject private var updates: AppUpdateStore
     @ObservedObject private var codexOverlay = CodexSidebarQuotaOverlayController.shared
     @ObservedObject private var quotaWidgetHotKey = QuotaWidgetHotKeyController.shared
-    @State private var viewMode: DashboardViewMode = .overview
+    @State private var viewMode: DashboardViewMode = .efficiency
     @State private var topTab: DashboardTopTab
     @State private var showsSidebarNavigation = true
     @State private var selectedSessionLabel: String?
@@ -83,6 +83,9 @@ struct StatisticsView: View {
             if let tab = DashboardNavigation.consumePendingTab() {
                 setTopTab(tab)
             }
+            if DashboardNavigation.consumePendingEfficiencyCoach() {
+                setPage(tab: .usage, viewMode: .efficiency)
+            }
             if !settings.didCompleteQuotaWidgetOnboarding {
                 showsQuotaWidgetOnboarding = true
             }
@@ -93,6 +96,10 @@ struct StatisticsView: View {
             else { return }
             setTopTab(tab)
             _ = DashboardNavigation.consumePendingTab()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: DashboardNavigation.efficiencyCoachRequestNotification)) { _ in
+            setPage(tab: .usage, viewMode: .efficiency)
+            _ = DashboardNavigation.consumePendingEfficiencyCoach()
         }
         .sheet(isPresented: $showsQuotaWidgetOnboarding) {
             QuotaWidgetOnboardingView(
@@ -137,6 +144,9 @@ struct StatisticsView: View {
             sidebarGroup(title: L.text("usage_statistics", store.language)) {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
+                }
+                sidebarItem(store.language == .chinese ? "效率教练" : "Efficiency Coach", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
+                    setPage(tab: .usage, viewMode: .efficiency)
                 }
                 sidebarItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {
                     setPage(tab: .usage, viewMode: .liveTasks)
@@ -301,6 +311,9 @@ struct StatisticsView: View {
             HStack(spacing: 8) {
                 topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
+                }
+                topNavigationItem(store.language == .chinese ? "效率教练" : "Efficiency Coach", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
+                    setPage(tab: .usage, viewMode: .efficiency)
                 }
                 topNavigationItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {
                     setPage(tab: .usage, viewMode: .liveTasks)
@@ -578,6 +591,8 @@ struct StatisticsView: View {
                 switch viewMode {
                 case .overview:
                     dashboardContent
+                case .efficiency:
+                    EfficiencyCoachView(store: store)
                 case .liveTasks:
                     LiveTaskCenterView(store: store)
                 case .projects:
@@ -1693,6 +1708,7 @@ enum DashboardTopTab: String, Hashable {
 
 private enum DashboardViewMode: Hashable {
     case overview
+    case efficiency
     case liveTasks
     case projects
     case resets

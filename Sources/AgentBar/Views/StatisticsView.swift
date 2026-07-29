@@ -37,8 +37,6 @@ struct StatisticsView: View {
     @State private var showsSidebarNavigation = true
     @State private var selectedSessionLabel: String?
     @State private var showsAccountPopover = false
-    @State private var showsServiceBreakdownPopover = false
-    @State private var showsModelBreakdownPopover = false
     @State private var showsQuotaWidgetOnboarding = false
     @State private var settingsSection: SettingsSection = .accounts
     @State private var showsAdvancedRefreshSettings = false
@@ -638,7 +636,10 @@ struct StatisticsView: View {
             rotationThresholdRemainingPercent: settings.codexRotationThresholdRemainingPercent,
             autoRotationEnabled: settings.autoCodexAccountRotationEnabled
         )
-        let topUsage = UsageInsights.topUsage(points: filteredPoints)
+        let topUsage = UsageInsights.topUsage(
+            points: filteredPoints,
+            limit: settings.topUsageRowCount
+        )
 
         VStack(alignment: .leading, spacing: 16) {
             dashboardOverviewHeader
@@ -715,7 +716,6 @@ struct StatisticsView: View {
                 Panel(title: usageLocalized("top_usage")) {
                     TopUsagePanel(
                         breakdown: topUsage,
-                        selectedSessionLabel: selectedSessionLabel,
                         language: store.language,
                     ) { label in
                         selectedSessionLabel = label
@@ -1085,6 +1085,19 @@ struct StatisticsView: View {
                     subtitle: L.text("quota_pressure_section_subtitle", store.language),
                     isOn: $settings.showQuotaPressureSection
                 )
+                SettingsRow(
+                    title: L.text("top_usage_row_count", store.language),
+                    subtitle: L.text("top_usage_row_count_subtitle", store.language)
+                ) {
+                    Picker("", selection: $settings.topUsageRowCount) {
+                        ForEach(1...SettingsStore.maximumTopUsageRowCount, id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
+                    }
+                    .labelsHidden()
+                    .settingsControl(width: settingsControlCompactPickerWidth)
+                    .accessibilityLabel(L.text("top_usage_row_count", store.language))
+                }
             }
 
             SettingsGroup(title: budgetLocalized("budgets"), subtitle: budgetLocalized("budget_subtitle")) {
@@ -1356,42 +1369,47 @@ struct StatisticsView: View {
         if rows.isEmpty {
             EmptyPanelMessage(L.text("no_usage_data", store.language))
         } else {
-            HStack(spacing: 18) {
-                ProgressRing(value: rows.first?.share ?? 0, tint: rows.first?.color ?? AgentBarPalette.primary, diameter: 118, stroke: 16) {
-                    VStack(spacing: 2) {
-                        Text(DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language))
-                            .font(.agentBarMono(size: 18, weight: .bold))
-                            .monospacedDigit()
-                        Text(L.text("total_tokens", store.language))
-                            .font(.agentBar(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                VStack(spacing: 10) {
-                    ForEach(rows, id: \.service) { row in
-                        HStack(spacing: 8) {
-                            LegendItem(title: row.title, color: row.color)
+            VStack(spacing: 16) {
+                ForEach(rows, id: \.service) { row in
+                    VStack(spacing: 12) {
+                        HStack(alignment: .center, spacing: 12) {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(row.color)
+                                .frame(width: 34, height: 34)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.title)
+                                    .font(.agentBar(size: 13, weight: .bold))
+                                Text(rows.count == 1 ? L.text("only_service", store.language) : row.subtitle)
+                                    .font(.agentBar(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+
                             Spacer()
-                            VStack(alignment: .trailing, spacing: 1) {
-                                Text("\(Int((row.share * 100).rounded()))%")
-                                    .font(.agentBar(size: 12, weight: .bold))
+
+                            VStack(spacing: 2) {
                                 Text(DisplayFormatters.compactTokenString(row.tokens, language: store.language))
+                                    .font(.agentBarMono(size: 18, weight: .bold))
+                                    .monospacedDigit()
+                                Text(L.text("total_tokens", store.language))
+                                    .font(.agentBar(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("\(Int((row.share * 100).rounded()))%")
+                                    .font(.agentBarMono(size: 15, weight: .bold))
+                                    .monospacedDigit()
+                                Text(L.text("service_share", store.language))
                                     .font(.agentBar(size: 10, weight: .semibold))
                                     .foregroundStyle(.secondary)
                             }
                         }
-                    }
-                    Button {
-                        showsServiceBreakdownPopover.toggle()
-                    } label: {
-                        Label(L.text("view_all_services", store.language), systemImage: "chevron.right")
-                            .font(.agentBar(size: 11, weight: .bold))
-                    }
-                    .tactilePlainButton()
-                    .foregroundStyle(AgentBarPalette.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .popover(isPresented: $showsServiceBreakdownPopover, arrowEdge: .trailing) {
-                        ServiceBreakdownPopover(rows: rows, language: store.language)
+
+                        ProgressView(value: row.share)
+                            .tint(row.color)
                     }
                 }
             }
@@ -1413,7 +1431,6 @@ struct StatisticsView: View {
                 subtitle: serviceProvider(service),
                 tokens: tokens,
                 share: Double(tokens) / Double(total),
-                cost: serviceCostText(service),
                 color: serviceColor(service)
             )
         }
@@ -1571,37 +1588,37 @@ struct StatisticsView: View {
         } else {
             let dataRows = rows.filter { !$0.isHeader }
             let maximum = max(1, dataRows.map { $0.input + $0.output }.max() ?? 1)
-            VStack(spacing: 9) {
-                ForEach(dataRows.prefix(6)) { row in
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Text(row.name)
-                                .font(.agentBar(size: 12, weight: .bold))
-                                .lineLimit(1)
-                            Spacer()
-                            Text(DisplayFormatters.compactTokenString(row.input + row.output, language: store.language))
-                                .font(.agentBarMono(size: 11, weight: .bold))
-                                .monospacedDigit()
-                            Text("\(Int((Double(row.input + row.output) / Double(maximum) * 100).rounded()))%")
-                                .font(.agentBar(size: 10, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 34, alignment: .trailing)
-                        }
-                        ProgressView(value: Double(row.input + row.output) / Double(maximum))
-                            .tint(serviceColor(row.service))
+            VStack(spacing: 0) {
+                ForEach(dataRows) { row in
+                    let total = row.input + row.output
+                    let share = Double(total) / Double(maximum)
+
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(serviceColor(row.service))
+                            .frame(width: 8, height: 8)
+                        Text(row.name)
+                            .font(.agentBar(size: 12, weight: .bold))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(DisplayFormatters.compactTokenString(total, language: store.language))
+                            .font(.agentBarMono(size: 11, weight: .bold))
+                            .monospacedDigit()
+                        Text("\(Int((share * 100).rounded()))%")
+                            .font(.agentBar(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 34, alignment: .trailing)
                     }
-                }
-                Button {
-                    showsModelBreakdownPopover.toggle()
-                } label: {
-                    Label(L.text("view_all_models", store.language), systemImage: "chevron.right")
-                        .font(.agentBar(size: 11, weight: .bold))
-                }
-                .tactilePlainButton()
-                .foregroundStyle(AgentBarPalette.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .popover(isPresented: $showsModelBreakdownPopover, arrowEdge: .trailing) {
-                    ModelBreakdownPopover(rows: rows, language: store.language)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 42)
+                    .background(alignment: .leading) {
+                        GeometryReader { proxy in
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(serviceColor(row.service).opacity(0.09))
+                                .frame(width: proxy.size.width * CGFloat(share))
+                        }
+                    }
+                    Divider()
                 }
             }
         }
@@ -1897,92 +1914,6 @@ private struct Panel<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .agentBarPanel()
-    }
-}
-
-private struct ServiceBreakdownPopover: View {
-    var rows: [ServiceMixRow]
-    var language: AppLanguage
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(language == .chinese ? "全部服务" : "All services")
-                .font(.agentBar(size: 13, weight: .bold))
-            ForEach(rows, id: \.service) { row in
-                HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(row.color)
-                        .frame(width: 8, height: 8)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.title)
-                            .font(.agentBar(size: 12, weight: .bold))
-                        Text(row.subtitle)
-                            .font(.agentBar(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
-                            .font(.agentBar(size: 11, weight: .bold))
-                        Text("\(Int((row.share * 100).rounded()))% · \(row.cost)")
-                            .font(.agentBar(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .frame(width: 320, alignment: .leading)
-    }
-}
-
-private struct ModelBreakdownPopover: View {
-    var rows: [ModelBreakdownRow]
-    var language: AppLanguage
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(language == .chinese ? "全部模型" : "All models")
-                .font(.agentBar(size: 13, weight: .bold))
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 9) {
-                    ForEach(rows) { row in
-                        if row.isHeader {
-                            Text(row.name)
-                                .font(.agentBar(size: 10, weight: .bold))
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            ModelBreakdownPopoverRow(row: row, language: language)
-                        }
-                    }
-                }
-            }
-            .frame(maxHeight: 320)
-        }
-        .padding(14)
-        .frame(width: 360, alignment: .leading)
-    }
-}
-
-private struct ModelBreakdownPopoverRow: View {
-    var row: ModelBreakdownRow
-    var language: AppLanguage
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(row.name)
-                .font(.agentBar(size: 12, weight: .bold))
-                .lineLimit(1)
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(DisplayFormatters.compactTokenString(row.input + row.output, language: language))
-                    .font(.agentBar(size: 11, weight: .bold))
-                Text(row.cost.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
-                    .font(.agentBar(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 }
 
@@ -3295,86 +3226,145 @@ private struct QuotaCapacityHoverCallout: View {
 }
 
 private struct TopUsagePanel: View {
+    private enum Category: String, CaseIterable, Identifiable {
+        case sessions
+        case projects
+        case days
+        case models
+
+        var id: Self { self }
+    }
+
     var breakdown: TopUsageBreakdown
-    var selectedSessionLabel: String?
     var language: AppLanguage
     var onSelectSession: (String) -> Void
+    @State private var category: Category = .sessions
 
     var body: some View {
         if breakdown.sessions.isEmpty && breakdown.projects.isEmpty && breakdown.days.isEmpty && breakdown.models.isEmpty {
             EmptyPanelMessage(L.text("no_usage_data", language))
         } else {
-            VStack(spacing: 12) {
-                topSection(title: localized("sessions"), rows: breakdown.sessions, color: AgentBarPalette.primary, showsLastUsedAt: true, isSelectable: true)
-                topSection(title: localized("projects"), rows: breakdown.projects, color: AgentBarPalette.tertiary)
-                topSection(title: localized("days"), rows: breakdown.days, color: AgentBarPalette.secondary)
-                topSection(title: localized("models"), rows: breakdown.models, color: AgentBarPalette.primary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func topSection(title: String, rows: [TopUsageRow], color: Color, showsLastUsedAt: Bool = false, isSelectable: Bool = false) -> some View {
-        if rows.isEmpty {
-            EmptyPanelMessage(L.text("no_usage_data", language))
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(.agentBar(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                ForEach(rows.prefix(3)) { row in
-                    Button {
-                        if isSelectable {
-                            onSelectSession(row.label)
-                        }
-                    } label: {
-                        topRow(row, color: color, showsLastUsedAt: showsLastUsedAt, isSelected: isSelectable && selectedSessionLabel == row.label)
+            VStack(alignment: .leading, spacing: 12) {
+                Picker(L.text("top_usage", language), selection: $category) {
+                    ForEach(Category.allCases) { category in
+                        Text(localized(category.rawValue))
+                            .tag(category)
                     }
-                    .disabled(!isSelectable)
-                    .tactilePlainButton(enabled: isSelectable, pressedScale: 1)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+
+                Text(summaryText)
+                    .font(.agentBar(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                if visibleRows.isEmpty {
+                    EmptyPanelMessage(L.text("no_usage_data", language))
+                } else {
+                    let maximum = max(1, visibleRows.map(\.tokens).max() ?? 1)
+                    VStack(spacing: 16) {
+                        ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, row in
+                            if category == .sessions {
+                                Button {
+                                    onSelectSession(row.label)
+                                } label: {
+                                    topUsageRow(index: index, row: row, maximum: maximum)
+                                }
+                                .tactilePlainButton(pressedScale: 0.99)
+                            } else {
+                                topUsageRow(index: index, row: row, maximum: maximum)
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    private func topRow(_ row: TopUsageRow, color: Color, showsLastUsedAt: Bool, isSelected: Bool) -> some View {
-        HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(color)
-                .frame(width: 7, height: 7)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row.label)
-                    .font(.agentBar(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                if showsLastUsedAt, let lastUsedAt = row.lastUsedAt {
-                    Text("\(localized("latest")) \(DisplayFormatters.relativeString(for: lastUsedAt, language: language))")
-                        .font(.agentBar(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
+    private func topUsageRow(index: Int, row: TopUsageRow, maximum: Int) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Text("\(index + 1)")
+                    .font(.agentBarMono(size: 18, weight: .semibold))
+                    .foregroundStyle(AgentBarPalette.primary)
+                    .frame(width: 24, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.label)
+                        .font(.agentBar(size: 12, weight: .semibold))
                         .lineLimit(1)
+                    if category == .sessions, let lastUsedAt = row.lastUsedAt {
+                        Text("\(localized("latest")) \(DisplayFormatters.relativeString(for: lastUsedAt, language: language))")
+                            .font(.agentBar(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
-                    .font(.agentBarMono(size: 12, weight: .bold))
-                    .monospacedDigit()
-                if let estimatedCostUSD = row.estimatedCostUSD {
-                    Text(DisplayFormatters.costString(estimatedCostUSD))
-                        .font(.agentBar(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(DisplayFormatters.compactTokenString(row.tokens, language: language))
+                        .font(.agentBarMono(size: 12, weight: .bold))
                         .monospacedDigit()
+                    if let estimatedCostUSD = row.estimatedCostUSD {
+                        Text(DisplayFormatters.costString(estimatedCostUSD))
+                            .font(.agentBar(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+
+                Text("\(Int((row.share * 100).rounded()))%")
+                    .font(.agentBar(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 34, alignment: .trailing)
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.06))
+                    Capsule()
+                        .fill(selectedColor)
+                        .frame(width: max(3, proxy.size.width * CGFloat(row.tokens) / CGFloat(maximum)))
                 }
             }
-            Text("\(Int((row.share * 100).rounded()))%")
-                .font(.agentBar(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 34, alignment: .trailing)
+            .frame(height: 4)
+            .padding(.leading, 34)
         }
-        .padding(.horizontal, isSelected ? 7 : 0)
-        .padding(.vertical, isSelected ? 5 : 0)
-        .background(isSelected ? color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         .contentShape(Rectangle())
+    }
+
+    private var selectedRows: [TopUsageRow] {
+        switch category {
+        case .sessions: breakdown.sessions
+        case .projects: breakdown.projects
+        case .days: breakdown.days
+        case .models: breakdown.models
+        }
+    }
+
+    private var visibleRows: [TopUsageRow] {
+        selectedRows
+    }
+
+    private var selectedColor: Color {
+        switch category {
+        case .sessions, .models: AgentBarPalette.primary
+        case .projects: AgentBarPalette.tertiary
+        case .days: AgentBarPalette.secondary
+        }
+    }
+
+    private var summaryText: String {
+        let share = Int((visibleRows.reduce(0) { $0 + $1.share } * 100).rounded())
+        return String(
+            format: localized("top_usage_summary"),
+            visibleRows.count,
+            localized(category.rawValue),
+            share
+        )
     }
 
     private func localized(_ key: String) -> String {
@@ -4282,7 +4272,6 @@ private struct ServiceMixRow {
     var subtitle: String
     var tokens: Int
     var share: Double
-    var cost: String
     var color: Color
 }
 

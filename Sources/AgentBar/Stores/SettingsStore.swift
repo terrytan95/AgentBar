@@ -54,6 +54,8 @@ final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
     static let maximumPopoverMetricCount = 3
     static let defaultPopoverMetrics: [PopoverMetric] = [.tokens, .cost, .availableResets]
+    static let maximumTopUsageRowCount = 9
+    static let defaultTopUsageRowCount = 3
 
     @Published var language: AppLanguage {
         didSet { persist(language.rawValue, forKey: Keys.language) }
@@ -128,6 +130,16 @@ final class SettingsStore: ObservableObject {
 
     @Published var showQuotaPressureSection: Bool {
         didSet { persist(showQuotaPressureSection, forKey: Keys.showQuotaPressureSection) }
+    }
+
+    @Published var topUsageRowCount: Int {
+        didSet {
+            let clamped = Self.clampedTopUsageRowCount(topUsageRowCount)
+            if clamped != topUsageRowCount {
+                topUsageRowCount = clamped
+            }
+            persist(clamped, forKey: Keys.topUsageRowCount)
+        }
     }
 
     @Published var showPopoverOverviewSection: Bool {
@@ -281,6 +293,10 @@ final class SettingsStore: ObservableObject {
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
         showQuotaPressureSection = defaults.object(forKey: Keys.showQuotaPressureSection) as? Bool ?? true
+        let savedTopUsageRowCount = defaults.object(forKey: Keys.topUsageRowCount) == nil
+            ? Self.defaultTopUsageRowCount
+            : defaults.integer(forKey: Keys.topUsageRowCount)
+        topUsageRowCount = Self.clampedTopUsageRowCount(savedTopUsageRowCount)
         showPopoverOverviewSection = defaults.object(forKey: Keys.showPopoverOverviewSection) as? Bool ?? true
         let savedPopoverMetrics = defaults.data(forKey: Keys.popoverMetrics)
             .flatMap { try? JSONDecoder().decode([String].self, from: $0) }
@@ -326,6 +342,10 @@ final class SettingsStore: ObservableObject {
 
     static func clampedRotationThreshold(_ threshold: Double) -> Double {
         min(100, max(1, threshold))
+    }
+
+    static func clampedTopUsageRowCount(_ count: Int) -> Int {
+        min(maximumTopUsageRowCount, max(1, count))
     }
 
     static func clampedBudgetCount(_ value: Int) -> Int {
@@ -453,6 +473,7 @@ final class SettingsStore: ObservableObject {
         static let accountSortMode = "accountSortMode"
         static let showAggregatedAccountData = "showAggregatedAccountData"
         static let showQuotaPressureSection = "showQuotaPressureSection"
+        static let topUsageRowCount = "topUsageRowCount"
         static let showPopoverOverviewSection = "showPopoverOverviewSection"
         static let popoverMetrics = "popoverMetrics"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
@@ -486,6 +507,7 @@ final class SettingsStore: ObservableObject {
             accountSortMode,
             showAggregatedAccountData,
             showQuotaPressureSection,
+            topUsageRowCount,
             showPopoverOverviewSection,
             popoverMetrics,
             autoCodexAccountRotationEnabled,

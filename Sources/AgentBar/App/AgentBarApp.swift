@@ -9,7 +9,12 @@ struct AgentBarApp: App {
 
     init() {
         let settings = SettingsStore.shared
-        let store = UsageStore(settings: settings)
+        let store = UsageStore(
+            settings: settings,
+            codexUsagePreviewReader: {
+                CodexUsageReader(sessionFileLimit: 5, prunesSessionCache: false).read()
+            }
+        )
         _settings = StateObject(wrappedValue: settings)
         _store = StateObject(wrappedValue: store)
         appDelegate.configure(settings: settings, store: store)
@@ -60,7 +65,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let store = store ?? UsageStore(settings: settings)
+        let store = store ?? UsageStore(
+            settings: settings,
+            codexUsagePreviewReader: {
+                CodexUsageReader(sessionFileLimit: 5, prunesSessionCache: false).read()
+            }
+        )
         self.store = store
         store.start()
         StatusItemController.shared.show(settings: settings, store: store)

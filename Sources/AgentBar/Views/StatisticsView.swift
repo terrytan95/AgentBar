@@ -594,7 +594,13 @@ struct StatisticsView: View {
                     .padding(.bottom, Self.dashboardContentBottomPadding)
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
-                    Group {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if store.isLoadingSessionData {
+                            LoadingAccountPanel(
+                                title: L.text("loading_session_data", store.language),
+                                subtitle: L.text("loading_session_data_subtitle", store.language)
+                            )
+                        }
                         switch viewMode {
                         case .overview:
                             dashboardContent
@@ -616,6 +622,7 @@ struct StatisticsView: View {
                             )
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                     .padding(.top, Self.dashboardContentTopPadding)
                     .padding(.horizontal, 26)
                     .padding(.bottom, Self.dashboardContentBottomPadding)
@@ -2690,7 +2697,7 @@ private struct EmptyPanelMessage: View {
     }
 }
 
-private struct LoadingAccountPanel: View {
+struct LoadingAccountPanel: View {
     var title: String
     var subtitle: String
 

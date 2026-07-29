@@ -11,6 +11,7 @@ final class UsageRefreshLifecycle {
     }
 
     enum Completion: Sendable {
+        case progress(Result)
         case result(Result)
         case timedOut
     }
@@ -24,6 +25,7 @@ final class UsageRefreshLifecycle {
     }
 
     private let codexUsageSynchronizer: @Sendable () async -> CodexUsageSyncResult
+    private let codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)?
     private let codexUsageReader: @Sendable () -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let xaiUsageReader: @Sendable () async -> UsageSnapshot?
@@ -34,12 +36,14 @@ final class UsageRefreshLifecycle {
 
     init(
         codexUsageSynchronizer: @escaping @Sendable () async -> CodexUsageSyncResult,
+        codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)? = nil,
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot,
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot,
         xaiUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
-        refreshTimeout: Duration = .seconds(60)
+        refreshTimeout: Duration = .seconds(180)
     ) {
         self.codexUsageSynchronizer = codexUsageSynchronizer
+        self.codexUsagePreviewReader = codexUsagePreviewReader
         self.codexUsageReader = codexUsageReader
         self.claudeUsageReader = claudeUsageReader
         self.xaiUsageReader = xaiUsageReader
@@ -71,6 +75,7 @@ final class UsageRefreshLifecycle {
         generation &+= 1
         let runGeneration = generation
         let codexUsageSynchronizer = codexUsageSynchronizer
+        let codexUsagePreviewReader = codexUsagePreviewReader
         let codexUsageReader = codexUsageReader
         let claudeUsageReader = claudeUsageReader
         let xaiUsageReader = xaiUsageReader
@@ -78,14 +83,33 @@ final class UsageRefreshLifecycle {
 
         let workTask = Task.detached(priority: .utility) { [weak self] in
             async let xaiUsage = xaiUsageReader()
-            let syncResult = await codexUsageSynchronizer()
+            let syncResult: CodexUsageSyncResult
+            var previewClaude: UsageSnapshot?
+            if let codexUsagePreviewReader {
+                async let pendingSyncResult = codexUsageSynchronizer()
+                let claude = claudeUsageReader()
+                previewClaude = claude
+                let codexPreview = codexUsagePreviewReader()
+                guard !Task.isCancelled else { return }
+                let preview = Result(
+                    snapshots: [.codex: codexPreview, .claudeCode: claude],
+                    accounts: codexPreview.accounts + claude.accounts,
+                    points: codexPreview.points + claude.points,
+                    tasks: codexPreview.tasks,
+                    generation: runGeneration
+                )
+                await self?.publishProgress(preview, generation: runGeneration, receive: receive)
+                syncResult = await pendingSyncResult
+            } else {
+                syncResult = await codexUsageSynchronizer()
+            }
             guard !Task.isCancelled else { return }
             var codex = codexUsageReader()
             guard !Task.isCancelled else { return }
             if let note = syncResult.note {
                 codex.securityNotes.append(note)
             }
-            let claude = claudeUsageReader()
+            let claude = previewClaude ?? claudeUsageReader()
             guard !Task.isCancelled else { return }
             let xai = await xaiUsage
             guard !Task.isCancelled else { return }
@@ -123,6 +147,15 @@ final class UsageRefreshLifecycle {
             return
         }
         inFlight?.timeoutTask = timeoutTask
+    }
+
+    private func publishProgress(
+        _ result: Result,
+        generation runGeneration: UInt64,
+        receive: @escaping Receiver
+    ) {
+        guard inFlight?.generation == runGeneration else { return }
+        receive(.progress(result))
     }
 
     private func finish(

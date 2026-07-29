@@ -39,6 +39,13 @@ struct EfficiencyCoachView: View {
         VStack(alignment: .leading, spacing: 14) {
             pageNavigation
 
+            if store.isLoadingSessionData {
+                LoadingAccountPanel(
+                    title: L.text("loading_session_data", store.language),
+                    subtitle: L.text("loading_session_data_subtitle", store.language)
+                )
+            }
+
             if page == .coach {
                 coach
             } else {

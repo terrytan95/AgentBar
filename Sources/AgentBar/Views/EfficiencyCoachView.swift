@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -21,8 +22,8 @@ struct EfficiencyCoachView: View {
     @ObservedObject var store: UsageStore
     @State private var page: EfficiencyCoachPage = .coach
     @State private var selectedService = "all"
-    @State private var dismissedInsightIDs: Set<String> = []
-    @State private var trialInsightIDs: Set<String> = []
+    @State private var selectedContextSessionID = ""
+    @State private var copiedHandoffSessionID: String?
     @State private var navigationAnchor: EfficiencyCoachPage = .coach
 
     var body: some View {
@@ -45,7 +46,10 @@ struct EfficiencyCoachView: View {
                         case .coach:
                             EmptyView()
                         case .contextBurn:
-                            ContextBurnEfficiencyView(store: store)
+                            ContextBurnEfficiencyView(
+                                store: store,
+                                selectedSessionID: $selectedContextSessionID
+                            )
                         case .cacheHealth:
                             CacheHealthEfficiencyView(store: store)
                         }
@@ -119,13 +123,6 @@ struct EfficiencyCoachView: View {
 
     private var coach: some View {
         let points = servicePoints
-        let insights = TokenEfficiencyAnalytics.coachInsights(
-            points: points,
-            tasks: store.tasks,
-            range: store.selectedRange,
-            customStart: store.customStart,
-            customEnd: store.customEnd
-        ).filter { !dismissedInsightIDs.contains($0.id) }
         let contextSessions = TokenEfficiencyAnalytics.contextBurn(
             points: points,
             range: store.selectedRange,
@@ -138,6 +135,24 @@ struct EfficiencyCoachView: View {
             customStart: store.customStart,
             customEnd: store.customEnd
         )
+        let actionSession = contextSessions.first {
+            $0.confidence.meetsMinimum
+                && $0.latestOccupancyRatio >= 0.70
+                && ($0.recentInputGrowthRatio ?? 0) > 0
+        }
+        let pressureSessions = contextSessions.filter {
+            $0.confidence.meetsMinimum && $0.latestOccupancyRatio >= 0.70
+        }
+        let cachedInput = cache.compactMap(\.cachedInputTokens).reduce(0, +)
+        let totalInput = cache.compactMap(\.inputTokens).reduce(0, +)
+        let cacheRatio = totalInput > 0 ? Double(cachedInput) / Double(totalInput) : nil
+        let cacheHealthy = !cache.contains { summary in
+            guard summary.confidence.meetsMinimum,
+                  let ratio = summary.cacheRatio,
+                  let baseline = summary.personalBaselineRatio
+            else { return false }
+            return ratio + 0.10 < baseline
+        }
 
         return VStack(alignment: .leading, spacing: 16) {
             header(
@@ -145,65 +160,27 @@ struct EfficiencyCoachView: View {
                 subtitle: efficiencyText("coachSubtitle", store.language)
             )
 
-            HStack(spacing: 12) {
-                coachMetric(
-                    efficiencyText("opportunities", store.language),
-                    insights.isEmpty ? "—" : "\(insights.count)",
-                    icon: "sparkles",
-                    color: .green
-                )
-                coachMetric(
-                    efficiencyText("contextSessions", store.language),
-                    contextSessions.isEmpty ? "—" : "\(contextSessions.count)",
-                    icon: "chart.line.uptrend.xyaxis",
-                    color: AgentBarPalette.primary
-                )
-                let cachedInput = cache.compactMap(\.cachedInputTokens).reduce(0, +)
-                let totalInput = cache.compactMap(\.inputTokens).reduce(0, +)
-                coachMetric(
-                    efficiencyText("cacheReuse", store.language),
-                    totalInput > 0 ? percent(Double(cachedInput) / Double(totalInput)) : "—",
-                    icon: "externaldrive.fill.badge.checkmark",
-                    color: .green
-                )
-                coachMetric(
-                    efficiencyText("timeframe", store.language),
-                    store.selectedRange.dashboardLabel(store.language),
-                    icon: "calendar",
-                    color: .purple
-                )
-            }
-
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(efficiencyText("topOpportunities", store.language))
-                        .font(.agentBar(size: 16, weight: .bold))
-                    Text(efficiencyText("opportunitiesSubtitle", store.language))
-                        .font(.agentBar(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                servicePicker
-                UsageRangeControls(
-                    range: $store.selectedRange,
-                    customStart: $store.customStart,
-                    customEnd: $store.customEnd,
-                    language: store.language
-                )
-            }
+            statusStrip(
+                measuredSessions: contextSessions.count,
+                hasAction: actionSession != nil,
+                cacheRatio: cacheRatio,
+                cacheHealthy: cacheHealthy
+            )
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
-                    if insights.isEmpty {
-                        unavailablePanel(
-                            efficiencyText("noInsights", store.language),
-                            efficiencyText("noInsightsDetail", store.language)
+                    if let actionSession {
+                        primaryActionCard(
+                            actionSession,
+                            pressureSessions: pressureSessions,
+                            cacheRatio: cacheRatio,
+                            cacheHealthy: cacheHealthy
                         )
                     } else {
-                        ForEach(insights) { insight in
-                            insightCard(insight)
-                        }
+                        noActionCard
                     }
+
+                    secondaryCards
 
                     Label(efficiencyText("privacyNote", store.language), systemImage: "lock.shield")
                         .font(.agentBar(size: 10, weight: .medium))
@@ -235,149 +212,354 @@ struct EfficiencyCoachView: View {
         .accessibilityLabel(efficiencyText("service", store.language))
     }
 
-    private func insightCard(_ insight: EfficiencyCoachInsight) -> some View {
-        let presentation = insightPresentation(insight)
-        return HStack(spacing: 0) {
-            VStack(spacing: 10) {
-                Image(systemName: presentation.icon)
-                    .font(.agentBar(size: 26, weight: .bold))
-                    .foregroundStyle(presentation.color)
-                    .frame(width: 58, height: 58)
-                    .background(Circle().fill(presentation.color.opacity(0.1)))
-                Text(efficiencyText(presentation.impactKey, store.language))
-                    .font(.agentBar(size: 10, weight: .bold))
-                    .foregroundStyle(presentation.color)
+    private func statusStrip(
+        measuredSessions: Int,
+        hasAction: Bool,
+        cacheRatio: Double?,
+        cacheHealthy: Bool
+    ) -> some View {
+        let cacheValue = cacheRatio.map(percent) ?? "—"
+        let cacheStatus = cacheRatio == nil
+            ? efficiencyText("unavailable", store.language)
+            : efficiencyText(cacheHealthy ? "healthy" : "review", store.language)
+        let cacheColor: Color = cacheRatio == nil ? .secondary : (cacheHealthy ? .green : .orange)
+
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                statusItem(
+                    store.selectedRange.dashboardLabel(store.language),
+                    icon: "calendar",
+                    color: AgentBarPalette.primary
+                )
+                statusDivider
+                statusItem(
+                    "\(measuredSessions) \(efficiencyText("sessions", store.language))",
+                    icon: "bubble.left.and.bubble.right",
+                    color: AgentBarPalette.primary
+                )
+                statusDivider
+                statusItem(
+                    efficiencyText(hasAction ? "oneAction" : "noActions", store.language),
+                    icon: "bolt",
+                    color: hasAction ? AgentBarPalette.primary : .green
+                )
+                statusDivider
+                statusItem(
+                    "\(efficiencyText("cacheReuse", store.language)) \(cacheValue) \(cacheStatus)",
+                    icon: "externaldrive.fill.badge.checkmark",
+                    color: cacheColor
+                )
             }
-            .frame(width: 106)
+            .frame(minHeight: 58)
 
-            Divider()
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                statusItem(
+                    store.selectedRange.dashboardLabel(store.language),
+                    icon: "calendar",
+                    color: AgentBarPalette.primary
+                )
+                statusItem(
+                    "\(measuredSessions) \(efficiencyText("sessions", store.language))",
+                    icon: "bubble.left.and.bubble.right",
+                    color: AgentBarPalette.primary
+                )
+                statusItem(
+                    efficiencyText(hasAction ? "oneAction" : "noActions", store.language),
+                    icon: "bolt",
+                    color: hasAction ? AgentBarPalette.primary : .green
+                )
+                statusItem(
+                    "\(efficiencyText("cacheReuse", store.language)) \(cacheValue) \(cacheStatus)",
+                    icon: "externaldrive.fill.badge.checkmark",
+                    color: cacheColor
+                )
+            }
+            .padding(8)
+        }
+        .agentBarPanel(cornerRadius: 12)
+    }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(presentation.title)
-                    .font(.agentBar(size: 16, weight: .bold))
-                Text(presentation.detail)
-                    .font(.agentBar(size: 11, weight: .medium))
+    private func statusItem(_ text: String, icon: String, color: Color) -> some View {
+        Label {
+            Text(text)
+                .lineLimit(1)
+        } icon: {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+        }
+        .font(.agentBar(size: 11, weight: .bold))
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var statusDivider: some View {
+        Divider()
+            .frame(height: 26)
+    }
+
+    private func primaryActionCard(
+        _ session: ContextBurnSession,
+        pressureSessions: [ContextBurnSession],
+        cacheRatio: Double?,
+        cacheHealthy: Bool
+    ) -> some View {
+        let target = session.scope.projectName?.trimmedNonEmpty ?? session.scope.service.rawValue
+        let minimumPressure = pressureSessions.map(\.latestOccupancyRatio).min() ?? session.latestOccupancyRatio
+        let maximumPressure = pressureSessions.map(\.latestOccupancyRatio).max() ?? session.latestOccupancyRatio
+        let copied = copiedHandoffSessionID == session.sessionID
+
+        return VStack(alignment: .leading, spacing: 16) {
+            Text(efficiencyText("doNow", store.language))
+                .font(.agentBar(size: 11, weight: .bold))
+                .foregroundStyle(AgentBarPalette.primary)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(AgentBarPalette.primary.opacity(0.09))
+                )
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(String(format: efficiencyText("handoffTitle", store.language), target))
+                    .font(.agentBar(size: 24, weight: .bold))
+                Text(efficiencyText("handoffDetail", store.language))
+                    .font(.agentBar(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    Label("\(insight.sampleSize) \(efficiencyText("samples", store.language))", systemImage: "number")
-                    Label(confidenceLabel(insight.confidence), systemImage: "checkmark.seal")
-                }
-                .font(.agentBar(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 18)
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Divider()
-
-            VStack(spacing: 8) {
-                Button(efficiencyText("seeEvidence", store.language)) {
-                    page = presentation.evidencePage
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    if trialInsightIDs.contains(insight.id) {
-                        trialInsightIDs.remove(insight.id)
-                    } else {
-                        trialInsightIDs.insert(insight.id)
-                    }
-                } label: {
-                    Text(
-                        trialInsightIDs.contains(insight.id)
-                            ? efficiencyText("trialQueued", store.language)
-                            : efficiencyText("tryNextSession", store.language)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    evidenceChip(
+                        String(
+                            format: efficiencyText("highestContext", store.language),
+                            percent(maximumPressure)
+                        ),
+                        icon: "chart.line.uptrend.xyaxis",
+                        color: AgentBarPalette.primary
                     )
-                    .frame(maxWidth: .infinity)
+                    evidenceChip(
+                        String(
+                            format: efficiencyText("pressureSessions", store.language),
+                            pressureSessions.count,
+                            percent(minimumPressure),
+                            percent(maximumPressure)
+                        ),
+                        icon: "bubble.left.and.bubble.right",
+                        color: AgentBarPalette.primary
+                    )
+                    evidenceChip(
+                        cacheRatio.map {
+                            String(
+                                format: efficiencyText(
+                                    cacheHealthy ? "cacheNormal" : "cacheReview",
+                                    store.language
+                                ),
+                                percent($0)
+                            )
+                        } ?? efficiencyText("cacheUnavailable", store.language),
+                        icon: "externaldrive.fill.badge.checkmark",
+                        color: cacheRatio == nil ? .secondary : (cacheHealthy ? .green : .orange)
+                    )
+                }
+
+                VStack(spacing: 8) {
+                    evidenceChip(
+                        String(
+                            format: efficiencyText("highestContext", store.language),
+                            percent(maximumPressure)
+                        ),
+                        icon: "chart.line.uptrend.xyaxis",
+                        color: AgentBarPalette.primary
+                    )
+                    evidenceChip(
+                        String(
+                            format: efficiencyText("pressureSessions", store.language),
+                            pressureSessions.count,
+                            percent(minimumPressure),
+                            percent(maximumPressure)
+                        ),
+                        icon: "bubble.left.and.bubble.right",
+                        color: AgentBarPalette.primary
+                    )
+                    evidenceChip(
+                        cacheRatio.map {
+                            String(
+                                format: efficiencyText(
+                                    cacheHealthy ? "cacheNormal" : "cacheReview",
+                                    store.language
+                                ),
+                                percent($0)
+                            )
+                        } ?? efficiencyText("cacheUnavailable", store.language),
+                        icon: "externaldrive.fill.badge.checkmark",
+                        color: cacheRatio == nil ? .secondary : (cacheHealthy ? .green : .orange)
+                    )
+                }
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.agentBar(size: 17, weight: .bold))
+                    .foregroundStyle(.secondary)
+                Text(efficiencyText("handoffPrompt", store.language))
+                    .font(.agentBar(size: 12, weight: .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AgentBarPalette.primary.opacity(0.035))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AgentBarPalette.primary.opacity(0.16), lineWidth: 1)
+            )
+
+            HStack(spacing: 10) {
+                Button {
+                    copyHandoff(for: session)
+                } label: {
+                    Label(
+                        efficiencyText(copied ? "copied" : "copyHandoff", store.language),
+                        systemImage: copied ? "checkmark" : "doc.on.clipboard"
+                    )
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
 
-                Button(efficiencyText("dismiss", store.language)) {
-                    dismissedInsightIDs.insert(insight.id)
+                Button {
+                    selectedContextSessionID = session.id
+                    page = .contextBurn
+                } label: {
+                    Label(efficiencyText("viewSession", store.language), systemImage: "doc.text.magnifyingglass")
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.large)
             }
-            .font(.agentBar(size: 11, weight: .bold))
-            .frame(width: 156)
-            .padding(14)
+            .font(.agentBar(size: 12, weight: .bold))
+
+            Label(efficiencyText("verificationDetail", store.language), systemImage: "checkmark.circle")
+                .font(.agentBar(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
         }
-        .frame(minHeight: 154)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .agentBarPanel(cornerRadius: 14)
     }
 
-    private func insightPresentation(_ insight: EfficiencyCoachInsight) -> (
-        title: String,
-        detail: String,
-        icon: String,
-        color: Color,
-        impactKey: String,
-        evidencePage: EfficiencyCoachPage
-    ) {
-        switch insight.kind {
-        case .contextPressure:
-            return (
-                String(
-                    format: efficiencyText("contextTitle", store.language),
-                    Int(insight.measuredValue * 100)
-                ),
-                efficiencyText("contextDetail", store.language),
-                "chart.line.uptrend.xyaxis",
-                AgentBarPalette.primary,
-                "highImpact",
-                .contextBurn
-            )
-        case .cacheReuseExperiment:
-            return (
-                String(
-                    format: efficiencyText("cacheTitle", store.language),
-                    Int(insight.measuredValue * 100)
-                ),
-                efficiencyText("cacheDetail", store.language),
-                "externaldrive.fill.badge.checkmark",
-                .green,
-                "highImpact",
-                .cacheHealth
-            )
-        case .sessionOutlier:
-            return (
-                String(
-                    format: efficiencyText("outlierTitle", store.language),
-                    DisplayFormatters.compactTokenString(Int(insight.measuredValue), language: store.language)
-                ),
-                efficiencyText("outlierDetail", store.language),
-                "exclamationmark.magnifyingglass",
-                .purple,
-                "mediumImpact",
-                .cacheHealth
-            )
+    private func evidenceChip(_ text: String, icon: String, color: Color) -> some View {
+        Label {
+            Text(text)
+                .lineLimit(1)
+        } icon: {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+        }
+        .font(.agentBar(size: 11, weight: .bold))
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AgentBarDesign.panelHighlight)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private var noActionCard: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.agentBar(size: 28, weight: .bold))
+                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(efficiencyText("noActionTitle", store.language))
+                    .font(.agentBar(size: 17, weight: .bold))
+                Text(efficiencyText("noActionDetail", store.language))
+                    .font(.agentBar(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+        .agentBarPanel(cornerRadius: 14)
+    }
+
+    private var secondaryCards: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                secondaryCard(
+                    title: efficiencyText("upNext", store.language),
+                    detail: efficiencyText("noMoreActions", store.language),
+                    icon: "calendar",
+                    color: AgentBarPalette.primary
+                )
+                secondaryCard(
+                    title: efficiencyText("recentVerification", store.language),
+                    detail: efficiencyText(
+                        copiedHandoffSessionID == nil ? "verificationEmpty" : "verificationPending",
+                        store.language
+                    ),
+                    icon: "chart.line.uptrend.xyaxis",
+                    color: AgentBarPalette.primary
+                )
+            }
+
+            VStack(spacing: 12) {
+                secondaryCard(
+                    title: efficiencyText("upNext", store.language),
+                    detail: efficiencyText("noMoreActions", store.language),
+                    icon: "calendar",
+                    color: AgentBarPalette.primary
+                )
+                secondaryCard(
+                    title: efficiencyText("recentVerification", store.language),
+                    detail: efficiencyText(
+                        copiedHandoffSessionID == nil ? "verificationEmpty" : "verificationPending",
+                        store.language
+                    ),
+                    icon: "chart.line.uptrend.xyaxis",
+                    color: AgentBarPalette.primary
+                )
+            }
         }
     }
 
-    private func coachMetric(
-        _ title: String,
-        _ value: String,
+    private func secondaryCard(
+        title: String,
+        detail: String,
         icon: String,
         color: Color
     ) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.agentBar(size: 19, weight: .bold))
-                .foregroundStyle(color)
-                .frame(width: 42, height: 42)
-                .background(RoundedRectangle(cornerRadius: 11).fill(color.opacity(0.1)))
+                    .foregroundStyle(color)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(color.opacity(0.1)))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.agentBar(size: 10, weight: .semibold))
+                    .font(.agentBar(size: 14, weight: .bold))
+                Text(detail)
+                    .font(.agentBar(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.agentBarMono(size: 18, weight: .bold))
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
         .agentBarPanel(cornerRadius: 12)
+    }
+
+    private func copyHandoff(for session: ContextBurnSession) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(efficiencyText("handoffPrompt", store.language), forType: .string)
+        copiedHandoffSessionID = session.sessionID
     }
 
     private func header(title: String, subtitle: String) -> some View {
@@ -390,6 +572,13 @@ struct EfficiencyCoachView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            servicePicker
+            UsageRangeControls(
+                range: $store.selectedRange,
+                customStart: $store.customStart,
+                customEnd: $store.customEnd,
+                language: store.language
+            )
             Button {
                 store.refresh(force: true, showManualFeedback: true)
             } label: {
@@ -399,30 +588,11 @@ struct EfficiencyCoachView: View {
             .buttonStyle(.bordered)
         }
     }
-
-    private func unavailablePanel(_ title: String, _ detail: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.agentBar(size: 28, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.agentBar(size: 15, weight: .bold))
-            Text(detail)
-                .font(.agentBar(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 180)
-        .agentBarPanel(cornerRadius: 14)
-    }
-
-    private func confidenceLabel(_ confidence: TokenEfficiencyConfidence) -> String {
-        "\(efficiencyText(confidence.level.rawValue, store.language)) · \(confidence.sampleSize)/\(confidence.minimumSampleSize)"
-    }
 }
 
 private struct ContextBurnEfficiencyView: View {
     @ObservedObject var store: UsageStore
-    @State private var selectedSessionID = ""
+    @Binding var selectedSessionID: String
 
     private var sessions: [ContextBurnSession] {
         TokenEfficiencyAnalytics.contextBurn(
@@ -813,7 +983,31 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "coach": "Efficiency Guide",
         "contextBurn": "Context Burn",
         "cacheHealth": "Cache Health",
-        "coachSubtitle": "Turn usage into prioritized, explainable actions.",
+        "coachSubtitle": "Turn usage into your next action.",
+        "oneAction": "1 action",
+        "noActions": "0 actions",
+        "healthy": "healthy",
+        "review": "review",
+        "doNow": "Do now · about 5 min",
+        "handoffTitle": "Give %@’s long session a handoff",
+        "handoffDetail": "Create a factual handoff, then continue in a fresh session.",
+        "highestContext": "Highest %@",
+        "pressureSessions": "%d sessions reached %@–%@",
+        "cacheNormal": "Cache %@ healthy",
+        "cacheReview": "Cache %@ needs review",
+        "cacheUnavailable": "Cache unavailable",
+        "handoffPrompt": "Create a handoff I can carry into a new session: goal, completed work, changed files, verification results, unfinished items, and the exact next step. Include only known facts and do not continue the task.",
+        "copyHandoff": "Copy handoff prompt",
+        "copied": "Copied",
+        "viewSession": "View session",
+        "verificationDetail": "The next session in this project will be used for verification.",
+        "noActionTitle": "No action needed now",
+        "noActionDetail": "No measured session crossed the handoff threshold in this range.",
+        "upNext": "Up next",
+        "noMoreActions": "No other required action right now.",
+        "recentVerification": "Recent verification",
+        "verificationEmpty": "Complete an action to see the observed before-and-after change.",
+        "verificationPending": "Handoff copied. Start a fresh session to verify the change.",
         "opportunities": "Opportunities",
         "contextSessions": "Measured sessions",
         "cacheReuse": "Cache reuse",
@@ -875,7 +1069,31 @@ private func efficiencyText(_ key: String, _ language: AppLanguage) -> String {
         "coach": "效率指南",
         "contextBurn": "上下文消耗",
         "cacheHealth": "缓存健康",
-        "coachSubtitle": "把用量转化为有优先级、可解释的行动。",
+        "coachSubtitle": "把用量转化为下一步行动。",
+        "oneAction": "1 个行动",
+        "noActions": "0 个行动",
+        "healthy": "正常",
+        "review": "需留意",
+        "doNow": "现在做 · 约 5 分钟",
+        "handoffTitle": "给 %@ 的长会话做一次交接",
+        "handoffDetail": "先生成事实交接，再开启新会话。",
+        "highestContext": "最高 %@",
+        "pressureSessions": "%d 个会话达到 %@–%@",
+        "cacheNormal": "缓存 %@ 正常",
+        "cacheReview": "缓存 %@ 需留意",
+        "cacheUnavailable": "缓存数据不可用",
+        "handoffPrompt": "请输出一份可带入新会话的事实交接：目标、已完成、改动文件、验证结果、未完成事项、明确下一步。只写已知事实，不继续执行任务。",
+        "copyHandoff": "复制交接指令",
+        "copied": "已复制",
+        "viewSession": "查看对应会话",
+        "verificationDetail": "下个同项目会话将用于验收。",
+        "noActionTitle": "现在无需行动",
+        "noActionDetail": "所选范围内没有已测会话达到交接门槛。",
+        "upNext": "之后行动",
+        "noMoreActions": "暂无其他必须处理的行动。",
+        "recentVerification": "最近验证",
+        "verificationEmpty": "完成一次行动后显示前后变化。",
+        "verificationPending": "交接指令已复制；开启新会话后即可验证变化。",
         "opportunities": "优化机会",
         "contextSessions": "已测会话",
         "cacheReuse": "缓存复用率",

@@ -3,6 +3,7 @@ import Foundation
 enum UsageService: String, Codable, CaseIterable, Hashable, Identifiable, Sendable {
     case codex = "Codex"
     case claudeCode = "Claude Code"
+    case xaiAPI = "xAI API"
 
     var id: String { rawValue }
 }
@@ -592,19 +593,25 @@ struct DailyUsageBar: Equatable, Identifiable, Sendable {
     var day: Date
     var codexTokens: Int
     var claudeTokens: Int
+    var xaiTokens: Int = 0
     var codexCostUSD: Decimal = 0
     var claudeCostUSD: Decimal = 0
+    var xaiCostUSD: Decimal = 0
 
     func tooltipText(language: AppLanguage) -> String {
         let tokensLabel = L.text("tokens", language)
-        let total = codexTokens + claudeTokens
-        let totalCost = codexCostUSD + claudeCostUSD
-        return [
+        let total = codexTokens + claudeTokens + xaiTokens
+        let totalCost = codexCostUSD + claudeCostUSD + xaiCostUSD
+        var lines = [
             DisplayFormatters.localizedDateString(for: day, template: "yMMMd", language: language, timeZone: TimeZone(secondsFromGMT: 0)),
             "Codex: \(DisplayFormatters.compactTokenString(codexTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(codexCostUSD))",
-            "Claude: \(DisplayFormatters.compactTokenString(claudeTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(claudeCostUSD))",
-            "Total: \(DisplayFormatters.compactTokenString(total, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(totalCost))"
-        ].joined(separator: "\n")
+            "Claude: \(DisplayFormatters.compactTokenString(claudeTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(claudeCostUSD))"
+        ]
+        if xaiTokens > 0 || xaiCostUSD != 0 {
+            lines.append("xAI: \(DisplayFormatters.compactTokenString(xaiTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(xaiCostUSD))")
+        }
+        lines.append("Total: \(DisplayFormatters.compactTokenString(total, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(totalCost))")
+        return lines.joined(separator: "\n")
     }
 }
 

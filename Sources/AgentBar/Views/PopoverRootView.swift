@@ -99,7 +99,6 @@ struct PopoverRootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isConfirmingQuit = false
-    @State private var dismissedEfficiencyNudgeID: String?
 
     private var stateSwapAnimation: Animation {
         .timingCurve(0.22, 1, 0.36, 1, duration: AgentBarDesign.durationNormal)
@@ -119,13 +118,8 @@ struct PopoverRootView: View {
             hairline
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    if let nudge = efficiencyNudge, dismissedEfficiencyNudgeID != nudge.id {
-                        EfficiencySmartNudgeCard(
-                            nudge: nudge,
-                            language: store.language,
-                            onDismiss: { dismissedEfficiencyNudgeID = nudge.id },
-                            onOpen: showEfficiencyCoach
-                        )
+                    if store.settings.showPopoverOverviewSection {
+                        quickSummarySection
                     }
                     accountSection
                 }
@@ -159,8 +153,10 @@ struct PopoverRootView: View {
         colorScheme == .dark ? AgentBarDesign.hairline : Color(nsColor: .separatorColor).opacity(0.72)
     }
 
-    private var efficiencyNudge: TokenEfficiencyNudge? {
-        TokenEfficiencyAnalytics.smartNudge(points: store.usageDataDisplayPoints)
+    private var dataSourceHealth: DataSourceHealthSummary {
+        UsageInsights.dataSourceHealth(
+            snapshots: Dictionary(uniqueKeysWithValues: store.uiDataSourceSnapshots.map { ($0.service, $0) })
+        )
     }
 
     private var header: some View {
@@ -234,6 +230,109 @@ struct PopoverRootView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var quickSummarySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.text("overview", store.language))
+                .font(.agentBar(size: 13, weight: .bold))
+            HStack(spacing: 8) {
+                ForEach(store.settings.popoverMetrics) { metric in
+                    quickSummaryMetric(metric)
+                }
+            }
+
+            if dataSourceHealth.issueCount > 0 {
+                Label(dataSourceIssueText, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func quickSummaryMetric(_ metric: PopoverMetric) -> some View {
+        switch metric {
+        case .tokens:
+            KPIPill(
+                title: metric.title(store.language),
+                value: DisplayFormatters.tokenString(store.summary.totalTokens),
+                systemImage: metric.systemImage,
+                tint: AgentBarPalette.primary
+            )
+        case .cost:
+            KPIPill(
+                title: metric.title(store.language),
+                value: costText(store.summary.estimatedCostUSD),
+                systemImage: metric.systemImage,
+                tint: AgentBarPalette.secondary
+            )
+        case .availableResets:
+            KPIPill(
+                title: metric.title(store.language),
+                value: availableResetCountText,
+                systemImage: metric.systemImage,
+                tint: .purple
+            )
+        case .earliestRecovery:
+            KPIPill(
+                title: metric.title(store.language),
+                value: earliestRecoveryText,
+                systemImage: metric.systemImage,
+                tint: AgentBarPalette.primary
+            )
+        case .currentBalance:
+            KPIPill(
+                title: metric.title(store.language),
+                value: DisplayFormatters.percentString(activeRemainingPercent),
+                systemImage: metric.systemImage,
+                tint: AgentBarPalette.quotaColor(remaining: activeRemainingPercent)
+            )
+        }
+    }
+
+    private var activeRemainingPercent: Double? {
+        guard let account = store.activeAccount,
+              account.status == .live,
+              !account.needsLogin
+        else { return nil }
+        return account.mostConstrainedRemainingPercent
+    }
+
+    private var availableResetCountText: String {
+        let counts = store.accounts
+            .filter { $0.status == .live && !$0.needsLogin }
+            .compactMap { $0.resetCredits?.visibleCount }
+        guard !counts.isEmpty else { return "--" }
+        let count = counts.reduce(0, +)
+        return store.language == .chinese ? "\(count) 次" : "\(count)"
+    }
+
+    private var earliestRecoveryText: String {
+        guard let date = earliestRecoveryDate else { return "--" }
+        return DisplayFormatters.relativeString(for: date, language: store.language)
+    }
+
+    private var earliestRecoveryDate: Date? {
+        let now = Date()
+        return store.accounts
+            .filter { $0.status == .live && !$0.needsLogin }
+            .flatMap { [$0.fiveHourWindow?.resetsAt, $0.weeklyWindow?.resetsAt] }
+            .compactMap { $0 }
+            .filter { $0 > now }
+            .min()
+    }
+
+    private var dataSourceIssueText: String {
+        dataSourceHealth.rows
+            .filter { $0.status != .live }
+            .map { "\($0.service.rawValue) \($0.status.label(language: store.language))" }
+            .joined(separator: " · ")
+    }
+
+    private func costText(_ value: Decimal?) -> String {
+        value.map { DisplayFormatters.costString($0) } ?? L.text("no_cost_data", store.language)
+    }
+
     private var footer: some View {
         Group {
             if isConfirmingQuit {
@@ -301,13 +400,6 @@ struct PopoverRootView: View {
             DispatchQueue.main.async {
                 DashboardNavigation.request(tab)
             }
-        }
-    }
-
-    private func showEfficiencyCoach() {
-        showStatisticsWindow()
-        DispatchQueue.main.async {
-            DashboardNavigation.requestEfficiencyCoach()
         }
     }
 }
@@ -708,6 +800,36 @@ struct UsageWindowGauge: View {
         if remaining < 15 { return .red }
         if remaining < 35 { return .orange }
         return AgentBarPalette.primary
+    }
+}
+
+struct KPIPill: View {
+    var title: String
+    var value: String
+    var systemImage: String
+    var tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.agentBar(size: 12, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 22, height: 22)
+                .background(tint.opacity(0.12), in: Circle())
+            Text(title)
+                .font(.agentBar(size: 9, weight: .bold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .lineLimit(1)
+            Text(value)
+                .font(.agentBarMono(size: 13, weight: .bold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.70)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+        .agentBarPanel(cornerRadius: 12)
     }
 }
 

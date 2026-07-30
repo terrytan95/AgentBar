@@ -59,6 +59,34 @@ struct CodexAccountStorage {
         homeDirectory.appending(path: ".codex/auth.json")
     }
 
+    func readRegistryBootstrappingActiveAccount(now: Date) throws -> Data {
+        do {
+            return try Data(contentsOf: registryURL)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            let authData = try Data(contentsOf: activeAuthURL)
+            guard let identity = Self.chatGPTAuthIdentity(from: authData),
+                  let accountID = identity.accountID
+            else { throw error }
+
+            try fileManager.createDirectory(at: accountsDirectory, withIntermediateDirectories: true)
+            let snapshotURL = accountAuthURL(for: accountID)
+            try authData.write(to: snapshotURL, options: [.atomic])
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: snapshotURL.path)
+
+            var account: [String: Any] = [
+                "account_key": accountID,
+                "chatgpt_account_id": accountID
+            ]
+            account["email"] = identity.email
+            try writeRegistry([
+                "active_account_key": accountID,
+                "active_account_activated_at_ms": Int(now.timeIntervalSince1970 * 1_000),
+                "accounts": [account]
+            ])
+            return try Data(contentsOf: registryURL)
+        }
+    }
+
     func accountAuthURL(for accountID: String) -> URL {
         accountsDirectory.appending(path: "\(Self.fileKey(for: accountID)).auth.json")
     }

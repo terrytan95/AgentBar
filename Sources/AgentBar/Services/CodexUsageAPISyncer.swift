@@ -54,7 +54,7 @@ struct CodexUsageAPISyncer {
     func refreshUsage() async -> CodexUsageSyncResult {
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
-        guard let data = try? Data(contentsOf: registryURL),
+        guard let data = try? storage.readRegistryBootstrappingActiveAccount(now: now()),
               let registry = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               var accounts = registry["accounts"] as? [[String: Any]]
         else {

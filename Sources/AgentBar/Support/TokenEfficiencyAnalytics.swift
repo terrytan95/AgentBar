@@ -91,15 +91,6 @@ struct EfficiencyCoachInsight: Equatable, Identifiable, Sendable {
     var confidence: TokenEfficiencyConfidence
 }
 
-struct TokenEfficiencyNudge: Equatable, Identifiable, Sendable {
-    var id: String
-    var sessionID: String
-    var service: UsageService
-    var contextOccupancyRatio: Double
-    var thresholdBand: Int
-    var confidence: TokenEfficiencyConfidence
-}
-
 enum TokenEfficiencyAnalytics {
     static let minimumCacheSessions = 6
     static let minimumOutlierBaseline = 8
@@ -348,33 +339,6 @@ enum TokenEfficiencyAnalytics {
             }
             return $0.measuredValue > $1.measuredValue
         }
-    }
-
-    static func smartNudge(
-        points: [UsagePoint],
-        suppressedSessionIDs: Set<String> = [],
-        deliveredBands: [String: Set<Int>] = [:]
-    ) -> TokenEfficiencyNudge? {
-        contextBurn(points: points)
-            .filter {
-                !suppressedSessionIDs.contains($0.sessionID)
-                    && $0.confidence.meetsMinimum
-                    && $0.latestOccupancyRatio >= 0.70
-                    && ($0.recentInputGrowthRatio ?? 0) > 0
-            }
-            .compactMap { burn in
-                let band = min(9, Int(burn.latestOccupancyRatio * 10))
-                guard deliveredBands[burn.sessionID]?.contains(band) != true else { return nil }
-                return TokenEfficiencyNudge(
-                    id: "\(burn.sessionID)|\(band)",
-                    sessionID: burn.sessionID,
-                    service: burn.scope.service,
-                    contextOccupancyRatio: burn.latestOccupancyRatio,
-                    thresholdBand: band,
-                    confidence: burn.confidence
-                )
-            }
-            .max { $0.contextOccupancyRatio < $1.contextOccupancyRatio }
     }
 
     private struct TaskSample {

@@ -1,4 +1,4 @@
-<h1><img src="Sources/AgentBar/Resources/AgentBarLogo.png" alt="AgentBar logo" height="32" align="center"> AgentBar</h1>
+<h1><img src="Sources/AgentBar/Resources/AgentBarLogo.png" alt="AgentBar logo" width="64" height="64" align="middle"> AgentBar</h1>
 
 [![release](https://img.shields.io/github/v/release/terrytan95/AgentBar?style=flat-square&label=release&labelColor=555555&color=111111)](https://github.com/terrytan95/AgentBar/releases/latest)
 ![macOS](https://img.shields.io/badge/macOS-14%2B-111111?style=flat-square&labelColor=555555)

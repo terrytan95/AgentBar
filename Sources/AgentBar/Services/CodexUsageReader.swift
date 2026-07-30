@@ -46,7 +46,7 @@ struct CodexUsageReader {
         )
 
         do {
-            let data = try Data(contentsOf: registryURL)
+            let data = try storage.readRegistryBootstrappingActiveAccount(now: now)
             if let registryDetails = try? Self.parseRegistryDetails(
                 data: data,
                 now: now,

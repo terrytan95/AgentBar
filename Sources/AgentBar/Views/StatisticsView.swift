@@ -119,19 +119,27 @@ struct StatisticsView: View {
             appFooter
                 .padding(.horizontal, 26)
                 .frame(height: 42)
-                .background(AgentBarDesign.panelHighlight)
+                .background(
+                    settings.useTranslucentAppearance
+                        ? Color.clear
+                        : AgentBarDesign.panelHighlight
+                )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                colors: [
-                    AgentBarDesign.panelHighlight,
-                    AgentBarDesign.appBackground,
-                    AgentBarPalette.primary.opacity(0.08)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+        .agentBarGlassSurface(
+            isEnabled: settings.useTranslucentAppearance,
+            opaqueBackground: AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        AgentBarDesign.panelHighlight,
+                        AgentBarDesign.appBackground,
+                        AgentBarPalette.primary.opacity(0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            ),
+            cornerRadius: 0
         )
     }
 

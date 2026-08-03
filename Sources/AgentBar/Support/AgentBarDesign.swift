@@ -182,16 +182,20 @@ private struct AgentBarPanelModifier: ViewModifier {
 private struct AgentBarGlassSurfaceModifier: ViewModifier {
     var isEnabled: Bool
     var opaqueBackground: AnyShapeStyle
+    var cornerRadius: CGFloat
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     @ViewBuilder
     func body(content: Content) -> some View {
         if isEnabled && !reduceTransparency {
-            content
-                .background {
-                    CodexSidebarMaterialView(material: .underWindowBackground)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            let glass = content.background {
+                CodexSidebarMaterialView(material: .underWindowBackground)
+            }
+            if cornerRadius > 0 {
+                glass.clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            } else {
+                glass
+            }
         } else {
             content.background(opaqueBackground)
         }
@@ -216,12 +220,14 @@ private struct AgentBarPressButtonStyle: ButtonStyle {
 extension View {
     func agentBarGlassSurface(
         isEnabled: Bool,
-        opaqueBackground: AnyShapeStyle
+        opaqueBackground: AnyShapeStyle,
+        cornerRadius: CGFloat = AgentBarDesign.radiusMedium
     ) -> some View {
         modifier(
             AgentBarGlassSurfaceModifier(
                 isEnabled: isEnabled,
-                opaqueBackground: opaqueBackground
+                opaqueBackground: opaqueBackground,
+                cornerRadius: cornerRadius
             )
         )
     }

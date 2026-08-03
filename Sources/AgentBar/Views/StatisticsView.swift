@@ -878,38 +878,51 @@ struct StatisticsView: View {
 
     private var accountsSettingsContent: some View {
         VStack(alignment: .leading, spacing: 18) {
-            SettingsGroup(title: L.text("account_providers", store.language), subtitle: L.text("account_providers_subtitle", store.language)) {
-                SettingsRow(title: "Codex", subtitle: "\(codexAccounts.count) \(L.text("accounts_loaded", store.language))") {
-                    Button {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L.text("account_providers", store.language))
+                        .font(.agentBar(size: 15, weight: .bold))
+                    Text(L.text("account_providers_subtitle", store.language))
+                        .font(.agentBar(size: 12))
+                        .foregroundStyle(Color.primary.opacity(0.62))
+                }
+
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2),
+                    spacing: 12
+                ) {
+                    ProviderSettingsCard(
+                        service: .codex,
+                        subtitle: "\(codexAccounts.count) \(L.text("accounts_loaded", store.language))",
+                        statusColor: providerStatusColor(for: .codex),
+                        actionTitle: L.text("login_codex_terminal", store.language)
+                    ) {
                         store.openLogin(for: .codex)
-                    } label: {
-                        Label(L.text("login_codex_terminal", store.language), systemImage: "terminal")
                     }
-                    .pointingHandCursor()
-                }
-                SettingsRow(title: "Claude Code", subtitle: hasClaudeData ? L.text("available", store.language) : L.text("no_safe_local_source", store.language)) {
-                    Button {
+                    ProviderSettingsCard(
+                        service: .claudeCode,
+                        subtitle: hasClaudeData ? L.text("available", store.language) : L.text("no_safe_local_source", store.language),
+                        statusColor: providerStatusColor(for: .claudeCode),
+                        actionTitle: L.text("login_claude_terminal", store.language)
+                    ) {
                         store.openLogin(for: .claudeCode)
-                    } label: {
-                        Label(L.text("login_claude_terminal", store.language), systemImage: "terminal")
                     }
-                    .pointingHandCursor()
-                }
-                SettingsRow(title: "Grok", subtitle: xaiProviderSubtitle) {
-                    Button {
+                    ProviderSettingsCard(
+                        service: .xaiAPI,
+                        subtitle: xaiProviderSubtitle,
+                        statusColor: providerStatusColor(for: .xaiAPI),
+                        actionTitle: L.text("login_grok_terminal", store.language)
+                    ) {
                         store.openLogin(for: .xaiAPI)
-                    } label: {
-                        Label(L.text("login_grok_terminal", store.language), systemImage: "terminal")
                     }
-                    .pointingHandCursor()
-                }
-                SettingsRow(title: "Cursor Agent", subtitle: cursorProviderSubtitle) {
-                    Button {
+                    ProviderSettingsCard(
+                        service: .cursorAgent,
+                        subtitle: cursorProviderSubtitle,
+                        statusColor: providerStatusColor(for: .cursorAgent),
+                        actionTitle: L.text("login_cursor_terminal", store.language)
+                    ) {
                         store.openLogin(for: .cursorAgent)
-                    } label: {
-                        Label(L.text("login_cursor_terminal", store.language), systemImage: "terminal")
                     }
-                    .pointingHandCursor()
                 }
             }
 
@@ -1348,6 +1361,22 @@ struct StatisticsView: View {
             return "\(snapshot.status.label(language: store.language)) · \(L.text("cursor_subscription_usage", store.language))"
         }
         return L.text("cursor_agent_not_logged_in", store.language)
+    }
+
+    private func providerStatusColor(for service: UsageService) -> Color {
+        guard let status = store.snapshots[service]?.status else {
+            if service == .codex, !codexAccounts.isEmpty { return AgentBarPalette.primary }
+            if service == .claudeCode, hasClaudeData { return .green }
+            return .secondary
+        }
+        switch status {
+        case .live:
+            return .green
+        case .unavailable:
+            return .secondary
+        case .needsAuthorization:
+            return .orange
+        }
     }
 
     private var overviewService: UsageService {
@@ -4127,6 +4156,90 @@ private struct SettingsGroup<Content: View>: View {
             .agentBarPanel()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ProviderSettingsCard: View {
+    var service: UsageService
+    var subtitle: String
+    var statusColor: Color
+    var actionTitle: String
+    var action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(nsImage: ProviderIcon.image(for: service))
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color.primary.opacity(0.88))
+                    .frame(width: 24, height: 24)
+                    .frame(width: 42, height: 42)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.8)
+                    }
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(service.rawValue)
+                        .font(.agentBar(size: 13, weight: .semibold))
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 7, height: 7)
+                        Text(subtitle)
+                            .font(.agentBar(size: 11))
+                            .foregroundStyle(Color.primary.opacity(0.62))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack {
+                Spacer()
+                Button(action: action) {
+                    HStack(spacing: 7) {
+                        Image(systemName: "terminal")
+                        Text(actionTitle)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color.primary.opacity(0.36))
+                    }
+                    .font(.agentBar(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+        .agentBarPanel()
+    }
+}
+
+private enum ProviderIcon {
+    static func image(for service: UsageService) -> NSImage {
+        let resourceName = switch service {
+        case .codex: "codex"
+        case .claudeCode: "claude-code"
+        case .xaiAPI: "grok"
+        case .cursorAgent: "cursor-agent"
+        }
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "svg", subdirectory: "ProviderIcons")
+            ?? Bundle.module.url(forResource: resourceName, withExtension: "svg", subdirectory: "ProviderIcons"),
+            let image = NSImage(contentsOf: url)
+        else {
+            return NSImage(systemSymbolName: "terminal", accessibilityDescription: service.rawValue) ?? NSImage()
+        }
+        image.isTemplate = true
+        return image
     }
 }
 

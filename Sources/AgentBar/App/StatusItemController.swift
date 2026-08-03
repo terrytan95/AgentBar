@@ -73,6 +73,9 @@ final class StatusItemController: NSObject {
         settings.popoverHeight = Double(height)
 
         let popover = NSPopover()
+        // Status-item popovers inherit the menu-bar appearance by default and ignore
+        // NSApp.appearance; pin both AppKit chrome and SwiftUI color scheme explicitly.
+        let appearance = Self.resolvedAppAppearance()
         let content = ResizablePopoverRootView(
             store: store,
             maximumHeight: maximumHeight,
@@ -84,23 +87,77 @@ final class StatusItemController: NSObject {
                 )
             }
         )
+        .preferredColorScheme(Self.preferredColorScheme(for: appearance))
 
         popover.animates = false
         popover.behavior = .transient
         popover.delegate = self
+        popover.appearance = appearance
         popover.contentSize = NSSize(
             width: PopoverLayout.width,
             height: height
         )
-        popover.contentViewController = NSHostingController(rootView: content)
+        let hostingController = NSHostingController(rootView: content)
+        hostingController.view.wantsLayer = true
+        hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingController.view.appearance = appearance
+        popover.contentViewController = hostingController
         self.popover = popover
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         sender.highlight(true)
+
+        Self.applyPopoverAppearance(appearance, to: hostingController.view)
+        if settings.useTranslucentAppearance {
+            Self.applyLiquidGlassPopoverChrome(to: hostingController.view)
+        }
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let popover = self.popover, popover.isShown else { return }
             popover.contentSize = NSSize(width: PopoverLayout.width, height: height)
             popover.contentViewController?.view.layoutSubtreeIfNeeded()
+            Self.applyPopoverAppearance(appearance, to: popover.contentViewController?.view)
+            if settings.useTranslucentAppearance {
+                Self.applyLiquidGlassPopoverChrome(to: popover.contentViewController?.view)
+            }
+        }
+    }
+
+    /// Matches `AgentBarApp` appearance policy: forced dark when enabled, otherwise system.
+    private static func resolvedAppAppearance() -> NSAppearance {
+        NSApp.appearance ?? NSApp.effectiveAppearance
+    }
+
+    private static func preferredColorScheme(for appearance: NSAppearance) -> ColorScheme {
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+    }
+
+    private static func applyPopoverAppearance(_ appearance: NSAppearance, to rootView: NSView?) {
+        guard let rootView else { return }
+        rootView.appearance = appearance
+        rootView.window?.appearance = appearance
+    }
+
+    /// Clears NSPopover chrome so `agentBarGlassSurface` (behind-window material) can show through.
+    private static func applyLiquidGlassPopoverChrome(to rootView: NSView?) {
+        guard let rootView else { return }
+        if let window = rootView.window {
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+        }
+
+        var current: NSView? = rootView
+        while let view = current {
+            view.wantsLayer = true
+            if let effectView = view as? NSVisualEffectView {
+                // Keep material sampling of desktop/content behind the popover window.
+                effectView.blendingMode = .behindWindow
+                effectView.state = .active
+                effectView.isEmphasized = true
+            } else {
+                view.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+            current = view.superview
         }
     }
 

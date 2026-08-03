@@ -188,7 +188,8 @@ struct StatisticsView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .agentBarGlassSurface(
             isEnabled: settings.useTranslucentAppearance,
-            opaqueBackground: AnyShapeStyle(AgentBarDesign.cardBackground)
+            opaqueBackground: AnyShapeStyle(AgentBarDesign.cardBackground),
+            cornerRadius: 0
         )
         .overlay(alignment: .trailing) {
             Rectangle()

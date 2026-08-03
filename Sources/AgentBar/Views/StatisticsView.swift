@@ -1007,8 +1007,20 @@ struct StatisticsView: View {
 
     private var menuBarSettingsContent: some View {
         VStack(alignment: .leading, spacing: 18) {
-            SettingsGroup(title: L.text("menu_bar", store.language), subtitle: L.text("menu_bar_settings_subtitle", store.language)) {
-                SettingsRow(title: L.text("menu_bar_preview", store.language), subtitle: L.text("menu_bar_preview_subtitle", store.language)) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L.text("menu_bar", store.language))
+                        .font(.agentBar(size: 15, weight: .bold))
+                    Text(L.text("menu_bar_settings_subtitle", store.language))
+                        .font(.agentBar(size: 12))
+                        .foregroundStyle(Color.primary.opacity(0.62))
+                }
+
+                SettingsRow(
+                    title: L.text("menu_bar_preview", store.language),
+                    subtitle: L.text("menu_bar_preview_subtitle", store.language),
+                    showsDivider: false
+                ) {
                     Label(store.menuBarTitle, systemImage: "menubar.rectangle")
                         .font(.agentBarMono(size: 12, weight: .semibold))
                         .padding(.horizontal, 10)
@@ -1016,17 +1028,51 @@ struct StatisticsView: View {
                         .background(.thinMaterial, in: Capsule())
                         .accessibilityLabel("\(L.text("menu_bar_preview", store.language)): \(store.menuBarTitle)")
                 }
-                SettingsToggleRow(
-                    title: L.text("show_codex_menu_bar", store.language),
-                    subtitle: L.text("show_codex_menu_bar_subtitle", store.language),
-                    isOn: $settings.showCodexInMenuBar
-                )
-                SettingsToggleRow(
-                    title: L.text("show_claude_menu_bar", store.language),
-                    subtitle: L.text("show_claude_menu_bar_subtitle", store.language),
-                    isOn: $settings.showClaudeInMenuBar
-                )
-                SettingsRow(title: L.text("display_value", store.language), subtitle: L.text("display_value_subtitle", store.language)) {
+                .agentBarPanel()
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L.text("menu_bar_included_services", store.language))
+                        .font(.agentBar(size: 13, weight: .semibold))
+                    Text(L.text("menu_bar_included_services_subtitle", store.language))
+                        .font(.agentBar(size: 11))
+                        .foregroundStyle(Color.primary.opacity(0.62))
+                }
+
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2),
+                    spacing: 12
+                ) {
+                    MenuBarProviderToggleCard(
+                        service: .codex,
+                        hasData: hasMenuBarData(for: .codex),
+                        language: store.language,
+                        isOn: $settings.showCodexInMenuBar
+                    )
+                    MenuBarProviderToggleCard(
+                        service: .claudeCode,
+                        hasData: hasMenuBarData(for: .claudeCode),
+                        language: store.language,
+                        isOn: $settings.showClaudeInMenuBar
+                    )
+                    MenuBarProviderToggleCard(
+                        service: .xaiAPI,
+                        hasData: hasMenuBarData(for: .xaiAPI),
+                        language: store.language,
+                        isOn: $settings.showGrokInMenuBar
+                    )
+                    MenuBarProviderToggleCard(
+                        service: .cursorAgent,
+                        hasData: hasMenuBarData(for: .cursorAgent),
+                        language: store.language,
+                        isOn: $settings.showCursorAgentInMenuBar
+                    )
+                }
+
+                SettingsRow(
+                    title: L.text("display_value", store.language),
+                    subtitle: L.text("display_value_subtitle", store.language),
+                    showsDivider: false
+                ) {
                     Picker("", selection: $settings.menuBarDisplayMode) {
                         Text(L.text("active_account_windows", store.language)).tag(MenuBarDisplayMode.activeAccountWindows)
                         Text(L.text("lowest_remaining", store.language)).tag(MenuBarDisplayMode.lowestRemaining)
@@ -1037,6 +1083,7 @@ struct StatisticsView: View {
                     .settingsControl(width: settingsControlWidePickerWidth)
                     .accessibilityLabel(L.text("display_value", store.language))
                 }
+                .agentBarPanel()
             }
 
             SettingsGroup(title: L.text("codex_sidebar", store.language), subtitle: L.text("codex_sidebar_settings_subtitle", store.language)) {
@@ -1356,6 +1403,12 @@ struct StatisticsView: View {
 
     private var hasCursorData: Bool {
         !cursorAccounts.isEmpty
+    }
+
+    private func hasMenuBarData(for service: UsageService) -> Bool {
+        store.snapshots[service]?.status == .live
+            || store.accounts.contains { $0.service == service }
+            || store.points.contains { $0.service == service }
     }
 
     private var xaiProviderSubtitle: String {
@@ -4168,6 +4221,62 @@ private struct SettingsGroup<Content: View>: View {
     }
 }
 
+private struct MenuBarProviderToggleCard: View {
+    var service: UsageService
+    var hasData: Bool
+    var language: AppLanguage
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            HStack(spacing: 12) {
+                Image(nsImage: ProviderIcon.image(for: service))
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color.primary.opacity(0.88))
+                    .frame(width: 24, height: 24)
+                    .frame(width: 42, height: 42)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.8)
+                    }
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(service.rawValue)
+                        .font(.agentBar(size: 13, weight: .semibold))
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(isOn ? AgentBarPalette.primary : Color.secondary)
+                            .frame(width: 7, height: 7)
+                        Text(statusText)
+                            .font(.agentBar(size: 11))
+                            .foregroundStyle(Color.primary.opacity(0.62))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch)
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+        .agentBarPanel()
+        .accessibilityHint(statusText)
+    }
+
+    private var statusText: String {
+        if !isOn {
+            return L.text("menu_bar_not_included", language)
+        }
+        return L.text(hasData ? "menu_bar_included" : "menu_bar_included_no_data", language)
+    }
+}
+
 private struct ProviderSettingsCard: View {
     var service: UsageService
     var subtitle: String
@@ -4255,6 +4364,7 @@ private enum ProviderIcon {
 private struct SettingsRow<Content: View>: View {
     var title: String
     var subtitle: String
+    var showsDivider = true
     @ViewBuilder var control: () -> Content
 
     var body: some View {
@@ -4272,7 +4382,7 @@ private struct SettingsRow<Content: View>: View {
             control()
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .settingsRowStyle()
+        .settingsRowStyle(showsDivider: showsDivider)
     }
 }
 
@@ -4452,17 +4562,19 @@ private struct BudgetCostField: View {
 }
 
 private extension View {
-    func settingsRowStyle() -> some View {
+    func settingsRowStyle(showsDivider: Bool = true) -> some View {
         frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, settingsControlLeadingInset)
             .padding(.trailing, settingsControlTrailingInset)
             .padding(.vertical, 12)
             .contentShape(Rectangle())
             .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Color.primary.opacity(0.06))
-                    .frame(height: 1)
-                    .padding(.leading, settingsControlLeadingInset)
+                if showsDivider {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.06))
+                        .frame(height: 1)
+                        .padding(.leading, settingsControlLeadingInset)
+                }
             }
     }
 

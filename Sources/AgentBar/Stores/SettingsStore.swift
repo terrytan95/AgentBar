@@ -112,6 +112,14 @@ final class SettingsStore: ObservableObject {
         didSet { persist(showClaudeInMenuBar, forKey: Keys.showClaudeInMenuBar) }
     }
 
+    @Published var showGrokInMenuBar: Bool {
+        didSet { persist(showGrokInMenuBar, forKey: Keys.showGrokInMenuBar) }
+    }
+
+    @Published var showCursorAgentInMenuBar: Bool {
+        didSet { persist(showCursorAgentInMenuBar, forKey: Keys.showCursorAgentInMenuBar) }
+    }
+
     @Published var useDarkAppearance: Bool {
         didSet { persist(useDarkAppearance, forKey: Keys.useDarkAppearance) }
     }
@@ -288,6 +296,8 @@ final class SettingsStore: ObservableObject {
             .flatMap { try? JSONDecoder().decode(QuotaWidgetHotKey.self, from: $0) }
         didCompleteQuotaWidgetOnboarding = defaults.bool(forKey: Keys.didCompleteQuotaWidgetOnboarding)
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
+        showGrokInMenuBar = defaults.object(forKey: Keys.showGrokInMenuBar) as? Bool ?? true
+        showCursorAgentInMenuBar = defaults.object(forKey: Keys.showCursorAgentInMenuBar) as? Bool ?? true
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         useTranslucentAppearance = defaults.object(forKey: Keys.useTranslucentAppearance) as? Bool ?? true
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
@@ -462,6 +472,8 @@ final class SettingsStore: ObservableObject {
         static let quotaWidgetHotKey = "quotaWidgetHotKey"
         static let didCompleteQuotaWidgetOnboarding = "didCompleteQuotaWidgetOnboarding"
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
+        static let showGrokInMenuBar = "showGrokInMenuBar"
+        static let showCursorAgentInMenuBar = "showCursorAgentInMenuBar"
         static let xaiTeamID = "xaiTeamID"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"
@@ -496,6 +508,8 @@ final class SettingsStore: ObservableObject {
             quotaWidgetHotKey,
             didCompleteQuotaWidgetOnboarding,
             showClaudeInMenuBar,
+            showGrokInMenuBar,
+            showCursorAgentInMenuBar,
             xaiTeamID,
             didMigrateActiveAccountMenuBarDefault,
             useDarkAppearance,

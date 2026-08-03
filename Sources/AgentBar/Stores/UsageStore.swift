@@ -296,7 +296,7 @@ final class UsageStore: ObservableObject {
         case .lowestRemaining:
             DisplayFormatters.percentString(lowestRemaining)
         case .totalTokens:
-            DisplayFormatters.tokenString(summary.totalTokens)
+            DisplayFormatters.tokenString(menuBarSummary.totalTokens)
         case .codexRemaining:
             DisplayFormatters.percentString(codexRemaining)
         }
@@ -317,14 +317,14 @@ final class UsageStore: ObservableObject {
     }
 
     private var activeAccountWindowTitle: String {
-        guard let account = activeAccount else {
-            if summary.totalTokens > 0 {
-                return DisplayFormatters.tokenString(summary.totalTokens)
+        guard let account = menuBarActiveAccount else {
+            if menuBarSummary.totalTokens > 0 {
+                return DisplayFormatters.tokenString(menuBarSummary.totalTokens)
             }
             return DisplayFormatters.percentString(lowestRemaining)
         }
         let titles = accountWindowTitles(account)
-        return titles.isEmpty ? DisplayFormatters.tokenString(summary.totalTokens) : titles.joined(separator: "  ")
+        return titles.isEmpty ? DisplayFormatters.tokenString(menuBarSummary.totalTokens) : titles.joined(separator: "  ")
     }
 
     private func accountWindowTitles(_ account: UsageAccount) -> [String] {
@@ -336,21 +336,36 @@ final class UsageStore: ObservableObject {
     }
 
     var lowestRemaining: Double? {
-        visibleAccounts.compactMap(\.mostConstrainedRemainingPercent).min()
+        menuBarAccounts.compactMap(\.mostConstrainedRemainingPercent).min()
     }
 
     var codexRemaining: Double? {
-        visibleAccounts.filter { $0.service == .codex }.compactMap(\.mostConstrainedRemainingPercent).min()
+        menuBarAccounts.filter { $0.service == .codex }.compactMap(\.mostConstrainedRemainingPercent).min()
     }
 
-    var visibleAccounts: [UsageAccount] {
-        accounts.filter { account in
-            switch account.service {
-            case .codex: settings.showCodexInMenuBar
-            case .claudeCode: settings.showClaudeInMenuBar
-            case .xaiAPI: true
-            case .cursorAgent: true
-            }
+    private var menuBarAccounts: [UsageAccount] {
+        accounts.filter { showsInMenuBar($0.service) }
+    }
+
+    private var menuBarActiveAccount: UsageAccount? {
+        menuBarAccounts.first(where: \.isActive) ?? menuBarAccounts.first
+    }
+
+    private var menuBarSummary: UsageSummary {
+        UsageRangeProjection(
+            points: points.filter { showsInMenuBar($0.service) },
+            range: selectedRange,
+            customStart: customStart,
+            customEnd: customEnd
+        ).summary
+    }
+
+    private func showsInMenuBar(_ service: UsageService) -> Bool {
+        switch service {
+        case .codex: settings.showCodexInMenuBar
+        case .claudeCode: settings.showClaudeInMenuBar
+        case .xaiAPI: settings.showGrokInMenuBar
+        case .cursorAgent: settings.showCursorAgentInMenuBar
         }
     }
 

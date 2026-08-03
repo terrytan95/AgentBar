@@ -29,6 +29,12 @@ struct AgentBarApp: App {
         .defaultSize(width: 1480, height: 940)
         .commandsRemoved()
         .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Close Window") {
+                    NSApp.keyWindow?.performClose(nil)
+                }
+                .keyboardShortcut("w", modifiers: .command)
+            }
             CommandGroup(replacing: .appTermination) {
                 Button("Quit AgentBar") {
                     NSApplication.shared.terminate(nil)

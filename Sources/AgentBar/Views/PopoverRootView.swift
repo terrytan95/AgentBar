@@ -132,11 +132,16 @@ struct PopoverRootView: View {
             footer
                 .padding(.horizontal, PopoverLayout.horizontalInset)
                 .frame(height: 62)
-                .background(AgentBarDesign.panelHighlight)
+                .background(
+                    store.settings.useTranslucentAppearance
+                        ? Color.clear
+                        : AgentBarDesign.panelHighlight
+                )
         }
         .agentBarGlassSurface(
             isEnabled: store.settings.useTranslucentAppearance,
-            opaqueBackground: AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
+            opaqueBackground: AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
+            cornerRadius: 0
         )
         .onDisappear {
             isConfirmingQuit = false

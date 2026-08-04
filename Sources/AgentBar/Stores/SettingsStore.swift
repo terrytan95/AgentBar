@@ -288,7 +288,13 @@ final class SettingsStore: ObservableObject {
             defaults.set(MenuBarDisplayMode.activeAccountWindows.rawValue, forKey: Keys.menuBarDisplayMode)
             defaults.set(true, forKey: Keys.didMigrateActiveAccountMenuBarDefault)
         }
-        menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .activeAccountWindows
+        if !defaults.bool(forKey: Keys.didMigrateProviderSummaryMenuBarDefault) {
+            if defaults.string(forKey: Keys.menuBarDisplayMode) == MenuBarDisplayMode.activeAccountWindows.rawValue {
+                defaults.set(MenuBarDisplayMode.lowestRemaining.rawValue, forKey: Keys.menuBarDisplayMode)
+            }
+            defaults.set(true, forKey: Keys.didMigrateProviderSummaryMenuBarDefault)
+        }
+        menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .lowestRemaining
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showCodexSidebarQuotaOverlay = defaults.object(forKey: Keys.showCodexSidebarQuotaOverlay) as? Bool ?? false
         codexSidebarQuotaOverlayIndependent = defaults.object(forKey: Keys.codexSidebarQuotaOverlayIndependent) as? Bool ?? false
@@ -476,6 +482,7 @@ final class SettingsStore: ObservableObject {
         static let showCursorAgentInMenuBar = "showCursorAgentInMenuBar"
         static let xaiTeamID = "xaiTeamID"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
+        static let didMigrateProviderSummaryMenuBarDefault = "didMigrateProviderSummaryMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"
         static let useTranslucentAppearance = "useTranslucentAppearance"
         static let accountSortMode = "accountSortMode"
@@ -512,6 +519,7 @@ final class SettingsStore: ObservableObject {
             showCursorAgentInMenuBar,
             xaiTeamID,
             didMigrateActiveAccountMenuBarDefault,
+            didMigrateProviderSummaryMenuBarDefault,
             useDarkAppearance,
             useTranslucentAppearance,
             accountSortMode,

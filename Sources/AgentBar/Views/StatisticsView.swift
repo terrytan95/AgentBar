@@ -1023,9 +1023,22 @@ struct StatisticsView: View {
                 ) {
                     MenuBarStatusPreview(
                         title: store.menuBarTitle,
-                        enabledServices: store.menuBarEnabledServices
+                        enabledServices: store.menuBarEnabledServices,
+                        showsProviderStatus: settings.showOtherServiceStatusInMenuBar
                     )
                     .accessibilityLabel("\(L.text("menu_bar_preview", store.language)): \(store.menuBarTitle)")
+                }
+                .agentBarPanel()
+
+                SettingsRow(
+                    title: L.text("show_other_service_status", store.language),
+                    subtitle: L.text("show_other_service_status_subtitle", store.language),
+                    showsDivider: false
+                ) {
+                    Toggle("", isOn: $settings.showOtherServiceStatusInMenuBar)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .accessibilityLabel(L.text("show_other_service_status", store.language))
                 }
                 .agentBarPanel()
 
@@ -4223,6 +4236,7 @@ private struct SettingsGroup<Content: View>: View {
 private struct MenuBarStatusPreview: View {
     var title: String
     var enabledServices: [UsageService]
+    var showsProviderStatus: Bool
 
     var body: some View {
         HStack(spacing: 7) {
@@ -4236,28 +4250,30 @@ private struct MenuBarStatusPreview: View {
                 .font(.agentBarMono(size: 12, weight: .semibold))
                 .monospacedDigit()
 
-            HStack(spacing: 4) {
-                ForEach(UsageService.allCases) { service in
-                    Image(nsImage: ProviderIcon.image(for: service))
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 10, height: 10)
-                        .opacity(enabledServices.contains(service) ? 0.95 : 0.22)
-                        .accessibilityHidden(true)
+            if showsProviderStatus {
+                HStack(spacing: 4) {
+                    ForEach(UsageService.allCases) { service in
+                        Image(nsImage: ProviderIcon.image(for: service))
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 10, height: 10)
+                            .opacity(enabledServices.contains(service) ? 0.95 : 0.22)
+                            .accessibilityHidden(true)
+                    }
+
+                    Divider()
+                        .frame(height: 11)
+                        .opacity(0.34)
+
+                    Text("\(enabledServices.count)")
+                        .font(.agentBarMono(size: 10, weight: .semibold))
+                        .monospacedDigit()
                 }
-
-                Divider()
-                    .frame(height: 11)
-                    .opacity(0.34)
-
-                Text("\(enabledServices.count)")
-                    .font(.agentBarMono(size: 10, weight: .semibold))
-                    .monospacedDigit()
+                .padding(.horizontal, 7)
+                .frame(height: 20)
+                .background(Color.primary.opacity(0.07), in: Capsule())
             }
-            .padding(.horizontal, 7)
-            .frame(height: 20)
-            .background(Color.primary.opacity(0.07), in: Capsule())
         }
         .padding(.horizontal, 10)
         .frame(minHeight: 32)

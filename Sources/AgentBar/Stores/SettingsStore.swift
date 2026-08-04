@@ -86,6 +86,10 @@ final class SettingsStore: ObservableObject {
         didSet { persist(menuBarDisplayMode.rawValue, forKey: Keys.menuBarDisplayMode) }
     }
 
+    @Published var showOtherServiceStatusInMenuBar: Bool {
+        didSet { persist(showOtherServiceStatusInMenuBar, forKey: Keys.showOtherServiceStatusInMenuBar) }
+    }
+
     @Published var showCodexInMenuBar: Bool {
         didSet { persist(showCodexInMenuBar, forKey: Keys.showCodexInMenuBar) }
     }
@@ -295,6 +299,7 @@ final class SettingsStore: ObservableObject {
             defaults.set(true, forKey: Keys.didMigrateProviderSummaryMenuBarDefault)
         }
         menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .lowestRemaining
+        showOtherServiceStatusInMenuBar = defaults.object(forKey: Keys.showOtherServiceStatusInMenuBar) as? Bool ?? true
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showCodexSidebarQuotaOverlay = defaults.object(forKey: Keys.showCodexSidebarQuotaOverlay) as? Bool ?? false
         codexSidebarQuotaOverlayIndependent = defaults.object(forKey: Keys.codexSidebarQuotaOverlayIndependent) as? Bool ?? false
@@ -472,6 +477,7 @@ final class SettingsStore: ObservableObject {
         static let quotaCapacityHistoryInterval = "quotaCapacityHistoryInterval"
         static let launchAtLogin = "launchAtLogin"
         static let menuBarDisplayMode = "menuBarDisplayMode"
+        static let showOtherServiceStatusInMenuBar = "showOtherServiceStatusInMenuBar"
         static let showCodexInMenuBar = "showCodexInMenuBar"
         static let showCodexSidebarQuotaOverlay = "showCodexSidebarQuotaOverlay"
         static let codexSidebarQuotaOverlayIndependent = "codexSidebarQuotaOverlayIndependent"
@@ -509,6 +515,7 @@ final class SettingsStore: ObservableObject {
             quotaCapacityHistoryInterval,
             launchAtLogin,
             menuBarDisplayMode,
+            showOtherServiceStatusInMenuBar,
             showCodexInMenuBar,
             showCodexSidebarQuotaOverlay,
             codexSidebarQuotaOverlayIndependent,

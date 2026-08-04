@@ -43,33 +43,38 @@ final class StatusItemController: NSObject {
     }
 
     private func updateButton() {
-        guard let button = item?.button, let store else { return }
+        guard let button = item?.button, let settings, let store else { return }
         let menuBarImage = AppLogo.menuBarImage()
         let image = menuBarImage.copy() as? NSImage ?? menuBarImage
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = true
         button.image = image
         let title = store.menuBarTitle
+        let showsProviderStatus = settings.showOtherServiceStatusInMenuBar
         let enabledServices = Set(store.menuBarEnabledServices)
         let highlighted = popover?.isShown == true
         let foregroundColor = highlighted ? NSColor.white : NSColor.labelColor
         let attributedTitle = NSMutableAttributedString(
-            string: " \(title)  ",
+            string: showsProviderStatus ? " \(title)  " : " \(title)",
             attributes: [
                 .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold),
                 .foregroundColor: foregroundColor
             ]
         )
-        let attachment = NSTextAttachment()
-        attachment.image = Self.providerBadgeImage(
-            enabledServices: enabledServices,
-            highlighted: highlighted
-        )
-        attachment.bounds = NSRect(x: 0, y: -4, width: 74, height: 18)
-        attributedTitle.append(NSAttributedString(attachment: attachment))
+        if showsProviderStatus {
+            let attachment = NSTextAttachment()
+            attachment.image = Self.providerBadgeImage(
+                enabledServices: enabledServices,
+                highlighted: highlighted
+            )
+            attachment.bounds = NSRect(x: 0, y: -4, width: 74, height: 18)
+            attributedTitle.append(NSAttributedString(attachment: attachment))
+        }
         button.attributedTitle = attributedTitle
         button.imagePosition = .imageLeading
-        let providerNames = store.menuBarEnabledServices.map(\.rawValue).joined(separator: " · ")
+        let providerNames = showsProviderStatus
+            ? store.menuBarEnabledServices.map(\.rawValue).joined(separator: " · ")
+            : ""
         button.toolTip = providerNames.isEmpty
             ? "AgentBar \(title)"
             : "AgentBar \(title)\n\(providerNames)"

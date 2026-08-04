@@ -1021,12 +1021,11 @@ struct StatisticsView: View {
                     subtitle: L.text("menu_bar_preview_subtitle", store.language),
                     showsDivider: false
                 ) {
-                    Label(store.menuBarTitle, systemImage: "menubar.rectangle")
-                        .font(.agentBarMono(size: 12, weight: .semibold))
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 30)
-                        .background(.thinMaterial, in: Capsule())
-                        .accessibilityLabel("\(L.text("menu_bar_preview", store.language)): \(store.menuBarTitle)")
+                    MenuBarStatusPreview(
+                        title: store.menuBarTitle,
+                        enabledServices: store.menuBarEnabledServices
+                    )
+                    .accessibilityLabel("\(L.text("menu_bar_preview", store.language)): \(store.menuBarTitle)")
                 }
                 .agentBarPanel()
 
@@ -4221,6 +4220,51 @@ private struct SettingsGroup<Content: View>: View {
     }
 }
 
+private struct MenuBarStatusPreview: View {
+    var title: String
+    var enabledServices: [UsageService]
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(nsImage: AppLogo.menuBarImage())
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 16, height: 16)
+
+            Text(title)
+                .font(.agentBarMono(size: 12, weight: .semibold))
+                .monospacedDigit()
+
+            HStack(spacing: 4) {
+                ForEach(UsageService.allCases) { service in
+                    Image(nsImage: ProviderIcon.image(for: service))
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 10, height: 10)
+                        .opacity(enabledServices.contains(service) ? 0.95 : 0.22)
+                        .accessibilityHidden(true)
+                }
+
+                Divider()
+                    .frame(height: 11)
+                    .opacity(0.34)
+
+                Text("\(enabledServices.count)")
+                    .font(.agentBarMono(size: 10, weight: .semibold))
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(Color.primary.opacity(0.07), in: Capsule())
+        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: 32)
+        .background(.thinMaterial, in: Capsule())
+    }
+}
+
 private struct MenuBarProviderToggleCard: View {
     var service: UsageService
     var hasData: Bool
@@ -4339,25 +4383,6 @@ private struct ProviderSettingsCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
         .agentBarPanel()
-    }
-}
-
-private enum ProviderIcon {
-    static func image(for service: UsageService) -> NSImage {
-        let resourceName = switch service {
-        case .codex: "codex"
-        case .claudeCode: "claude-code"
-        case .xaiAPI: "grok"
-        case .cursorAgent: "cursor-agent"
-        }
-        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "svg", subdirectory: "ProviderIcons")
-            ?? Bundle.module.url(forResource: resourceName, withExtension: "svg", subdirectory: "ProviderIcons"),
-            let image = NSImage(contentsOf: url)
-        else {
-            return NSImage(systemSymbolName: "terminal", accessibilityDescription: service.rawValue) ?? NSImage()
-        }
-        image.isTemplate = true
-        return image
     }
 }
 

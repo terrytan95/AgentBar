@@ -17,3 +17,22 @@ enum AppLogo {
         return image()
     }
 }
+
+enum ProviderIcon {
+    static func image(for service: UsageService) -> NSImage {
+        let resourceName = switch service {
+        case .codex: "codex"
+        case .claudeCode: "claude-code"
+        case .xaiAPI: "grok"
+        case .cursorAgent: "cursor-agent"
+        }
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "svg", subdirectory: "ProviderIcons")
+            ?? Bundle.module.url(forResource: resourceName, withExtension: "svg", subdirectory: "ProviderIcons"),
+            let image = NSImage(contentsOf: url)
+        else {
+            return NSImage(systemSymbolName: "terminal", accessibilityDescription: service.rawValue) ?? NSImage()
+        }
+        image.isTemplate = true
+        return image
+    }
+}

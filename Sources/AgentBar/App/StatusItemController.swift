@@ -50,9 +50,35 @@ final class StatusItemController: NSObject {
         image.isTemplate = true
         button.image = image
         let title = store.menuBarTitle
-        button.title = " \(title)"
+        let enabledServices = Set(store.menuBarEnabledServices)
+        let highlighted = popover?.isShown == true
+        let foregroundColor = highlighted ? NSColor.white : NSColor.labelColor
+        let attributedTitle = NSMutableAttributedString(
+            string: " \(title)  ",
+            attributes: [
+                .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold),
+                .foregroundColor: foregroundColor
+            ]
+        )
+        let attachment = NSTextAttachment()
+        attachment.image = Self.providerBadgeImage(
+            enabledServices: enabledServices,
+            highlighted: highlighted
+        )
+        attachment.bounds = NSRect(x: 0, y: -4, width: 74, height: 18)
+        attributedTitle.append(NSAttributedString(attachment: attachment))
+        button.attributedTitle = attributedTitle
         button.imagePosition = .imageLeading
-        button.toolTip = "AgentBar \(title)"
+        let providerNames = store.menuBarEnabledServices.map(\.rawValue).joined(separator: " · ")
+        button.toolTip = providerNames.isEmpty
+            ? "AgentBar \(title)"
+            : "AgentBar \(title)\n\(providerNames)"
+        button.setAccessibilityLabel("AgentBar")
+        button.setAccessibilityValue(
+            providerNames.isEmpty
+                ? title
+                : "\(title), \(store.menuBarEnabledServices.count) providers: \(providerNames)"
+        )
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -105,6 +131,7 @@ final class StatusItemController: NSObject {
         self.popover = popover
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         sender.highlight(true)
+        updateButton()
 
         Self.applyPopoverAppearance(appearance, to: hostingController.view)
         if settings.useTranslucentAppearance {
@@ -165,6 +192,56 @@ final class StatusItemController: NSObject {
         popover?.performClose(sender)
         item?.button?.highlight(false)
         popover = nil
+        updateButton()
+    }
+
+    private static func providerBadgeImage(
+        enabledServices: Set<UsageService>,
+        highlighted: Bool
+    ) -> NSImage {
+        let size = NSSize(width: 74, height: 18)
+        return NSImage(size: size, flipped: false) { rect in
+            let foreground = highlighted ? NSColor.white : NSColor.labelColor
+            foreground.withAlphaComponent(highlighted ? 0.16 : 0.08).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+
+            var x: CGFloat = 5
+            for service in UsageService.allCases {
+                let iconRect = NSRect(x: x, y: 4, width: 10, height: 10)
+                let iconColor = foreground.withAlphaComponent(enabledServices.contains(service) ? 0.95 : 0.22)
+                tintedProviderImage(for: service, color: iconColor, size: iconRect.size)
+                    .draw(in: iconRect)
+                x += 13
+            }
+
+            foreground.withAlphaComponent(0.28).setFill()
+            NSRect(x: 56, y: 4, width: 1, height: 10).fill()
+
+            let count = NSAttributedString(
+                string: "\(enabledServices.count)",
+                attributes: [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
+                    .foregroundColor: foreground.withAlphaComponent(0.95)
+                ]
+            )
+            let countSize = count.size()
+            count.draw(at: NSPoint(x: 62, y: (rect.height - countSize.height) / 2))
+            return true
+        }
+    }
+
+    private static func tintedProviderImage(
+        for service: UsageService,
+        color: NSColor,
+        size: NSSize
+    ) -> NSImage {
+        let source = ProviderIcon.image(for: service)
+        return NSImage(size: size, flipped: false) { rect in
+            source.draw(in: rect)
+            color.setFill()
+            rect.fill(using: .sourceIn)
+            return true
+        }
     }
 }
 
@@ -172,5 +249,6 @@ extension StatusItemController: NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
         item?.button?.highlight(false)
         popover = nil
+        updateButton()
     }
 }

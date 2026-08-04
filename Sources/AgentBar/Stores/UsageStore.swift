@@ -294,7 +294,7 @@ final class UsageStore: ObservableObject {
         case .activeAccountWindows:
             activeAccountWindowTitle
         case .lowestRemaining:
-            DisplayFormatters.percentString(lowestRemaining)
+            mostConstrainedMenuBarQuotaTitle
         case .totalTokens:
             DisplayFormatters.tokenString(menuBarSummary.totalTokens)
         case .codexRemaining:
@@ -336,11 +336,15 @@ final class UsageStore: ObservableObject {
     }
 
     var lowestRemaining: Double? {
-        menuBarAccounts.compactMap(\.mostConstrainedRemainingPercent).min()
+        mostConstrainedMenuBarQuota?.remainingPercent
     }
 
     var codexRemaining: Double? {
         menuBarAccounts.filter { $0.service == .codex }.compactMap(\.mostConstrainedRemainingPercent).min()
+    }
+
+    var menuBarEnabledServices: [UsageService] {
+        UsageService.allCases.filter(showsInMenuBar)
     }
 
     private var menuBarAccounts: [UsageAccount] {
@@ -366,6 +370,48 @@ final class UsageStore: ObservableObject {
         case .claudeCode: settings.showClaudeInMenuBar
         case .xaiAPI: settings.showGrokInMenuBar
         case .cursorAgent: settings.showCursorAgentInMenuBar
+        }
+    }
+
+    private var mostConstrainedMenuBarQuotaTitle: String {
+        guard let quota = mostConstrainedMenuBarQuota else {
+            return DisplayFormatters.percentString(nil)
+        }
+        return "\(quota.label) \(DisplayFormatters.percentString(quota.remainingPercent))"
+    }
+
+    private var mostConstrainedMenuBarQuota: (label: String, remainingPercent: Double)? {
+        menuBarAccounts
+            .flatMap(menuBarQuotaCandidates)
+            .min { lhs, rhs in
+                if lhs.remainingPercent != rhs.remainingPercent {
+                    return lhs.remainingPercent < rhs.remainingPercent
+                }
+                return lhs.label < rhs.label
+            }
+    }
+
+    private func menuBarQuotaCandidates(for account: UsageAccount) -> [(label: String, remainingPercent: Double)] {
+        switch account.service {
+        case .codex:
+            return [
+                account.fiveHourWindow.map { ("5H", $0.remainingPercent) },
+                account.weeklyWindow.map { ("WK", $0.remainingPercent) }
+            ].compactMap { $0 }
+        case .claudeCode:
+            return []
+        case .xaiAPI:
+            guard let usage = account.grokSubscriptionUsage,
+                  let used = usage.onDemandUsedUSD,
+                  let cap = usage.onDemandCapUSD
+            else { return [] }
+            let usedValue = NSDecimalNumber(decimal: used).doubleValue
+            let capValue = NSDecimalNumber(decimal: cap).doubleValue
+            guard capValue > 0 else { return [] }
+            return [("Grok", 100 - min(max(usedValue / capValue * 100, 0), 100))]
+        case .cursorAgent:
+            guard let usage = account.cursorSubscriptionUsage else { return [] }
+            return [("Cursor", usage.includedRemainingPercent)]
         }
     }
 

@@ -1182,7 +1182,7 @@ struct StatisticsView: View {
                 if settings.showPopoverOverviewSection {
                     PopoverMetricPicker(settings: settings, language: store.language)
                         .padding(.horizontal, settingsControlLeadingInset)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 10)
                 }
             }
 
@@ -4463,14 +4463,57 @@ private struct PopoverMetricPicker: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(L.text("popover_metrics_subtitle", language))
-                .font(.agentBar(size: 11))
-                .foregroundStyle(Color.primary.opacity(0.62))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(L.text("selected_metrics", language))
+                            .font(.agentBar(size: 11, weight: .semibold))
+                        Text("\(settings.popoverMetrics.count)/\(SettingsStore.maximumPopoverMetricCount)")
+                            .font(.agentBar(size: 10, weight: .bold))
+                            .foregroundStyle(AgentBarPalette.primary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                AgentBarPalette.primary.opacity(0.10),
+                                in: Capsule()
+                            )
+                    }
+                    Text(L.text("popover_metrics_subtitle", language))
+                        .font(.agentBar(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.58))
+                        .lineLimit(1)
+                }
 
-            Text(L.text("selected_metrics", language))
-                .font(.agentBar(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+                Spacer()
+
+                Menu {
+                    ForEach(availableMetrics) { metric in
+                        Button {
+                            settings.setPopoverMetric(metric, enabled: true)
+                        } label: {
+                            Label(metric.title(language), systemImage: metric.systemImage)
+                        }
+                    }
+                } label: {
+                    Label(L.text("add_metric", language), systemImage: "plus")
+                        .font(.agentBar(size: 11, weight: .semibold))
+                        .foregroundStyle(AgentBarPalette.primary)
+                        .padding(.horizontal, 9)
+                        .frame(height: 26)
+                        .background(
+                            AgentBarPalette.primary.opacity(0.10),
+                            in: Capsule()
+                        )
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(
+                    availableMetrics.isEmpty
+                        || settings.popoverMetrics.count >= SettingsStore.maximumPopoverMetricCount
+                )
+                .help(L.text("available_metrics", language))
+            }
 
             List {
                 ForEach(settings.popoverMetrics) { metric in
@@ -4495,7 +4538,7 @@ private struct PopoverMetricPicker: View {
                         .disabled(settings.popoverMetrics.count == 1)
                         .accessibilityLabel("\(L.text("remove_metric", language)) \(metric.title(language))")
                     }
-                    .frame(height: 32)
+                    .frame(height: 30)
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -4505,35 +4548,7 @@ private struct PopoverMetricPicker: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .scrollDisabled(true)
-            .frame(height: CGFloat(settings.popoverMetrics.count * 32 + 8))
-
-            if !availableMetrics.isEmpty {
-                Text(L.text("available_metrics", language))
-                    .font(.agentBar(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                ForEach(availableMetrics) { metric in
-                    Button {
-                        settings.setPopoverMetric(metric, enabled: true)
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: metric.systemImage)
-                                .frame(width: 18)
-                            Text(metric.title(language))
-                                .font(.agentBar(size: 12, weight: .semibold))
-                            Spacer()
-                            Image(systemName: "plus.circle.fill")
-                        }
-                        .foregroundStyle(AgentBarPalette.primary)
-                        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(settings.popoverMetrics.count >= SettingsStore.maximumPopoverMetricCount)
-                    .opacity(settings.popoverMetrics.count >= SettingsStore.maximumPopoverMetricCount ? 0.45 : 1)
-                    .accessibilityLabel("\(L.text("add_metric", language)) \(metric.title(language))")
-                }
-            }
+            .frame(height: CGFloat(settings.popoverMetrics.count * 30 + 6))
         }
     }
 }

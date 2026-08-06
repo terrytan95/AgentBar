@@ -173,8 +173,12 @@ struct CodexUsageReader {
                 secondary: raw.lastUsage?.secondary
             )
             let resetCredits = raw.lastUsage?.resetCredits?.toUsageResetCredits()
+            let hasSwitchableInactiveAuth =
+                raw.accountKey != activeAccountKey &&
+                raw.matchesAuthIdentity(savedAuthInfo?.identity)
             let loginWarning: UsageAccountLoginWarning? =
                 raw.hasTokenBackedQuotaWarning ? .quotaUnavailable :
+                !hasSwitchableInactiveAuth &&
                 raw.hasForcedLogoutWarning(authSnapshotInfo: savedAuthInfo, activeAuthInfo: activeAuthInfo) ? .forcedLogout :
                 raw.lastUsage?.hasUnreadableResetWarning == true ? .unreadableReset :
                 nil

@@ -292,13 +292,13 @@ final class SettingsStore: ObservableObject {
             defaults.set(MenuBarDisplayMode.activeAccountWindows.rawValue, forKey: Keys.menuBarDisplayMode)
             defaults.set(true, forKey: Keys.didMigrateActiveAccountMenuBarDefault)
         }
-        if !defaults.bool(forKey: Keys.didMigrateProviderSummaryMenuBarDefault) {
-            if defaults.string(forKey: Keys.menuBarDisplayMode) == MenuBarDisplayMode.activeAccountWindows.rawValue {
-                defaults.set(MenuBarDisplayMode.lowestRemaining.rawValue, forKey: Keys.menuBarDisplayMode)
+        if !defaults.bool(forKey: Keys.didRestoreActiveAccountMenuBarDefault) {
+            if defaults.string(forKey: Keys.menuBarDisplayMode) == MenuBarDisplayMode.lowestRemaining.rawValue {
+                defaults.set(MenuBarDisplayMode.activeAccountWindows.rawValue, forKey: Keys.menuBarDisplayMode)
             }
-            defaults.set(true, forKey: Keys.didMigrateProviderSummaryMenuBarDefault)
+            defaults.set(true, forKey: Keys.didRestoreActiveAccountMenuBarDefault)
         }
-        menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .lowestRemaining
+        menuBarDisplayMode = MenuBarDisplayMode(rawValue: defaults.string(forKey: Keys.menuBarDisplayMode) ?? "") ?? .activeAccountWindows
         showOtherServiceStatusInMenuBar = defaults.object(forKey: Keys.showOtherServiceStatusInMenuBar) as? Bool ?? true
         showCodexInMenuBar = defaults.object(forKey: Keys.showCodexInMenuBar) as? Bool ?? true
         showCodexSidebarQuotaOverlay = defaults.object(forKey: Keys.showCodexSidebarQuotaOverlay) as? Bool ?? false
@@ -488,7 +488,7 @@ final class SettingsStore: ObservableObject {
         static let showCursorAgentInMenuBar = "showCursorAgentInMenuBar"
         static let xaiTeamID = "xaiTeamID"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
-        static let didMigrateProviderSummaryMenuBarDefault = "didMigrateProviderSummaryMenuBarDefault"
+        static let didRestoreActiveAccountMenuBarDefault = "didRestoreActiveAccountMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"
         static let useTranslucentAppearance = "useTranslucentAppearance"
         static let accountSortMode = "accountSortMode"
@@ -526,7 +526,7 @@ final class SettingsStore: ObservableObject {
             showCursorAgentInMenuBar,
             xaiTeamID,
             didMigrateActiveAccountMenuBarDefault,
-            didMigrateProviderSummaryMenuBarDefault,
+            didRestoreActiveAccountMenuBarDefault,
             useDarkAppearance,
             useTranslucentAppearance,
             accountSortMode,

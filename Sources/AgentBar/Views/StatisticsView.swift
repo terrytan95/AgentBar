@@ -691,36 +691,49 @@ struct StatisticsView: View {
                 )
             }
 
-            GeometryReader { proxy in
-                LazyVGrid(columns: kpiColumns(for: proxy.size.width), spacing: 14) {
-                    DashboardKPI(
-                        title: L.text("total_tokens", store.language),
-                        value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language),
-                        delta: DisplayFormatters.changePercentString(periodChange.tokenPercent),
-                        subtitle: L.text("compared_to_yesterday", store.language),
-                        systemImage: "cylinder.split.1x2.fill",
-                        accent: AgentBarPalette.primary,
-                    )
-                    DashboardKPI(
-                        title: L.text("total_cost", store.language),
-                        value: costText(summary.estimatedCostUSD),
-                        delta: DisplayFormatters.changePercentString(periodChange.costPercent),
-                        subtitle: L.text("compared_to_yesterday", store.language),
-                        systemImage: "dollarsign",
-                        accent: .green,
-                    )
-                    DashboardKPI(
-                        title: L.text(serviceOverviewTitleKey(overviewService), store.language),
-                        value: serviceCostText(overviewService),
-                        delta: serviceShareText(overviewService),
-                        subtitle: L.text("share_of_total_cost", store.language),
-                        systemImage: "sparkles",
-                        marker: serviceColor(overviewService),
-                        accent: serviceColor(overviewService),
-                    )
-                }
+            HStack(alignment: .top, spacing: 0) {
+                DashboardKPI(
+                    title: L.text("total_tokens", store.language),
+                    value: DisplayFormatters.compactTokenString(summary.totalTokens, language: store.language),
+                    delta: DisplayFormatters.changePercentString(periodChange.tokenPercent),
+                    subtitle: L.text("compared_to_yesterday", store.language),
+                    systemImage: "cylinder.split.1x2.fill",
+                    accent: AgentBarPalette.primary
+                )
+                .frame(maxWidth: .infinity)
+
+                Divider()
+                    .padding(.vertical, 22)
+
+                DashboardKPI(
+                    title: L.text("total_cost", store.language),
+                    value: costText(summary.estimatedCostUSD),
+                    delta: DisplayFormatters.changePercentString(periodChange.costPercent),
+                    subtitle: L.text("compared_to_yesterday", store.language),
+                    systemImage: "dollarsign",
+                    accent: .green
+                )
+                .frame(maxWidth: .infinity)
+
+                Divider()
+                    .padding(.vertical, 22)
+
+                ServiceQuotaOverview(
+                    summaries: serviceQuotaSummaries,
+                    language: store.language
+                )
+                .frame(minWidth: 330)
             }
-            .frame(height: 128)
+            .frame(height: 164)
+            .background(
+                LinearGradient(
+                    colors: [AgentBarDesign.panelHighlight, AgentBarPalette.primary.opacity(0.04)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .agentBarPanel(cornerRadius: 16)
 
             if settings.showQuotaPressureSection {
                 QuotaPressurePanel(pressure: quotaPressure, language: store.language)
@@ -1483,17 +1496,20 @@ struct StatisticsView: View {
         }
     }
 
-    private var overviewService: UsageService {
-        if !codexAccounts.isEmpty { return .codex }
-        if hasClaudeData { return .claudeCode }
-        if hasXAIData { return .xaiAPI }
-        if hasCursorData { return .cursorAgent }
-        return .codex
-    }
-
-    private func kpiColumns(for width: CGFloat) -> [GridItem] {
-        let count = width < 760 ? 2 : 3
-        return Array(repeating: GridItem(.flexible(), spacing: 12), count: count)
+    private var serviceQuotaSummaries: [ServiceQuotaSummary] {
+        UsageService.allCases.compactMap { service in
+            let loggedInAccounts = store.accounts.filter {
+                $0.service == service && $0.status == .live && !$0.needsLogin
+            }
+            let remaining = loggedInAccounts.compactMap(\.mostConstrainedRemainingPercent)
+            guard !remaining.isEmpty else { return nil }
+            return ServiceQuotaSummary(
+                service: service,
+                accountCount: loggedInAccounts.count,
+                remainingPercent: remaining.reduce(0, +) / Double(remaining.count),
+                color: serviceColor(service)
+            )
+        }
     }
 
     private var displayBars: [DailyUsageBar] {
@@ -1511,23 +1527,6 @@ struct StatisticsView: View {
 
     private var yearActivityBars: [DailyUsageBar] {
         store.yearActivityBars
-    }
-
-    private func serviceCostText(_ service: UsageService) -> String {
-        let costs = selectedRangePoints.filter { $0.service == service }.compactMap(\.estimatedCostUSD)
-        guard !costs.isEmpty else { return L.text("no_cost_data", store.language) }
-        return DisplayFormatters.costString(costs.reduce(Decimal(0), +))
-    }
-
-    private func serviceShareText(_ service: UsageService) -> String {
-        let total = selectedRangePoints.compactMap(\.estimatedCostUSD).reduce(Decimal(0), +)
-        guard total > 0 else { return "0% \(L.text("share", store.language))" }
-        let serviceCost = selectedRangePoints
-            .filter { $0.service == service }
-            .compactMap(\.estimatedCostUSD)
-            .reduce(Decimal(0), +)
-        let share = NSDecimalNumber(decimal: serviceCost / total).doubleValue * 100
-        return "\(Int(share.rounded()))% \(L.text("share", store.language))"
     }
 
     private func costText(_ value: Decimal?) -> String {
@@ -1845,21 +1844,12 @@ struct StatisticsView: View {
         }
     }
 
-    private func serviceOverviewTitleKey(_ service: UsageService) -> String {
-        switch service {
-        case .codex: "openai_overview"
-        case .claudeCode: "anthropic_overview"
-        case .xaiAPI: "xai_overview"
-        case .cursorAgent: "cursor_overview"
-        }
-    }
-
     private func serviceColor(_ service: UsageService) -> Color {
         switch service {
         case .codex: AgentBarPalette.tertiary
         case .claudeCode: AgentBarPalette.secondary
         case .xaiAPI: .purple
-        case .cursorAgent: .blue
+        case .cursorAgent: AgentBarPalette.primary
         }
     }
 
@@ -1875,7 +1865,7 @@ struct StatisticsView: View {
         guard let remaining else { return AgentBarPalette.tertiary }
         if remaining < 15 { return .red }
         if remaining < 35 { return .yellow }
-        return .blue
+        return AgentBarPalette.primary
     }
 }
 
@@ -1913,7 +1903,7 @@ private struct ResetSpendAdvice {
             return ResetSpendAdvice(title: localized("no_reset_cushion", language), message: localized("no_reset_cushion_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "exclamationmark.triangle.fill", color: .secondary)
         }
         if let fiveHour, let fiveReset = fiveHour.resetsAt?.timeIntervalSince(now), fiveHour.remainingPercent <= 12, weeklyRemaining >= 25, fiveReset <= 90 * 60 {
-            return ResetSpendAdvice(title: localized("let_5h_refill", language), message: localized("let_5h_refill_message", language), detail: fiveHourResetDetail(fiveHour.resetsAt ?? now, language), systemImage: "hourglass", color: .blue)
+            return ResetSpendAdvice(title: localized("let_5h_refill", language), message: localized("let_5h_refill_message", language), detail: fiveHourResetDetail(fiveHour.resetsAt ?? now, language), systemImage: "hourglass", color: AgentBarPalette.primary)
         }
         if let fiveHour, fiveHour.remainingPercent <= 12, weeklyRemaining >= 50 {
             return ResetSpendAdvice(title: localized("deadline_call", language), message: localized("deadline_call_message", language), detail: localized("five_hour_nearly_empty", language), systemImage: "bolt.badge.clock", color: .orange)
@@ -1925,9 +1915,9 @@ private struct ResetSpendAdvice {
             return ResetSpendAdvice(title: localized("green_light_with_brakes", language), message: localized("green_light_with_brakes_message", language), detail: weeklyResetDetail(weekly.resetsAt ?? now, language), systemImage: "bolt.badge.clock", color: .orange)
         }
         if let weeklyReset, weeklyRemaining >= 35, weeklyReset <= 3 * 86_400 {
-            return ResetSpendAdvice(title: localized("hold_that_reset", language), message: localized("hold_that_reset_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "shield.fill", color: .blue)
+            return ResetSpendAdvice(title: localized("hold_that_reset", language), message: localized("hold_that_reset_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "shield.fill", color: AgentBarPalette.primary)
         }
-        return ResetSpendAdvice(title: localized("cruise_mode", language), message: localized("cruise_mode_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "gauge.with.dots.needle.50percent", color: .cyan)
+        return ResetSpendAdvice(title: localized("cruise_mode", language), message: localized("cruise_mode_message", language), detail: weeklyLeftDetail(weeklyRemaining, language), systemImage: "gauge.with.dots.needle.50percent", color: AgentBarPalette.secondary)
     }
 
     private static func weeklyLeftDetail(_ remaining: Double, _ language: AppLanguage) -> String {
@@ -1999,7 +1989,6 @@ private struct DashboardKPI: View {
     var delta: String
     var subtitle: String
     var systemImage: String
-    var marker: Color? = nil
     var accent: Color
 
     var body: some View {
@@ -2016,11 +2005,6 @@ private struct DashboardKPI: View {
                         .foregroundStyle(accent)
                         .frame(width: 22, height: 22)
                         .background(accent.opacity(0.12), in: Circle())
-                    if let marker {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(marker)
-                            .frame(width: 7, height: 7)
-                    }
                     Text(title)
                         .font(.agentBar(size: 13, weight: .bold))
                         .foregroundStyle(.primary)
@@ -2047,12 +2031,79 @@ private struct DashboardKPI: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
-        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-        .background(
-            LinearGradient(colors: [AgentBarDesign.panelHighlight, accent.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .agentBarPanel(cornerRadius: 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+}
+
+private struct ServiceQuotaOverview: View {
+    var summaries: [ServiceQuotaSummary]
+    var language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label(
+                    language == .chinese ? "各服务额度剩余" : "Remaining quota by service",
+                    systemImage: "gauge.with.dots.needle.50percent"
+                )
+                .font(.agentBar(size: 13, weight: .bold))
+
+                Spacer(minLength: 8)
+
+                Text(language == .chinese ? "仅统计已登录账号" : "Logged-in accounts only")
+                    .font(.agentBar(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            if summaries.isEmpty {
+                Text(language == .chinese ? "暂无已登录账户额度数据" : "No logged-in quota data")
+                    .font(.agentBar(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else {
+                VStack(spacing: 7) {
+                    ForEach(summaries) { summary in
+                        VStack(spacing: 3) {
+                            HStack(spacing: 7) {
+                                Text(serviceName(summary.service))
+                                    .font(.agentBar(size: 11, weight: .bold))
+                                Text(accountCount(summary.accountCount))
+                                    .font(.agentBar(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text(remainingText(summary.remainingPercent))
+                                    .font(.agentBarMono(size: 11, weight: .bold))
+                                    .monospacedDigit()
+                            }
+                            ProgressView(value: summary.remainingPercent, total: 100)
+                                .tint(summary.color)
+                                .controlSize(.small)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func serviceName(_ service: UsageService) -> String {
+        switch service {
+        case .codex: "OpenAI"
+        case .claudeCode: "Claude Code"
+        case .xaiAPI: "Grok"
+        case .cursorAgent: "Cursor"
+        }
+    }
+
+    private func accountCount(_ count: Int) -> String {
+        language == .chinese ? "\(count) 已登录" : "\(count) signed in"
+    }
+
+    private func remainingText(_ remaining: Double) -> String {
+        let value = Int(min(100, max(0, remaining)).rounded())
+        return language == .chinese ? "约 \(value)%" : "~\(value)%"
     }
 }
 
@@ -2464,7 +2515,7 @@ private struct YearActivityPanel: View {
                     value: DisplayFormatters.compactTokenString(averageActiveDayTokens, language: language),
                     title: language == .chinese ? "日均 Tokens" : "daily average"
                 )
-                statistic(value: "\(activeDaysCount)", title: language == .chinese ? "活跃天数" : "active days", color: githubAccent)
+                statistic(value: "\(activeDaysCount)", title: language == .chinese ? "活跃天数" : "active days", color: AgentBarPalette.primary)
                 statistic(
                     value: DisplayFormatters.compactTokenString(peakDayTokens, language: language),
                     detail: peakDayDateText,
@@ -2553,10 +2604,6 @@ private struct YearActivityPanel: View {
         return dayText(peakDayBar.day)
     }
 
-    private var githubAccent: Color {
-        Color(red: 0.25, green: 0.77, blue: 0.39)
-    }
-
     private var emptyCellColor: Color {
         colorScheme == .dark ? Color(red: 0.09, green: 0.11, blue: 0.14) : Color(red: 0.92, green: 0.93, blue: 0.94)
     }
@@ -2571,17 +2618,17 @@ private struct YearActivityPanel: View {
     }
 
     private func darkContributionColor(for ratio: Double) -> Color {
-        if ratio >= 0.78 { return Color(red: 0.22, green: 0.83, blue: 0.33) }
-        if ratio >= 0.56 { return Color(red: 0.15, green: 0.65, blue: 0.25) }
-        if ratio >= 0.32 { return Color(red: 0.00, green: 0.43, blue: 0.20) }
-        return Color(red: 0.05, green: 0.27, blue: 0.16)
+        if ratio >= 0.78 { return Color(red: 0.42, green: 0.66, blue: 0.88) }
+        if ratio >= 0.56 { return Color(red: 0.34, green: 0.56, blue: 0.76) }
+        if ratio >= 0.32 { return Color(red: 0.27, green: 0.44, blue: 0.62) }
+        return Color(red: 0.20, green: 0.33, blue: 0.46)
     }
 
     private func lightContributionColor(for ratio: Double) -> Color {
-        if ratio >= 0.75 { return Color(red: 0.13, green: 0.43, blue: 0.22) }
-        if ratio >= 0.50 { return Color(red: 0.19, green: 0.63, blue: 0.31) }
-        if ratio >= 0.25 { return Color(red: 0.25, green: 0.77, blue: 0.39) }
-        return Color(red: 0.61, green: 0.91, blue: 0.66)
+        if ratio >= 0.75 { return Color(red: 0.26, green: 0.43, blue: 0.59) }
+        if ratio >= 0.50 { return Color(red: 0.33, green: 0.50, blue: 0.66) }
+        if ratio >= 0.25 { return Color(red: 0.39, green: 0.57, blue: 0.66) }
+        return Color(red: 0.68, green: 0.77, blue: 0.85)
     }
 
     private var activityCells: [YearActivityCell] {
@@ -4689,6 +4736,14 @@ private struct ServiceMixRow {
     var subtitle: String
     var tokens: Int
     var share: Double
+    var color: Color
+}
+
+private struct ServiceQuotaSummary: Identifiable {
+    var id: UsageService { service }
+    var service: UsageService
+    var accountCount: Int
+    var remainingPercent: Double
     var color: Color
 }
 

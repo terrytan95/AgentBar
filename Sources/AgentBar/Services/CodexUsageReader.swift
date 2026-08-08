@@ -167,7 +167,10 @@ struct CodexUsageReader {
             let hasUsableExternalAccessToken =
                 raw.externalAuthSource == CLIProxyCodexRegistryMetadata.sourceValue &&
                 (externalAccessTokenExpiresAt.map { $0 > now } ?? true)
-            let accessTokenExpiresAt = nativeAccessTokenExpiresAt.map { $0 <= now } == true && hasUsableExternalAccessToken
+            let usesExternalAccessToken =
+                hasUsableExternalAccessToken &&
+                (nativeAccessTokenExpiresAt.map { $0 <= now } ?? true)
+            let accessTokenExpiresAt = usesExternalAccessToken
                 ? externalAccessTokenExpiresAt
                 : nativeAccessTokenExpiresAt ?? externalAccessTokenExpiresAt
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
@@ -215,6 +218,7 @@ struct CodexUsageReader {
                 workspaceID: workspaceID,
                 workspaces: workspaces,
                 accessTokenExpiresAt: accessTokenExpiresAt,
+                accessTokenSource: usesExternalAccessToken ? "CLIProxyAPI" : nil,
                 canSwitchAccount: raw.externalAuthOnly ? false : nil,
                 canRemoveAccount: raw.externalAuthOnly ? false : nil
             )

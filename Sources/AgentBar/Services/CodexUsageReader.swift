@@ -162,7 +162,14 @@ struct CodexUsageReader {
             let activeAccessTokenExpiresAt = raw.accountKey == activeAccountKey && raw.matchesAuthIdentity(activeAuthInfo?.identity)
                 ? activeAuthInfo?.accessTokenExpiresAt
                 : nil
-            let accessTokenExpiresAt = activeAccessTokenExpiresAt ?? savedAuthInfo?.accessTokenExpiresAt
+            let nativeAccessTokenExpiresAt = activeAccessTokenExpiresAt ?? savedAuthInfo?.accessTokenExpiresAt
+            let externalAccessTokenExpiresAt = epochDate(raw.externalAccessTokenExpiresAt)
+            let hasUsableExternalAccessToken =
+                raw.externalAuthSource == CLIProxyCodexRegistryMetadata.sourceValue &&
+                (externalAccessTokenExpiresAt.map { $0 > now } ?? true)
+            let accessTokenExpiresAt = nativeAccessTokenExpiresAt.map { $0 <= now } == true && hasUsableExternalAccessToken
+                ? externalAccessTokenExpiresAt
+                : nativeAccessTokenExpiresAt ?? externalAccessTokenExpiresAt
             let username = firstNonEmptyOptional([raw.email, raw.accountName, raw.alias])
             let displayName = username ?? "Codex Account"
             let workspaces = raw.usageWorkspaces.resolvingNames(with: workspaceNamesByID)
@@ -207,7 +214,7 @@ struct CodexUsageReader {
                 workspaceName: workspaceName,
                 workspaceID: workspaceID,
                 workspaces: workspaces,
-                accessTokenExpiresAt: accessTokenExpiresAt ?? epochDate(raw.externalAccessTokenExpiresAt),
+                accessTokenExpiresAt: accessTokenExpiresAt,
                 canSwitchAccount: raw.externalAuthOnly ? false : nil,
                 canRemoveAccount: raw.externalAuthOnly ? false : nil
             )

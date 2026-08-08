@@ -1,6 +1,6 @@
 import Foundation
 
-struct CodexAuthIdentity: Equatable {
+struct CodexAuthIdentity: Equatable, Sendable {
     var accountID: String?
     var email: String?
 
@@ -41,6 +41,11 @@ struct CodexAuthIdentity: Equatable {
         let value = accountKey[delimiter.upperBound...]
         return value.isEmpty ? nil : String(value)
     }
+}
+
+struct CodexUsageAuthInfo: Sendable {
+    var accessToken: String
+    var accountID: String
 }
 
 struct CodexAccountStorage {
@@ -128,6 +133,32 @@ struct CodexAccountStorage {
         ])
         guard accountID != nil || email != nil else { return nil }
         return CodexAuthIdentity(accountID: accountID, email: email)
+    }
+
+    static func usageAuthInfo(from authData: Data) -> CodexUsageAuthInfo? {
+        guard let root = try? JSONSerialization.jsonObject(with: authData) as? [String: Any] else {
+            return nil
+        }
+        if firstNonEmptyString([root["OPENAI_API_KEY"]]) != nil {
+            return nil
+        }
+        if let authMode = firstNonEmptyString([root["auth_mode"]]),
+           authMode.localizedCaseInsensitiveCompare("apikey") == .orderedSame {
+            return nil
+        }
+        let tokens = root["tokens"] as? [String: Any]
+        guard let accessToken = firstNonEmptyString([
+            tokens?["access_token"],
+            root["access_token"]
+        ]),
+              let accountID = firstNonEmptyString([
+                  tokens?["account_id"],
+                  root["account_id"]
+              ])
+        else {
+            return nil
+        }
+        return CodexUsageAuthInfo(accessToken: accessToken, accountID: accountID)
     }
 
     static func accessTokenExpiration(from authData: Data) -> Date? {

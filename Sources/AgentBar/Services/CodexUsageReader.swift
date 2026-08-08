@@ -176,7 +176,7 @@ struct CodexUsageReader {
             let hasSwitchableInactiveAuth =
                 raw.accountKey != activeAccountKey &&
                 raw.matchesAuthIdentity(savedAuthInfo?.identity)
-            let loginWarning: UsageAccountLoginWarning? =
+            let loginWarning: UsageAccountLoginWarning? = raw.externalAuthOnly ? nil :
                 raw.hasTokenBackedQuotaWarning ? .quotaUnavailable :
                 !hasSwitchableInactiveAuth &&
                 raw.hasForcedLogoutWarning(authSnapshotInfo: savedAuthInfo, activeAuthInfo: activeAuthInfo) ? .forcedLogout :
@@ -190,7 +190,11 @@ struct CodexUsageReader {
                 username: username,
                 maskedEmail: maskEmail(raw.email),
                 plan: raw.plan ?? raw.lastUsage?.planType,
-                sourceDescription: "Local Codex account registry",
+                sourceDescription: raw.externalAuthOnly
+                    ? "CLIProxyAPI auth · read-only monitoring"
+                    : raw.externalAuthSource == CLIProxyCodexRegistryMetadata.sourceValue
+                        ? "Local Codex account registry · CLIProxyAPI usage"
+                        : "Local Codex account registry",
                 status: .live,
                 fiveHourWindow: quotaWindows.fiveHour,
                 weeklyWindow: quotaWindows.weekly,
@@ -203,16 +207,24 @@ struct CodexUsageReader {
                 workspaceName: workspaceName,
                 workspaceID: workspaceID,
                 workspaces: workspaces,
-                accessTokenExpiresAt: accessTokenExpiresAt
+                accessTokenExpiresAt: accessTokenExpiresAt ?? epochDate(raw.externalAccessTokenExpiresAt),
+                canSwitchAccount: raw.externalAuthOnly ? false : nil,
+                canRemoveAccount: raw.externalAuthOnly ? false : nil
             )
         }
 
+        var securityNotes = ["Parsed account metadata only; credential auth files are excluded."]
+        if registry.cliProxyBroadReadPermissions {
+            securityNotes.append(
+                "CLIProxyAPI auth has broad local read permissions. Restrict its auth directory to 0700 and JSON files to 0600."
+            )
+        }
         let snapshot = UsageSnapshot(
             service: .codex,
             status: accounts.isEmpty ? .unavailable : .live,
             accounts: accounts,
             points: [],
-            securityNotes: ["Parsed account metadata only; credential auth files are excluded."],
+            securityNotes: securityNotes,
             refreshedAt: now,
             pricingFingerprint: Pricing.fingerprint
         )
@@ -607,11 +619,21 @@ private struct CodexRegistry: Decodable {
     var activeAccountKey: String?
     var activeAccountActivatedAtMs: Double?
     var accounts: [CodexRegistryAccount]
+    var cliProxyBroadReadPermissions: Bool
 
     enum CodingKeys: String, CodingKey {
         case activeAccountKey = "active_account_key"
         case activeAccountActivatedAtMs = "active_account_activated_at_ms"
         case accounts
+        case cliProxyBroadReadPermissions = "agentbar_cliproxyapi_broad_read_permissions"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        activeAccountKey = try container.decodeIfPresent(String.self, forKey: .activeAccountKey)
+        activeAccountActivatedAtMs = try container.decodeIfPresent(Double.self, forKey: .activeAccountActivatedAtMs)
+        accounts = try container.decode([CodexRegistryAccount].self, forKey: .accounts)
+        cliProxyBroadReadPermissions = (try? container.decodeIfPresent(Bool.self, forKey: .cliProxyBroadReadPermissions)) ?? false
     }
 }
 
@@ -636,6 +658,9 @@ private struct CodexRegistryAccount: Decodable {
     var lastUsageAt: Double?
     var authError: CodexAuthError?
     var tokenBacked: Bool
+    var externalAuthSource: String?
+    var externalAuthOnly: Bool
+    var externalAccessTokenExpiresAt: Double?
 
     enum CodingKeys: String, CodingKey {
         case accountKey = "account_key"
@@ -658,6 +683,9 @@ private struct CodexRegistryAccount: Decodable {
         case lastUsageAt = "last_usage_at"
         case authError = "agentbar_auth_error"
         case tokenBacked = "agentbar_token_backed"
+        case externalAuthSource = "agentbar_external_auth_source"
+        case externalAuthOnly = "agentbar_external_auth_only"
+        case externalAccessTokenExpiresAt = "agentbar_external_access_token_expires_at"
     }
 
     init(from decoder: Decoder) throws {
@@ -682,6 +710,9 @@ private struct CodexRegistryAccount: Decodable {
         lastUsageAt = try container.decodeIfPresent(Double.self, forKey: .lastUsageAt)
         authError = try container.decodeIfPresent(CodexAuthError.self, forKey: .authError)
         tokenBacked = (try? container.decodeIfPresent(Bool.self, forKey: .tokenBacked)) ?? false
+        externalAuthSource = try container.decodeIfPresent(String.self, forKey: .externalAuthSource)
+        externalAuthOnly = (try? container.decodeIfPresent(Bool.self, forKey: .externalAuthOnly)) ?? false
+        externalAccessTokenExpiresAt = try container.decodeIfPresent(Double.self, forKey: .externalAccessTokenExpiresAt)
     }
 
     var hasTokenBackedQuotaWarning: Bool {

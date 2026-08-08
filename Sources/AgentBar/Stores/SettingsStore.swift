@@ -169,6 +169,14 @@ final class SettingsStore: ObservableObject {
         didSet { persist(autoCodexAccountRotationEnabled, forKey: Keys.autoCodexAccountRotationEnabled) }
     }
 
+    @Published var reuseCLIProxyAPIAuthEnabled: Bool {
+        didSet { persist(reuseCLIProxyAPIAuthEnabled, forKey: Keys.reuseCLIProxyAPIAuthEnabled) }
+    }
+
+    @Published var cliProxyAPIAuthDirectory: String {
+        didSet { persist(cliProxyAPIAuthDirectory, forKey: Keys.cliProxyAPIAuthDirectory) }
+    }
+
     @Published var quotaResetNotificationsEnabled: Bool {
         didSet { persist(quotaResetNotificationsEnabled, forKey: Keys.quotaResetNotificationsEnabled) }
     }
@@ -325,6 +333,8 @@ final class SettingsStore: ObservableObject {
             ?? Self.defaultPopoverMetrics
         popoverMetrics = Self.normalizedPopoverMetrics(savedPopoverMetrics)
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
+        reuseCLIProxyAPIAuthEnabled = defaults.object(forKey: Keys.reuseCLIProxyAPIAuthEnabled) as? Bool ?? false
+        cliProxyAPIAuthDirectory = defaults.string(forKey: Keys.cliProxyAPIAuthDirectory) ?? ""
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
         taskCompletionNotificationsEnabled = defaults.object(forKey: Keys.taskCompletionNotificationsEnabled) as? Bool ?? false
         accessTokenExpiryNotificationsEnabled = defaults.object(forKey: Keys.accessTokenExpiryNotificationsEnabled) as? Bool ?? false
@@ -498,6 +508,8 @@ final class SettingsStore: ObservableObject {
         static let showPopoverOverviewSection = "showPopoverOverviewSection"
         static let popoverMetrics = "popoverMetrics"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
+        static let reuseCLIProxyAPIAuthEnabled = "reuseCLIProxyAPIAuthEnabled"
+        static let cliProxyAPIAuthDirectory = "cliProxyAPIAuthDirectory"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
         static let taskCompletionNotificationsEnabled = "taskCompletionNotificationsEnabled"
         static let accessTokenExpiryNotificationsEnabled = "accessTokenExpiryNotificationsEnabled"
@@ -536,6 +548,8 @@ final class SettingsStore: ObservableObject {
             showPopoverOverviewSection,
             popoverMetrics,
             autoCodexAccountRotationEnabled,
+            reuseCLIProxyAPIAuthEnabled,
+            cliProxyAPIAuthDirectory,
             quotaResetNotificationsEnabled,
             taskCompletionNotificationsEnabled,
             accessTokenExpiryNotificationsEnabled,

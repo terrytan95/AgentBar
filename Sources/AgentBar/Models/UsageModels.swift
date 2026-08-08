@@ -162,6 +162,8 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var accessTokenExpiresAt: Date? = nil
     var grokSubscriptionUsage: GrokSubscriptionUsage? = nil
     var cursorSubscriptionUsage: CursorSubscriptionUsage? = nil
+    var canSwitchAccount: Bool? = nil
+    var canRemoveAccount: Bool? = nil
 
     var mostConstrainedRemainingPercent: Double? {
         [
@@ -240,6 +242,14 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         case .quotaUnavailable, nil:
             false
         }
+    }
+
+    var supportsAccountSwitching: Bool {
+        canSwitchAccount ?? true
+    }
+
+    var supportsAccountRemoval: Bool {
+        canRemoveAccount ?? true
     }
 
     func restoringExpiredQuotaWindows(now: Date) -> UsageAccount {

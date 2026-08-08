@@ -36,29 +36,65 @@ struct CodexUsageAPISyncer {
     var now: @Sendable () -> Date
     var usageClient: UsageClient
     var timeout: TimeInterval
+    var reusesCLIProxyAPIAuth: Bool
+    var cliProxyAPIAuthDirectory: String
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default,
         now: @escaping @Sendable () -> Date = Date.init,
         usageClient: @escaping UsageClient = Self.defaultUsageClient,
-        timeout: TimeInterval = 5
+        timeout: TimeInterval = 5,
+        reusesCLIProxyAPIAuth: Bool = false,
+        cliProxyAPIAuthDirectory: String = ""
     ) {
         self.homeDirectory = homeDirectory
         self.fileManager = fileManager
         self.now = now
         self.usageClient = usageClient
         self.timeout = timeout
+        self.reusesCLIProxyAPIAuth = reusesCLIProxyAPIAuth
+        self.cliProxyAPIAuthDirectory = cliProxyAPIAuthDirectory
     }
 
     func refreshUsage() async -> CodexUsageSyncResult {
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
-        guard let data = try? storage.readRegistryBootstrappingActiveAccount(now: now()),
-              let registry = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              var accounts = registry["accounts"] as? [[String: Any]]
-        else {
+        let discovery = reusesCLIProxyAPIAuth
+            ? CLIProxyCodexAuthReader(
+                homeDirectory: homeDirectory,
+                configuredDirectory: cliProxyAPIAuthDirectory,
+                now: now
+            ).discover()
+            : CLIProxyCodexDiscovery(credentials: [], scanCompleted: true, hasBroadReadPermissions: false)
+
+        let registryData = try? storage.readRegistryBootstrappingActiveAccount(now: now())
+        let parsedRegistry = registryData
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        guard parsedRegistry != nil || !discovery.credentials.isEmpty else {
             return .unavailable("Codex account registry was not found or could not be parsed.")
+        }
+        var registry = parsedRegistry ?? [:]
+        let originalRegistry = registry
+        var accounts = registry["accounts"] as? [[String: Any]] ?? []
+        accounts = Self.reconcileCLIProxyAccounts(
+            accounts,
+            discovery: discovery
+        )
+        Self.promoteNativeAccounts(&accounts, storage: storage, fileManager: fileManager)
+        registry["accounts"] = accounts
+        if discovery.scanCompleted, discovery.hasBroadReadPermissions {
+            registry[CLIProxyCodexRegistryMetadata.broadReadPermissions] = true
+        } else if discovery.scanCompleted {
+            registry.removeValue(forKey: CLIProxyCodexRegistryMetadata.broadReadPermissions)
+        }
+        if !Self.jsonValue(originalRegistry, equals: registry) {
+            do {
+                try fileManager.createDirectory(at: storage.accountsDirectory, withIntermediateDirectories: true)
+                try storage.writeRegistry(registry)
+            } catch {
+                return .failed(error.localizedDescription)
+            }
         }
 
         let activeAuthIdentity = (try? Data(contentsOf: storage.activeAuthURL))
@@ -67,7 +103,7 @@ struct CodexUsageAPISyncer {
             ?? registry["active_account_key"] as? String
         guard let activeAccountIndex = accounts.firstIndex(where: { account in
             (account["account_key"] as? String) == activeAccountKey
-        }) else {
+        }) ?? accounts.indices.first else {
             return .unavailable("No active ChatGPT account was available for usage refresh.")
         }
 
@@ -103,9 +139,14 @@ struct CodexUsageAPISyncer {
                 storage: storage,
                 activeAuthMatchesAccount: Self.account(accounts[index], matches: activeAuthIdentity)
             )
-            guard let authData = try? Data(contentsOf: authURL),
-                  let authInfo = Self.parseAuthInfo(data: authData)
-            else {
+            let externalCredential = discovery.credentials.first {
+                Self.account(accounts[index], matches: $0.identity)
+            }
+            let nativeAuthData = try? Data(contentsOf: authURL)
+            let authInfo = externalCredential?.authInfo
+                ?? nativeAuthData.flatMap(CodexAccountStorage.usageAuthInfo)
+            let usesExternalCredential = externalCredential != nil
+            guard let authInfo else {
                 continue
             }
 
@@ -133,7 +174,7 @@ struct CodexUsageAPISyncer {
             }
 
             guard 200..<300 ~= response.statusCode else {
-                if response.statusCode == 401 {
+                if response.statusCode == 401, !usesExternalCredential {
                     accounts[index]["agentbar_auth_error"] = [
                         "status_code": 401,
                         "detected_at": now().timeIntervalSince1970
@@ -155,15 +196,17 @@ struct CodexUsageAPISyncer {
                 usage["reset_credits"] = detailedResetCredits
             }
 
-            if authURL != accountSnapshotURL {
+            if !usesExternalCredential,
+               authURL != accountSnapshotURL,
+               let nativeAuthData {
                 do {
-                    try authData.write(to: accountSnapshotURL, options: [.atomic])
+                    try nativeAuthData.write(to: accountSnapshotURL, options: [.atomic])
                 } catch {
                     if index == activeAccountIndex { activeResult = .failed(error.localizedDescription) }
                     continue
                 }
             }
-            if accounts[index]["agentbar_auth_error"] != nil {
+            if !usesExternalCredential, accounts[index]["agentbar_auth_error"] != nil {
                 accounts[index].removeValue(forKey: "agentbar_auth_error")
                 updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_auth_error")
             }
@@ -239,32 +282,6 @@ struct CodexUsageAPISyncer {
         let (data, response) = try await session.data(for: request)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         return CodexUsageAPIResponse(statusCode: statusCode, data: data)
-    }
-
-    private static func parseAuthInfo(data: Data) -> CodexUsageAuthInfo? {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
-        }
-        if let apiKey = root["OPENAI_API_KEY"] as? String,
-           !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return nil
-        }
-        if let authMode = root["auth_mode"] as? String,
-           authMode.localizedCaseInsensitiveCompare("apikey") == .orderedSame {
-            return nil
-        }
-
-        let tokens = root["tokens"] as? [String: Any]
-        let accessToken = firstNonEmptyString([
-            tokens?["access_token"],
-            root["access_token"]
-        ])
-        let accountID = firstNonEmptyString([
-            tokens?["account_id"],
-            root["account_id"]
-        ])
-        guard let accessToken, let accountID else { return nil }
-        return CodexUsageAuthInfo(accessToken: accessToken, accountID: accountID)
     }
 
     private static func parseUsageResponse(data: Data) -> [String: Any]? {
@@ -435,6 +452,67 @@ struct CodexUsageAPISyncer {
         ) == true
     }
 
+    private static func reconcileCLIProxyAccounts(
+        _ currentAccounts: [[String: Any]],
+        discovery: CLIProxyCodexDiscovery
+    ) -> [[String: Any]] {
+        var accounts = currentAccounts
+        if discovery.scanCompleted {
+            accounts.removeAll {
+                ($0[CLIProxyCodexRegistryMetadata.externalOnly] as? Bool) == true
+            }
+            for index in accounts.indices {
+                accounts[index].removeValue(forKey: CLIProxyCodexRegistryMetadata.source)
+                accounts[index].removeValue(forKey: CLIProxyCodexRegistryMetadata.accessTokenExpiresAt)
+            }
+        }
+
+        for credential in discovery.credentials {
+            let index: Int
+            if let existingIndex = accounts.firstIndex(where: {
+                account($0, matches: credential.identity)
+            }) {
+                index = existingIndex
+            } else {
+                var account: [String: Any] = [
+                    "account_key": externalAccountKey(for: credential),
+                    "chatgpt_account_id": credential.authInfo.accountID,
+                    CLIProxyCodexRegistryMetadata.externalOnly: true
+                ]
+                account["email"] = credential.identity.email
+                accounts.append(account)
+                index = accounts.index(before: accounts.endIndex)
+            }
+            accounts[index][CLIProxyCodexRegistryMetadata.source] = CLIProxyCodexRegistryMetadata.sourceValue
+            accounts[index][CLIProxyCodexRegistryMetadata.accessTokenExpiresAt] =
+                credential.accessTokenExpiresAt?.timeIntervalSince1970
+        }
+        return accounts
+    }
+
+    private static func externalAccountKey(for credential: CLIProxyCodexCredential) -> String {
+        let email = credential.identity.email?.lowercased() ?? ""
+        return "cliproxyapi|\(credential.authInfo.accountID)|\(email)"
+    }
+
+    private static func promoteNativeAccounts(
+        _ accounts: inout [[String: Any]],
+        storage: CodexAccountStorage,
+        fileManager: FileManager
+    ) {
+        for index in accounts.indices {
+            guard (accounts[index][CLIProxyCodexRegistryMetadata.externalOnly] as? Bool) == true,
+                  let accountKey = firstNonEmptyString([accounts[index]["account_key"]])
+            else { continue }
+            let authURL = storage.accountAuthURL(for: accountKey)
+            guard fileManager.fileExists(atPath: authURL.path),
+                  let data = try? Data(contentsOf: authURL),
+                  account(accounts[index], matches: CodexAccountStorage.chatGPTAuthIdentity(from: data))
+            else { continue }
+            accounts[index].removeValue(forKey: CLIProxyCodexRegistryMetadata.externalOnly)
+        }
+    }
+
     private static func firstNumber(_ values: [Any?]) -> NSNumber? {
         values.compactMap(number).first
     }
@@ -474,9 +552,4 @@ struct CodexUsageAPISyncer {
         guard let lhs = lhs else { return false }
         return NSDictionary(dictionary: rhs).isEqual(lhs)
     }
-}
-
-private struct CodexUsageAuthInfo {
-    var accessToken: String
-    var accountID: String
 }

@@ -585,7 +585,7 @@ struct AccountRowView: View {
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
                             .background(AgentBarPalette.primary, in: Capsule())
-                    } else if account.service == .codex {
+                    } else if account.service == .codex, account.supportsAccountSwitching {
                         Button {
                             isConfirmingSwitch = true
                         } label: {
@@ -604,7 +604,7 @@ struct AccountRowView: View {
                         .pointingHandCursor(enabled: !isSwitching)
                     }
 
-                    if account.service == .codex {
+                    if account.service == .codex, account.supportsAccountRemoval {
                         Button(role: .destructive) {
                             isConfirmingRemoval = true
                         } label: {
@@ -615,6 +615,11 @@ struct AccountRowView: View {
                         .foregroundStyle(.red)
                         .help(L.text("remove_account", language))
                         .pointingHandCursor()
+                    }
+                    if account.service == .codex, !account.supportsAccountSwitching {
+                        Text(L.text("monitor_only", language))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }

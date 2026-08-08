@@ -67,6 +67,7 @@ AgentBar has no separate analytics backend. Network access is limited to the Cha
 - `~/.claude/projects/**/*.jsonl` supplies Claude Code model, token, project, and estimated-cost records. Prompts, replies, tool output, and credentials are not extracted or retained.
 - `~/.grok/auth.json` supplies the existing Grok CLI OAuth session used to request subscription quota and plan settings. AgentBar does not log or persist the token contents.
 - `~/.codex/accounts/registry.json`, `~/.codex/auth.json`, and per-account auth snapshots supply account identity, quota state, authentication health, and credential expiry. Token contents are used only when required for quota sync or account actions and are not retained in AgentBar reports.
+- With explicit opt-in, AgentBar can read CLIProxyAPI Codex access tokens in place for quota monitoring. It never writes those auth files or uses, copies, or persists their refresh tokens; CLIProxyAPI-only accounts are monitor-only.
 - Quota refresh and account-management actions can update Codex's local registry and auth snapshots. Parsed session metrics are cached under `~/Library/Caches/AgentBar/` for faster refreshes.
 - Audit exports contain aggregate metrics and derived thread labels, not full prompts, replies, or tool output.
 - Claude subscription quota and billing totals are not exposed by local session files; AgentBar reports local tokens and price-table estimates instead.

@@ -968,6 +968,36 @@ struct StatisticsView: View {
                     .accessibilityLabel(L.text("statistics_scope", store.language))
                 }
                 SettingsToggleRow(
+                    title: L.text("reuse_cliproxyapi_auth", store.language),
+                    subtitle: L.text("reuse_cliproxyapi_auth_subtitle", store.language),
+                    isOn: $settings.reuseCLIProxyAPIAuthEnabled
+                )
+                .onChange(of: settings.reuseCLIProxyAPIAuthEnabled) { _, _ in
+                    store.refresh(force: true)
+                }
+                if settings.reuseCLIProxyAPIAuthEnabled {
+                    SettingsRow(
+                        title: L.text("cliproxyapi_auth_directory", store.language),
+                        subtitle: L.text("cliproxyapi_auth_directory_subtitle", store.language)
+                    ) {
+                        TextField("~/.cli-proxy-api", text: $settings.cliProxyAPIAuthDirectory)
+                            .textFieldStyle(.roundedBorder)
+                            .settingsControl(width: settingsControlWidePickerWidth)
+                            .accessibilityLabel(L.text("cliproxyapi_auth_directory", store.language))
+                            .onSubmit {
+                                store.refresh(force: true)
+                            }
+                    }
+                    SettingsRow(
+                        title: L.text("cliproxyapi_security", store.language),
+                        subtitle: L.text("cliproxyapi_security_subtitle", store.language)
+                    ) {
+                        Image(systemName: "lock.shield")
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(L.text("cliproxyapi_security", store.language))
+                    }
+                }
+                SettingsToggleRow(
                     title: L.text("auto_codex_rotation", store.language),
                     subtitle: L.text("auto_codex_rotation_subtitle", store.language),
                     isOn: $settings.autoCodexAccountRotationEnabled
@@ -3974,7 +4004,7 @@ private struct AccountLimitGroupView: View {
                     .controlSize(.small)
                     .tint(.red)
                     .pointingHandCursor()
-                } else if !account.isActive {
+                } else if !account.isActive, account.supportsAccountSwitching {
                     Button {
                         onSwitch()
                     } label: {
@@ -3991,6 +4021,10 @@ private struct AccountLimitGroupView: View {
                     .tint(AgentBarPalette.primary)
                     .disabled(isSwitching)
                     .pointingHandCursor(enabled: !isSwitching)
+                } else if !account.supportsAccountSwitching {
+                    Text(L.text("monitor_only", language))
+                        .font(.agentBar(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(account.service.rawValue)
@@ -4181,16 +4215,22 @@ private struct SettingsAccountDeleteRow: View {
                 }
             }
             Spacer()
-            Button(role: .destructive) {
-                isConfirmingRemoval = true
-            } label: {
-                Image(systemName: "trash")
+            if account.supportsAccountRemoval {
+                Button(role: .destructive) {
+                    isConfirmingRemoval = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .foregroundStyle(.red)
+                .help(L.text("remove_account", language))
+                .pointingHandCursor()
+            } else {
+                Text(L.text("monitor_only", language))
+                    .font(.agentBar(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .foregroundStyle(.red)
-            .help(L.text("remove_account", language))
-            .pointingHandCursor()
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)

@@ -103,9 +103,7 @@ final class UsageStore: ObservableObject {
 
     init(
         settings: SettingsStore = .shared,
-        codexUsageSynchronizer: @escaping @Sendable () async -> CodexUsageSyncResult = {
-            await CodexUsageAPISyncer().refreshUsage()
-        },
+        codexUsageSynchronizer: (@Sendable () async -> CodexUsageSyncResult)? = nil,
         codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)? = nil,
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot = {
             CodexUsageReader().read()
@@ -155,8 +153,21 @@ final class UsageStore: ObservableObject {
     ) {
         self.settings = settings
         self.quotaCapacityHistoryStore = quotaCapacityHistoryStore
+        let resolvedCodexUsageSynchronizer: @Sendable () async -> CodexUsageSyncResult =
+            codexUsageSynchronizer ?? { [weak settings] in
+                let configuration = await MainActor.run {
+                    (
+                        settings?.reuseCLIProxyAPIAuthEnabled ?? false,
+                        settings?.cliProxyAPIAuthDirectory ?? ""
+                    )
+                }
+                return await CodexUsageAPISyncer(
+                    reusesCLIProxyAPIAuth: configuration.0,
+                    cliProxyAPIAuthDirectory: configuration.1
+                ).refreshUsage()
+            }
         refreshLifecycle = UsageRefreshLifecycle(
-            codexUsageSynchronizer: codexUsageSynchronizer,
+            codexUsageSynchronizer: resolvedCodexUsageSynchronizer,
             codexUsagePreviewReader: codexUsagePreviewReader,
             codexUsageReader: codexUsageReader,
             claudeUsageReader: claudeUsageReader,
@@ -652,11 +663,12 @@ final class UsageStore: ObservableObject {
     }
 
     func switchActiveAccount(_ account: UsageAccount) {
+        guard account.supportsAccountSwitching else { return }
         switchCodexAccount(account, restartMode: .manualForceCodexAppRestart)
     }
 
     func removeAccount(_ account: UsageAccount) {
-        guard account.service == .codex else {
+        guard account.service == .codex, account.supportsAccountRemoval else {
             lastError = AccountActionError.unsupportedService.localizedDescription
             return
         }

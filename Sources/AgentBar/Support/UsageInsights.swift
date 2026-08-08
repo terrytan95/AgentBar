@@ -114,6 +114,7 @@ enum UsageInsights {
         let bestAlternative = accounts
             .filter { $0.service == .codex && $0.id != active?.id }
             .filter { !$0.needsLogin }
+            .filter(\.supportsAccountSwitching)
             .max { lhs, rhs in
                 if comparesFiveHour {
                     let lhsFiveHour = lhs.fiveHourWindow?.remainingPercent ?? -1

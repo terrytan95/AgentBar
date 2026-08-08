@@ -16,7 +16,7 @@ final class CodexAccountLifecycle {
         switchingAccountID: String?
     ) throws -> String? {
         guard switchingAccountID == nil else { return nil }
-        guard account.service == .codex else {
+        guard account.service == .codex, account.supportsAccountSwitching else {
             throw AccountActionError.unsupportedService
         }
         if restartMode == .manualForceCodexAppRestart {

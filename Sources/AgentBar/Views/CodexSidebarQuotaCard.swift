@@ -70,6 +70,12 @@ struct CodexSidebarQuotaCard: View {
                 if let credentialState = state.credentialState(at: timeline.date) {
                     credentialLine(credentialState)
                 }
+                if let source = state.account?.accessTokenSource {
+                    metadataLine(
+                        "\(L.text("token_source", model.content.language)): \(source)",
+                        systemImage: "key.horizontal"
+                    )
+                }
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)

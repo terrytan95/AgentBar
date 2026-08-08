@@ -3802,6 +3802,9 @@ private struct SidebarAccountPopover: View {
                 infoRow(L.text("total_tokens", language), DisplayFormatters.compactTokenString(account.tokens.total, language: language))
                 infoRow(L.text("cost", language), account.estimatedCostUSD.map(DisplayFormatters.costString) ?? L.text("no_cost_data", language))
                 infoRow(L.text("last_activity", language), account.lastActivityLine(language: language).replacingOccurrences(of: "\(L.text("last_activity", language)): ", with: ""))
+                if let source = account.accessTokenSource {
+                    infoRow(L.text("token_source", language), source)
+                }
                 infoRow(language == .chinese ? "数据源" : "Source", account.sourceDescription)
             } else {
                 Text(L.text("current_account", language))

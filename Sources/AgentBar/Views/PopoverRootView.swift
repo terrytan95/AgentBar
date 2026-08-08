@@ -641,6 +641,12 @@ struct AccountRowView: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(accessTokenExpiryColor)
                     .lineLimit(1)
+                if let source = account.accessTokenSource {
+                    Label("\(L.text("token_source", language)): \(source)", systemImage: "key.horizontal")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
 
             if account.fiveHourWindow != nil || account.weeklyWindow != nil {

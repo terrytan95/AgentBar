@@ -169,6 +169,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     var workspaceID: String? = nil
     var workspaces: [UsageWorkspace] = []
     var accessTokenExpiresAt: Date? = nil
+    var accessTokenSource: String? = nil
     var grokSubscriptionUsage: GrokSubscriptionUsage? = nil
     var cursorSubscriptionUsage: CursorSubscriptionUsage? = nil
     var canSwitchAccount: Bool? = nil

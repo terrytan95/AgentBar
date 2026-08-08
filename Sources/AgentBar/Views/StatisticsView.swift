@@ -735,16 +735,26 @@ struct StatisticsView: View {
             )
             .agentBarPanel(cornerRadius: 16)
 
-            if settings.showQuotaPressureSection {
-                QuotaPressurePanel(pressure: quotaPressure, language: store.language)
-                    .padding(.top, 8)
-            }
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
+                    dailyUsagePanel
 
-            dailyUsagePanel
+                    Panel(title: yearActivityLocalized("year_activity")) {
+                        YearActivityPanel(bars: yearActivityBars, language: store.language)
+                    }
+                }
 
-            Panel(title: yearActivityLocalized("year_activity")) {
-                YearActivityPanel(bars: yearActivityBars, language: store.language)
+                if settings.showQuotaPressureSection {
+                    QuotaPressurePanel(
+                        pressure: quotaPressure,
+                        history: store.quotaCapacityHistory,
+                        language: store.language
+                    )
+                    .frame(width: 230)
+                    .frame(maxHeight: .infinity)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .top)
 
             Panel(
                 title: quotaCapacityLocalized("quota_capacity_history"),
@@ -2973,103 +2983,100 @@ private struct CurrentLimitSummaryStrip: View {
 
 private struct QuotaPressurePanel: View {
     var pressure: QuotaPressureInsight
+    var history: QuotaCapacityHistory
     var language: AppLanguage
     @State private var showsDetails = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: iconName)
-                .font(.agentBar(size: 24, weight: .bold))
-                .foregroundStyle(severityColor)
-                .frame(width: 48, height: 48)
-                .background(severityColor.opacity(0.10), in: Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(localized("quota_pressure"))
-                        .font(.agentBar(size: 16, weight: .bold))
-                        .foregroundStyle(severityColor)
-                    Text(severityTitle)
-                        .font(.agentBar(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(severityColor, in: Capsule())
-                }
-                Text(detailLine)
-                    .font(.agentBar(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.primary.opacity(0.76))
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            if let recommendedAccount = pressure.recommendedAccount {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(localized("best_account"))
-                        .font(.agentBar(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    Text(recommendedAccount.providerAccountDisplayName)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 7) {
+                Text(localized("quota_pressure"))
+                    .font(.agentBar(size: 16, weight: .bold))
+                Button {
+                    showsDetails.toggle()
+                } label: {
+                    Image(systemName: "info.circle")
                         .font(.agentBar(size: 12, weight: .bold))
-                        .lineLimit(1)
-                    ForEach(recommendedAccount.workspaceLines(language: language), id: \.self) { line in
-                        Text(line)
-                            .font(.agentBar(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    if let resetCredits = recommendedAccount.resetCredits, resetCredits.hasAvailableCredits {
-                        Text(resetCredits.summaryLine(language: language))
-                            .font(.agentBar(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                        .foregroundStyle(AgentBarPalette.primary)
                 }
+                .tactilePlainButton()
+                .accessibilityLabel(localized("view_details"))
+                .popover(isPresented: $showsDetails, arrowEdge: .trailing) {
+                    QuotaPressureDetailsPopover(pressure: pressure, language: language, tint: severityColor)
+                }
+                Spacer(minLength: 0)
             }
 
-            Button {
-                showsDetails.toggle()
-            } label: {
-                HStack(spacing: 6) {
-                    Text(localized("view_details"))
-                    Image(systemName: "chevron.right")
-                }
-                .font(.agentBar(size: 12, weight: .bold))
+            Text(severityTitle)
+                .font(.agentBar(size: 20, weight: .bold))
                 .foregroundStyle(severityColor)
-            }
-            .tactilePlainButton()
-            .popover(isPresented: $showsDetails, arrowEdge: .trailing) {
-                QuotaPressureDetailsPopover(pressure: pressure, language: language, tint: severityColor)
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            LinearGradient(colors: [severityColor.opacity(0.16), AgentBarDesign.panelHighlight, severityColor.opacity(0.06)], startPoint: .leading, endPoint: .trailing),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(severityColor.opacity(0.38), lineWidth: 1)
-        )
-        .shadow(color: severityColor.opacity(0.10), radius: 16, y: 8)
-    }
+                .padding(.top, 16)
 
-    private var iconName: String {
-        switch pressure.severity {
-        case .critical: "exclamationmark.triangle.fill"
-        case .warning: "gauge.with.dots.needle.67percent"
-        case .ok: "checkmark.circle.fill"
+            metricLabel(language == .chinese ? "预计支撑" : "Estimated runway")
+                .padding(.top, 20)
+            Text(supportText)
+                .font(.agentBar(size: 21, weight: .bold))
+                .monospacedDigit()
+                .padding(.top, 5)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.09))
+                    Capsule()
+                        .fill(AgentBarPalette.primary)
+                        .frame(width: proxy.size.width * remainingProgress)
+                }
+            }
+            .frame(height: 6)
+            .padding(.top, 12)
+
+            metricLabel(language == .chinese ? "基于用量估算" : "Based on usage")
+                .padding(.top, 8)
+
+            metricLabel(localized("weekly"))
+                .padding(.top, 22)
+            Text(weeklyEstimateText)
+                .font(.agentBar(size: 17, weight: .bold))
+                .monospacedDigit()
+                .padding(.top, 5)
+
+            metricLabel(localized("samples"))
+                .padding(.top, 18)
+            Text("\(history.samples.count)")
+                .font(.agentBar(size: 17, weight: .bold))
+                .monospacedDigit()
+                .padding(.top, 5)
+
+            metricLabel(language == .chinese ? "置信度" : "Confidence")
+                .padding(.top, 20)
+            HStack(spacing: 6) {
+                Text(confidenceTitle)
+                    .font(.agentBar(size: 12, weight: .bold))
+                Spacer()
+                ForEach(0..<5, id: \.self) { index in
+                    Circle()
+                        .fill(AgentBarPalette.primary.opacity(index < confidenceLevel ? 1 : 0.32))
+                        .frame(width: 7, height: 7)
+                }
+            }
+            .padding(.top, 6)
+
+            Spacer(minLength: 18)
+
+            QuotaPressureSparkline(values: sparklineValues)
+                .frame(height: 72)
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .agentBarPanel()
     }
 
     private var severityColor: Color {
         switch pressure.severity {
         case .critical: .red
         case .warning: .orange
-        case .ok: AgentBarPalette.primary
+        case .ok: .green
         }
     }
 
@@ -3077,56 +3084,103 @@ private struct QuotaPressurePanel: View {
         switch (pressure.severity, language) {
         case (.critical, .chinese): "高风险"
         case (.warning, .chinese): "注意"
-        case (.ok, .chinese): "正常"
+        case (.ok, .chinese): "健康"
         case (.critical, _): "High risk"
         case (.warning, _): "Watch"
         case (.ok, _): "Healthy"
         }
     }
 
-    private var detailLine: String {
-        let active = pressure.activeAccount?.providerAccountDisplayName ?? "--"
-        if pressure.recommendationReason != nil, pressure.severity != .ok {
-            return recommendationReason
-        }
-        guard pressure.activeAccount?.fiveHourWindow != nil else {
-            let weekly = DisplayFormatters.percentString(pressure.activeAccount?.weeklyWindow?.remainingPercent)
-            return "\(active) · \(localized("weekly")) \(weekly) \(localized("remaining"))"
-        }
-        let projected = pressure.projectedFiveHourExhaustion.map { DisplayFormatters.relativeString(for: $0, language: language) }
-        let rotation = pressure.shouldTriggerRotation ? localized("rotation_ready") : localized("rotation_standby")
-        if let projected {
-            return "\(active) · \(localized("five_hour_exhausts")) \(projected) · \(rotation)"
-        }
-        return "\(active) · \(localized("five_hour_healthy")) · \(rotation)"
+    private var supportText: String {
+        let date = pressure.projectedFiveHourExhaustion
+            ?? pressure.activeAccount?.fiveHourWindow?.resetsAt
+            ?? pressure.projectedWeeklyExhaustion
+        guard let date else { return "--" }
+        let hours = max(1, Int(ceil(date.timeIntervalSinceNow / 3_600)))
+        return language == .chinese ? "\(hours) 小时" : "\(hours) hr"
     }
 
-    private var recommendationReason: String {
-        guard let active = pressure.activeAccount, let recommended = pressure.recommendedAccount else {
-            return pressure.recommendationReason ?? ""
+    private var remainingProgress: Double {
+        let remaining = [
+            pressure.activeAccount?.fiveHourWindow?.remainingPercent,
+            pressure.activeAccount?.weeklyWindow?.remainingPercent
+        ]
+        .compactMap { $0 }
+        .min() ?? 0
+        return min(max(remaining / 100, 0), 1)
+    }
+
+    private var weeklyEstimateText: String {
+        guard let sample = history.latestEstimate, let estimate = sample.estimatedWeeklyTotalTokens else { return "-- / --" }
+        let usedPercent = sample.weeklyUsedPercent ?? 0
+        let used = Int((Double(estimate) * usedPercent / 100).rounded())
+        return "\(tokenText(used)) / \(tokenText(estimate))"
+    }
+
+    private var sparklineValues: [Int] {
+        history.samples.suffix(24).compactMap(\.estimatedWeeklyTotalTokens)
+    }
+
+    private var confidenceLevel: Int {
+        let estimateCount = history.samples.suffix(48).compactMap(\.estimatedWeeklyTotalTokens).count
+        switch estimateCount {
+        case 0..<4: return 2
+        case 4..<24: return 4
+        default: return 5
         }
-        let activeWeekly = DisplayFormatters.percentString(active.weeklyWindow?.remainingPercent)
-        let recommendedWeekly = DisplayFormatters.percentString(recommended.weeklyWindow?.remainingPercent)
-        guard active.fiveHourWindow != nil else {
-            switch language {
-            case .chinese:
-                return "当前本周 \(activeWeekly)；\(recommended.providerAccountDisplayName) 本周 \(recommendedWeekly)"
-            case .english:
-                return pressure.recommendationReason ?? "active weekly \(activeWeekly); \(recommended.providerAccountDisplayName) weekly \(recommendedWeekly)"
-            }
+    }
+
+    private var confidenceTitle: String {
+        switch (confidenceLevel, language) {
+        case (..<4, .chinese): "较低"
+        case (4, .chinese): "中等"
+        case (_, .chinese): "高"
+        case (..<4, _): "Low"
+        case (4, _): "Medium"
+        default: "High"
         }
-        let activeFive = DisplayFormatters.percentString(active.fiveHourWindow?.remainingPercent)
-        let recommendedFive = DisplayFormatters.percentString(recommended.fiveHourWindow?.remainingPercent)
-        switch language {
-        case .chinese:
-            return "当前 5H \(activeFive)，本周 \(activeWeekly)；\(recommended.providerAccountDisplayName) 5H \(recommendedFive)，本周 \(recommendedWeekly)"
-        case .english:
-            return pressure.recommendationReason ?? "active 5H \(activeFive), weekly \(activeWeekly); \(recommended.providerAccountDisplayName) 5H \(recommendedFive), weekly \(recommendedWeekly)"
-        }
+    }
+
+    private func metricLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.agentBar(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private func tokenText(_ value: Int) -> String {
+        DisplayFormatters.compactTokenString(value, language: language)
     }
 
     private func localized(_ key: String) -> String {
         L.text(key, language)
+    }
+}
+
+private struct QuotaPressureSparkline: View {
+    var values: [Int]
+
+    var body: some View {
+        Canvas { context, size in
+            guard values.count > 1, let minimum = values.min(), let maximum = values.max() else { return }
+            let range = max(1, maximum - minimum)
+            let xStep = size.width / CGFloat(values.count - 1)
+            var path = Path()
+
+            for (index, value) in values.enumerated() {
+                let point = CGPoint(
+                    x: CGFloat(index) * xStep,
+                    y: size.height - CGFloat(value - minimum) / CGFloat(range) * size.height
+                )
+                index == 0 ? path.move(to: point) : path.addLine(to: point)
+            }
+
+            context.stroke(
+                path,
+                with: .color(AgentBarPalette.primary),
+                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .accessibilityHidden(true)
     }
 }
 

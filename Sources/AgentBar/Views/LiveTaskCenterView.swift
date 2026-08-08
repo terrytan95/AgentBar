@@ -94,7 +94,7 @@ struct LiveTaskCenterView: View {
             taskMetric(L.text("working", store.language), "\(working)", color: .green)
             taskMetric(L.text("task_waiting", store.language), "\(waiting)", color: .orange)
             taskMetric(L.text("completed", store.language), "\(completed)", color: AgentBarPalette.primary)
-            taskMetric(L.text("active_tokens", store.language), DisplayFormatters.compactTokenString(activeTokens, language: store.language), color: .blue)
+            taskMetric(L.text("active_tokens", store.language), DisplayFormatters.compactTokenString(activeTokens, language: store.language), color: AgentBarPalette.primary)
         }
     }
 

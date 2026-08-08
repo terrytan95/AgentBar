@@ -83,7 +83,7 @@ struct ProjectBillingView: View {
 
         return HStack(spacing: 14) {
             metric(L.text("repositories", store.language), "\(projects.count)", icon: "folder.fill", color: AgentBarPalette.primary)
-            metric("Tokens", DisplayFormatters.compactTokenString(tokens, language: store.language), icon: "cylinder.split.1x2.fill", color: .blue)
+            metric("Tokens", DisplayFormatters.compactTokenString(tokens, language: store.language), icon: "cylinder.split.1x2.fill", color: AgentBarPalette.primary)
             metric(L.text("estimated_cost", store.language), DisplayFormatters.costString(cost), icon: "dollarsign", color: .green)
             metric(L.text("budget_alerts", store.language), "\(overBudget)", icon: "exclamationmark.triangle.fill", color: overBudget > 0 ? .orange : .green)
         }

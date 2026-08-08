@@ -100,6 +100,15 @@ struct UsageResetCredits: Codable, Equatable, Sendable {
         visibleCount > 0
     }
 
+    func removingExpiredResets(now: Date) -> UsageResetCredits? {
+        let activeResets = resets.filter { $0.expiresAt.map { $0 > now } ?? true }
+        let credits = UsageResetCredits(
+            availableCount: max(0, availableCount - (resets.count - activeResets.count)),
+            resets: activeResets
+        )
+        return credits.hasAvailableCredits ? credits : nil
+    }
+
     func summaryLine(language: AppLanguage) -> String {
         let key = visibleCount == 1 ? "reset_available" : "resets_available"
         return "\(visibleCount) \(L.text(key, language))"
@@ -256,6 +265,7 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
         var account = self
         account.fiveHourWindow = fiveHourWindow?.restoringExpiredQuota(now: now)
         account.weeklyWindow = weeklyWindow?.restoringExpiredQuota(now: now)
+        account.resetCredits = resetCredits?.removingExpiredResets(now: now)
         return account
     }
 

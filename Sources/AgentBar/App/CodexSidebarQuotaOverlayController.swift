@@ -106,7 +106,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         isStarted = true
         self.settings = settings
         let cardContent = Self.cardContent(accounts: store.accounts, language: settings.language)
-        configurePanel(content: cardContent)
+        configurePanel(content: cardContent, settings: settings, store: store)
         observeWorkspace()
 
         settings.$showCodexSidebarQuotaOverlay
@@ -359,14 +359,28 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         }
     }
 
-    private func configurePanel(content: CodexSidebarQuotaCardContent) {
+    private func configurePanel(
+        content: CodexSidebarQuotaCardContent,
+        settings: SettingsStore,
+        store: UsageStore
+    ) {
         let cardModel = CodexSidebarQuotaCardViewModel(content: content)
-        let card = CodexSidebarQuotaCard(model: cardModel) { [weak self] in
-            Task { @MainActor in
-                await Task.yield()
-                self?.refreshPanelFrame(reason: .cardContent)
+        let card = CodexSidebarQuotaCard(
+            model: cardModel,
+            onShowMainWindow: { [weak store] in
+                guard let store else { return }
+                AgentBarWindowPresenter.presentStatisticsWindow(store: store, initialTab: .usage)
+            },
+            onCloseQuotaWindow: { [weak settings] in
+                settings?.showCodexSidebarQuotaOverlay = false
+            },
+            onContentSizeChange: { [weak self] in
+                Task { @MainActor in
+                    await Task.yield()
+                    self?.refreshPanelFrame(reason: .cardContent)
+                }
             }
-        }
+        )
         let hostingView = CodexSidebarQuotaHostingView(rootView: card)
         hostingView.frame = CGRect(x: 0, y: 0, width: 280, height: 1)
         hostingView.wantsLayer = true

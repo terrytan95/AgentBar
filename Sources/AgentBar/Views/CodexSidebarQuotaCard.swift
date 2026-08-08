@@ -45,6 +45,8 @@ struct CodexSidebarQuotaCardState: Equatable {
 
 struct CodexSidebarQuotaCard: View {
     @ObservedObject var model: CodexSidebarQuotaCardViewModel
+    var onShowMainWindow: () -> Void
+    var onCloseQuotaWindow: () -> Void
     var onContentSizeChange: () -> Void = {}
 
     @State private var isResetCreditsExpanded = false
@@ -82,6 +84,15 @@ struct CodexSidebarQuotaCard: View {
             .modifier(CodexSidebarGlassSurface())
         }
         .fixedSize(horizontal: false, vertical: true)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button(L.text("show_main_window", model.content.language), action: onShowMainWindow)
+            Button(
+                L.text("close_quota_window", model.content.language),
+                role: .destructive,
+                action: onCloseQuotaWindow
+            )
+        }
     }
 
     private func quotaWindow(_ window: UsageWindow) -> some View {

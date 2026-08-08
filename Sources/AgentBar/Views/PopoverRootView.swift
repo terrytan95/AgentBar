@@ -409,7 +409,7 @@ struct PopoverRootView: View {
     }
 }
 
-private enum AgentBarWindowPresenter {
+enum AgentBarWindowPresenter {
     @MainActor
     private static var statisticsWindow: NSWindow?
 

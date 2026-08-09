@@ -77,7 +77,7 @@ struct StatisticsView: View {
             }
             contentColumn
         }
-        .animation(AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion), value: usesSidebarLayout)
+        .animation(AgentBarDesign.smoothAnimation(reduceMotion: false, duration: 0.28), value: usesSidebarLayout)
         .onGeometryChange(for: Bool.self) { proxy in
             proxy.size.width < 900
         } action: { usesCompactNavigation = $0 }

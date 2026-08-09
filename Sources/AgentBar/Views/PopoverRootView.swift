@@ -426,12 +426,14 @@ enum AgentBarWindowPresenter {
         )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1480, height: 940),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.isOpaque = false
         window.backgroundColor = .clear
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
         window.title = "AgentBar"
         window.contentViewController = controller
         window.minSize = NSSize(width: 1180, height: 760)

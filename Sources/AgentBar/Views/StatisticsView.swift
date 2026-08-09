@@ -43,12 +43,16 @@ struct StatisticsView: View {
     @State private var dismissedUpdateVersion: String?
     @State private var usesCompactNavigation = false
     @State private var stacksActivityPanels = false
+    @GestureState private var sidebarDragOffset: CGFloat = 0
+    @AppStorage("dashboardSidebarWidth") private var storedSidebarWidth = 236.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
 
     private static let dashboardContentTopPadding: CGFloat = 12
     private static let dashboardContentBottomPadding: CGFloat = 26
+    private static let minimumSidebarWidth: CGFloat = 220
+    private static let maximumSidebarWidth: CGFloat = 360
 
     init(
         store: UsageStore,
@@ -62,20 +66,18 @@ struct StatisticsView: View {
     }
 
     var body: some View {
-        Group {
-            if showsSidebarNavigation && !usesCompactNavigation {
-                HStack(spacing: 0) {
-                    sidebar
-                        .frame(width: 236)
-                    contentColumn
-                }
+        dashboardLayout {
+            if usesSidebarLayout {
+                sidebar
+                    .frame(width: sidebarWidth)
+                    .transition(.opacity)
             } else {
-                VStack(spacing: 0) {
-                    topNavigationBar
-                    contentColumn
-                }
+                topNavigationBar
+                    .transition(.opacity)
             }
+            contentColumn
         }
+        .animation(AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion), value: usesSidebarLayout)
         .onGeometryChange(for: Bool.self) { proxy in
             proxy.size.width < 900
         } action: { usesCompactNavigation = $0 }
@@ -113,6 +115,20 @@ struct StatisticsView: View {
                 language: store.language
             )
         }
+    }
+
+    private var usesSidebarLayout: Bool {
+        showsSidebarNavigation && !usesCompactNavigation
+    }
+
+    private var dashboardLayout: AnyLayout {
+        usesSidebarLayout
+            ? AnyLayout(HStackLayout(spacing: 0))
+            : AnyLayout(VStackLayout(spacing: 0))
+    }
+
+    private var sidebarWidth: CGFloat {
+        clampedSidebarWidth(clampedSidebarWidth(CGFloat(storedSidebarWidth)) + sidebarDragOffset)
     }
 
     @ViewBuilder
@@ -206,14 +222,54 @@ struct StatisticsView: View {
             cornerRadius: 0
         )
         .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(sidebarSeparatorColor)
-                .frame(width: 1)
+            sidebarResizeHandle
         }
         .animation(
             AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion),
             value: sidebarUpdateRelease?.version
         )
+    }
+
+    private var sidebarResizeHandle: some View {
+        Rectangle()
+            .fill(sidebarSeparatorColor)
+            .frame(width: 1)
+            .frame(width: 9)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($sidebarDragOffset) { value, offset, _ in
+                        offset = value.translation.width
+                    }
+                    .onEnded { value in
+                        storedSidebarWidth = Double(
+                            clampedSidebarWidth(
+                                clampedSidebarWidth(CGFloat(storedSidebarWidth)) + value.translation.width
+                            )
+                        )
+                    }
+            )
+            .onHover { isHovering in
+                (isHovering ? NSCursor.resizeLeftRight : NSCursor.arrow).set()
+            }
+            .onDisappear {
+                NSCursor.arrow.set()
+            }
+            .accessibilityLabel(store.language == .chinese ? "调整侧边栏宽度" : "Resize sidebar")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    storedSidebarWidth = Double(clampedSidebarWidth(sidebarWidth + 16))
+                case .decrement:
+                    storedSidebarWidth = Double(clampedSidebarWidth(sidebarWidth - 16))
+                @unknown default:
+                    break
+                }
+            }
+    }
+
+    private func clampedSidebarWidth(_ width: CGFloat) -> CGFloat {
+        min(Self.maximumSidebarWidth, max(Self.minimumSidebarWidth, width))
     }
 
     private var sidebarSeparatorColor: Color {

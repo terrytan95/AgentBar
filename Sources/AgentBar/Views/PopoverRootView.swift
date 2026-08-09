@@ -5,19 +5,19 @@ struct ResizablePopoverRootView: View {
     @ObservedObject var store: UsageStore
     var maximumHeight: CGFloat
     var onQuit: () -> Void
-    var onHeightChange: (CGFloat) -> Void
+    var onSizeChange: (CGSize) -> Void
     @ObservedObject private var settings: SettingsStore
 
     init(
         store: UsageStore,
         maximumHeight: CGFloat,
         onQuit: @escaping () -> Void = { NSApplication.shared.terminate(nil) },
-        onHeightChange: @escaping (CGFloat) -> Void
+        onSizeChange: @escaping (CGSize) -> Void
     ) {
         self.store = store
         self.maximumHeight = maximumHeight
         self.onQuit = onQuit
-        self.onHeightChange = onHeightChange
+        self.onSizeChange = onSizeChange
         self.settings = store.settings
     }
 
@@ -26,10 +26,13 @@ struct ResizablePopoverRootView: View {
             store: store,
             onQuit: onQuit
         )
-        .frame(width: PopoverLayout.width)
+        .frame(minWidth: PopoverLayout.minimumWidth, maxWidth: .infinity)
         .frame(minHeight: PopoverLayout.minimumHeight, maxHeight: .infinity)
         .overlay(alignment: .bottom) {
-            resizeBorder
+            heightResizeBorder
+        }
+        .overlay(alignment: .trailing) {
+            widthResizeBorder
         }
         .onAppear {
             refreshPopoverLayout()
@@ -41,7 +44,10 @@ struct ResizablePopoverRootView: View {
             applyAutomaticHeight()
         }
         .onChange(of: settings.popoverHeight) { _, newHeight in
-            onHeightChange(CGFloat(newHeight))
+            reportSize(height: CGFloat(newHeight))
+        }
+        .onChange(of: settings.popoverWidth) { _, newWidth in
+            reportSize(width: CGFloat(newWidth))
         }
         .transaction { transaction in
             transaction.animation = nil
@@ -49,10 +55,9 @@ struct ResizablePopoverRootView: View {
     }
 
     private func refreshPopoverLayout() {
-        let height = CGFloat(settings.popoverHeight)
-        onHeightChange(height)
+        reportSize()
         DispatchQueue.main.async {
-            onHeightChange(height)
+            reportSize()
         }
     }
 
@@ -63,20 +68,31 @@ struct ResizablePopoverRootView: View {
             maximumHeight: maximumHeight
         )
         settings.popoverHeight = Double(height)
-        onHeightChange(height)
+        reportSize(height: height)
     }
 
-    private var resizeBorder: some View {
+    private func reportSize(
+        width: CGFloat? = nil,
+        height: CGFloat? = nil
+    ) {
+        onSizeChange(CGSize(
+            width: width ?? CGFloat(settings.popoverWidth),
+            height: height ?? CGFloat(settings.popoverHeight)
+        ))
+    }
+
+    private var heightResizeBorder: some View {
         ZStack(alignment: .bottom) {
             PopoverResizeHandle(
-                startHeight: CGFloat(settings.popoverHeight),
-                maxHeight: maximumHeight
+                startSize: CGFloat(settings.popoverHeight),
+                minimumSize: PopoverLayout.minimumHeight,
+                maximumSize: maximumHeight
             ) { height, isFinal in
-                onHeightChange(height)
+                reportSize(height: height)
                 if isFinal {
                     settings.updatePopoverMaximumHeight(Double(maximumHeight))
                     settings.popoverHeight = Double(height)
-                    onHeightChange(CGFloat(settings.popoverHeight))
+                    reportSize()
                 }
             }
             .frame(height: 12)
@@ -90,6 +106,33 @@ struct ResizablePopoverRootView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 12)
+    }
+
+    private var widthResizeBorder: some View {
+        ZStack(alignment: .trailing) {
+            PopoverResizeHandle(
+                axis: .width,
+                startSize: CGFloat(settings.popoverWidth),
+                minimumSize: PopoverLayout.minimumWidth,
+                maximumSize: PopoverLayout.maximumWidth
+            ) { width, isFinal in
+                reportSize(width: width)
+                if isFinal {
+                    settings.popoverWidth = Double(width)
+                    reportSize()
+                }
+            }
+            .frame(width: 12)
+            .accessibilityLabel(L.text("resize_popover", store.language))
+
+            Capsule()
+                .fill(AgentBarPalette.primary.opacity(0.30))
+                .frame(width: 4, height: 48)
+                .padding(.trailing, 3)
+                .allowsHitTesting(false)
+        }
+        .frame(width: 12)
+        .frame(maxHeight: .infinity)
     }
 }
 

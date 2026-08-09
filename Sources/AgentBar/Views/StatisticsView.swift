@@ -1355,6 +1355,7 @@ struct StatisticsView: View {
                 AppearanceSettingsPicker(
                     useDarkAppearance: $settings.useDarkAppearance,
                     colorTheme: $settings.colorTheme,
+                    useHighSaturationTheme: $settings.useHighSaturationTheme,
                     language: store.language
                 )
                 SettingsToggleRow(
@@ -4313,6 +4314,7 @@ private struct SettingsGroup<Content: View>: View {
 private struct AppearanceSettingsPicker: View {
     @Binding var useDarkAppearance: Bool
     @Binding var colorTheme: AgentBarColorTheme
+    @Binding var useHighSaturationTheme: Bool
     var language: AppLanguage
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
@@ -4377,7 +4379,7 @@ private struct AppearanceSettingsPicker: View {
         } label: {
             VStack(spacing: 7) {
                 Circle()
-                    .fill(theme.color)
+                    .fill(theme.color(highSaturation: useHighSaturationTheme))
                     .frame(width: 30, height: 30)
                     .overlay {
                         Circle().strokeBorder(Color.primary.opacity(0.14), lineWidth: 1)

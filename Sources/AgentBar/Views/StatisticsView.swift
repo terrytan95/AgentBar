@@ -319,6 +319,7 @@ struct StatisticsView: View {
 
             ViewThatFits(in: .horizontal) {
                 topNavigationItems(showsTitles: true)
+                    .frame(minWidth: 720)
                 topNavigationItems(showsTitles: false)
             }
             .padding(.horizontal, 44)

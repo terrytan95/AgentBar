@@ -3053,6 +3053,9 @@ private struct QuotaPressurePanel: View {
 
             Spacer(minLength: 18)
 
+            metricLabel(language == .chinese ? "周额度容量估算趋势" : "Estimated weekly capacity trend")
+                .padding(.bottom, 8)
+
             QuotaPressureSparkline(values: sparklineValues)
                 .frame(height: 72)
         }

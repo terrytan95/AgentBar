@@ -4519,7 +4519,7 @@ private struct ProviderSettingsCard: View {
     var action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 Image(nsImage: ProviderIcon.image(for: service))
                     .renderingMode(.template)
@@ -4570,8 +4570,9 @@ private struct ProviderSettingsCard: View {
                 .pointingHandCursor()
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
         .agentBarPanel()
     }
 }

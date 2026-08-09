@@ -1358,6 +1358,11 @@ struct StatisticsView: View {
                     language: store.language
                 )
                 SettingsToggleRow(
+                    title: L.text("high_saturation_theme", store.language),
+                    subtitle: L.text("high_saturation_theme_subtitle", store.language),
+                    isOn: $settings.useHighSaturationTheme
+                )
+                SettingsToggleRow(
                     title: L.text("translucent", store.language),
                     subtitle: L.text("translucent_subtitle", store.language),
                     isOn: $settings.useTranslucentAppearance

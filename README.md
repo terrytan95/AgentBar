@@ -10,35 +10,6 @@ A native macOS menu bar companion for Codex, Claude Code, and Grok usage, quotas
 
 [English](#english) · [简体中文](#zh-cn) · [Install / 安装](#install--安装) · [Build / 构建](#build-from-source--从源码构建)
 
-## Screenshots / 截图
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="screenshots/agentbar-overview-dashboard.png" alt="AgentBar overview dashboard showing usage, quota pressure, and activity charts">
-    </td>
-    <td width="50%">
-      <img src="screenshots/agentbar-resets.png" alt="AgentBar resets page showing quota windows, reset credits, and account state">
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="screenshots/agentbar-audit.png" alt="AgentBar audit page showing local threads, performance, and token details">
-    </td>
-    <td width="50%">
-      <img src="screenshots/agentbar-settings.png" alt="AgentBar settings page showing accounts, menu bar options, budgets, and refresh settings">
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="screenshots/agentbar-quota-widget-en.png" alt="AgentBar floating quota widget in English showing weekly quota, reset time, reset credits, and credential expiry">
-    </td>
-    <td width="50%">
-      <img src="screenshots/agentbar-quota-widget.png" alt="AgentBar floating quota widget in Simplified Chinese showing weekly quota, reset time, reset credits, and credential expiry">
-    </td>
-  </tr>
-</table>
-
 <a id="english"></a>
 
 ## English

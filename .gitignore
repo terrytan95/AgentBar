@@ -21,14 +21,8 @@ paseo.json
 .codegraph/
 .foglamp/
 
-# Screenshots: keep README product shots only
-screenshots/*
-!screenshots/agentbar-overview-dashboard.png
-!screenshots/agentbar-settings.png
-!screenshots/agentbar-audit.png
-!screenshots/agentbar-resets.png
-!screenshots/agentbar-quota-widget.png
-!screenshots/agentbar-quota-widget-en.png
+# Local screenshots
+screenshots/
 
 # OS noise
 **/.DS_Store

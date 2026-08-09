@@ -10,6 +10,36 @@ A native macOS menu bar companion for Codex, Claude Code, and Grok usage, quotas
 
 [English](#english) · [简体中文](#zh-cn) · [Install / 安装](#install--安装) · [Build / 构建](#build-from-source--从源码构建)
 
+## Screenshots / 截图
+
+<table>
+  <tr>
+    <th width="50%">简体中文</th>
+    <th width="50%">English</th>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><strong>Overview / 概览</strong></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/overview-zh.png" alt="AgentBar 中文概览"></td>
+    <td><img src="screenshots/overview-en.png" alt="AgentBar overview in English"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><strong>Settings / 设置</strong></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/settings-zh.png" alt="AgentBar 中文设置"></td>
+    <td><img src="screenshots/settings-en.png" alt="AgentBar settings in English"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><strong>Weekly quota / 每周额度</strong></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/weekly-quota-zh.png" alt="AgentBar 中文每周额度详情"></td>
+    <td><img src="screenshots/weekly-quota-en.png" alt="AgentBar weekly quota details in English"></td>
+  </tr>
+</table>
+
 <a id="english"></a>
 
 ## English

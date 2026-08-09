@@ -21,8 +21,14 @@ paseo.json
 .codegraph/
 .foglamp/
 
-# Local screenshots
-screenshots/
+# Screenshots: keep README product shots only
+screenshots/*
+!screenshots/overview-en.png
+!screenshots/overview-zh.png
+!screenshots/settings-en.png
+!screenshots/settings-zh.png
+!screenshots/weekly-quota-en.png
+!screenshots/weekly-quota-zh.png
 
 # OS noise
 **/.DS_Store

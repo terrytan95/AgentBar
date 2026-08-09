@@ -41,6 +41,8 @@ struct StatisticsView: View {
     @State private var settingsSection: SettingsSection = .accounts
     @State private var showsAdvancedRefreshSettings = false
     @State private var dismissedUpdateVersion: String?
+    @State private var usesCompactNavigation = false
+    @State private var stacksActivityPanels = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -60,19 +62,11 @@ struct StatisticsView: View {
 
     var body: some View {
         Group {
-            if showsSidebarNavigation {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 0) {
-                        sidebar
-                            .frame(width: 236)
-                        contentColumn
-                    }
-                    .frame(minWidth: 900)
-
-                    VStack(spacing: 0) {
-                        topNavigationBar
-                        contentColumn
-                    }
+            if showsSidebarNavigation && !usesCompactNavigation {
+                HStack(spacing: 0) {
+                    sidebar
+                        .frame(width: 236)
+                    contentColumn
                 }
             } else {
                 VStack(spacing: 0) {
@@ -81,6 +75,9 @@ struct StatisticsView: View {
                 }
             }
         }
+        .onGeometryChange(for: Bool.self) { proxy in
+            proxy.size.width < 900
+        } action: { usesCompactNavigation = $0 }
         .tint(AgentBarPalette.primary)
         .background(
             settings.useTranslucentAppearance
@@ -758,28 +755,20 @@ struct StatisticsView: View {
             .agentBarPanel(cornerRadius: 16)
 
             if settings.showQuotaPressureSection {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 14) {
-                        dashboardActivityPanels
-                            .frame(minWidth: 640)
-                        QuotaPressurePanel(
-                            pressure: quotaPressure,
-                            history: store.quotaCapacityHistory,
-                            language: store.language
-                        )
-                        .frame(width: 230)
-                        .frame(maxHeight: .infinity)
-                    }
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        dashboardActivityPanels
-                        QuotaPressurePanel(
-                            pressure: quotaPressure,
-                            history: store.quotaCapacityHistory,
-                            language: store.language
-                        )
-                    }
+                activityPanelsLayout {
+                    dashboardActivityPanels
+                        .frame(minWidth: stacksActivityPanels ? nil : 640)
+                    QuotaPressurePanel(
+                        pressure: quotaPressure,
+                        history: store.quotaCapacityHistory,
+                        language: store.language
+                    )
+                    .frame(width: stacksActivityPanels ? nil : 230)
+                    .frame(maxHeight: stacksActivityPanels ? nil : .infinity)
                 }
+                .onGeometryChange(for: Bool.self) { proxy in
+                    proxy.size.width < 884
+                } action: { stacksActivityPanels = $0 }
             } else {
                 dashboardActivityPanels
             }
@@ -809,6 +798,12 @@ struct StatisticsView: View {
                 currentLimitsRows
             }
         }
+    }
+
+    private var activityPanelsLayout: AnyLayout {
+        stacksActivityPanels
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
     }
 
     private var dashboardActivityPanels: some View {

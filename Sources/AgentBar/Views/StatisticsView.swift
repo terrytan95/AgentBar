@@ -3031,7 +3031,7 @@ private struct QuotaPressurePanel: View {
                 .foregroundStyle(severityColor)
                 .padding(.top, 16)
 
-            metricLabel(language == .chinese ? "预估剩余 Token 额度" : "Estimated tokens left")
+            metricLabel(language == .chinese ? "当前账号预估 Token 剩余额度" : "Estimated remaining token quota for current account")
                 .padding(.top, 14)
             Text(estimatedRemainingTokensText)
                 .font(.agentBar(size: 21, weight: .bold))

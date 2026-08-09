@@ -2353,6 +2353,7 @@ private struct YearActivityPanel: View {
     var language: AppLanguage
     @State private var hoveredBarID: Date?
     @State private var hoverLocation: CGPoint?
+    @State private var heatmapContentHeight: CGFloat = 192
     @Environment(\.colorScheme) private var colorScheme
 
     private let spacing: CGFloat = 4
@@ -2369,7 +2370,11 @@ private struct YearActivityPanel: View {
     }
 
     private var heatmapBody: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let cellCount = activityCells.count
+        let layoutSpacing = spacing
+        let layoutDayLabelWidth = dayLabelWidth
+
+        return VStack(alignment: .leading, spacing: 16) {
             summaryHeader
 
             GeometryReader { proxy in
@@ -2443,8 +2448,32 @@ private struct YearActivityPanel: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(height: 192)
+            .frame(height: heatmapContentHeight)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                Self.heatmapContentHeight(
+                    width: proxy.size.width,
+                    cellCount: cellCount,
+                    spacing: layoutSpacing,
+                    dayLabelWidth: layoutDayLabelWidth
+                )
+            } action: { heatmapContentHeight = $0 }
         }
+    }
+
+    private nonisolated static func heatmapContentHeight(
+        width: CGFloat,
+        cellCount: Int,
+        spacing: CGFloat,
+        dayLabelWidth: CGFloat
+    ) -> CGFloat {
+        let columns = max(1, Int(ceil(Double(cellCount) / 7.0)))
+        let availableWidth = max(1, width - dayLabelWidth - 10)
+        let cellSize = max(
+            7,
+            min(18, (availableWidth - CGFloat(max(0, columns - 1)) * spacing) / CGFloat(columns))
+        )
+        let gridHeight = cellSize * 7 + spacing * 6
+        return 14 + 8 + gridHeight + 8 + 14
     }
 
     @ViewBuilder

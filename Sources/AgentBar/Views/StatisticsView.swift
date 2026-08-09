@@ -3097,6 +3097,7 @@ private struct QuotaPressurePanel: View {
                 filled: false,
                 markerTopPadding: 16
             )
+            .padding(.top, 8)
 
             Text(gapText)
                 .font(.agentBar(size: 10, weight: .bold))
@@ -3131,7 +3132,7 @@ private struct QuotaPressurePanel: View {
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
-                .fill(filled ? AgentBarPalette.primary : AgentBarDesign.cardBackground)
+                .fill(filled ? AgentBarPalette.primary : Color(nsColor: .controlBackgroundColor))
                 .overlay {
                     Circle()
                         .strokeBorder(AgentBarPalette.primary, lineWidth: 1.5)

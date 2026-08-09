@@ -128,6 +128,10 @@ final class SettingsStore: ObservableObject {
         didSet { persist(useDarkAppearance, forKey: Keys.useDarkAppearance) }
     }
 
+    @Published var colorTheme: AgentBarColorTheme {
+        didSet { persist(colorTheme.rawValue, forKey: Keys.colorTheme) }
+    }
+
     @Published var useTranslucentAppearance: Bool {
         didSet { persist(useTranslucentAppearance, forKey: Keys.useTranslucentAppearance) }
     }
@@ -318,6 +322,7 @@ final class SettingsStore: ObservableObject {
         showGrokInMenuBar = defaults.object(forKey: Keys.showGrokInMenuBar) as? Bool ?? true
         showCursorAgentInMenuBar = defaults.object(forKey: Keys.showCursorAgentInMenuBar) as? Bool ?? true
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
+        colorTheme = AgentBarColorTheme(rawValue: defaults.string(forKey: Keys.colorTheme) ?? "") ?? .classic
         useTranslucentAppearance = defaults.object(forKey: Keys.useTranslucentAppearance) as? Bool ?? true
         accountSortMode = AccountSortMode(rawValue: defaults.string(forKey: Keys.accountSortMode) ?? "") ?? .quotaPressure
         showAggregatedAccountData = defaults.object(forKey: Keys.showAggregatedAccountData) as? Bool ?? false
@@ -500,6 +505,7 @@ final class SettingsStore: ObservableObject {
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let didRestoreActiveAccountMenuBarDefault = "didRestoreActiveAccountMenuBarDefault"
         static let useDarkAppearance = "useDarkAppearance"
+        static let colorTheme = AgentBarColorTheme.storageKey
         static let useTranslucentAppearance = "useTranslucentAppearance"
         static let accountSortMode = "accountSortMode"
         static let showAggregatedAccountData = "showAggregatedAccountData"
@@ -540,6 +546,7 @@ final class SettingsStore: ObservableObject {
             didMigrateActiveAccountMenuBarDefault,
             didRestoreActiveAccountMenuBarDefault,
             useDarkAppearance,
+            colorTheme,
             useTranslucentAppearance,
             accountSortMode,
             showAggregatedAccountData,

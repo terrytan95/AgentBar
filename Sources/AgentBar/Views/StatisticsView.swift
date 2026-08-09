@@ -1352,15 +1352,11 @@ struct StatisticsView: View {
                     .settingsControl(width: settingsControlMediumPickerWidth)
                     .accessibilityLabel(L.text("language", store.language))
                 }
-                SettingsRow(title: L.text("appearance", store.language), subtitle: L.text("appearance_subtitle", store.language)) {
-                    Picker("", selection: $settings.useDarkAppearance) {
-                        Text(L.text("follow_system", store.language)).tag(false)
-                        Text(L.text("dark_theme", store.language)).tag(true)
-                    }
-                    .labelsHidden()
-                    .settingsControl(width: settingsControlMediumPickerWidth)
-                    .accessibilityLabel(L.text("appearance", store.language))
-                }
+                AppearanceSettingsPicker(
+                    useDarkAppearance: $settings.useDarkAppearance,
+                    colorTheme: $settings.colorTheme,
+                    language: store.language
+                )
                 SettingsToggleRow(
                     title: L.text("translucent", store.language),
                     subtitle: L.text("translucent_subtitle", store.language),
@@ -4306,6 +4302,106 @@ private struct SettingsGroup<Content: View>: View {
             .agentBarPanel()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct AppearanceSettingsPicker: View {
+    @Binding var useDarkAppearance: Bool
+    @Binding var colorTheme: AgentBarColorTheme
+    var language: AppLanguage
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L.text("appearance", language))
+                    .font(.agentBar(size: 13, weight: .semibold))
+                Text(L.text("appearance_subtitle", language))
+                    .font(.agentBar(size: 11))
+                    .foregroundStyle(Color.primary.opacity(0.62))
+            }
+
+            HStack(spacing: 4) {
+                appearanceButton(title: L.text("theme_light", language), systemImage: "sun.max.fill", dark: false)
+                appearanceButton(title: L.text("theme_dark", language), systemImage: "moon.fill", dark: true)
+            }
+            .padding(4)
+            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            Divider()
+
+            Text(L.text("theme_color", language))
+                .font(.agentBar(size: 12, weight: .semibold))
+                .foregroundStyle(Color.primary.opacity(0.70))
+
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(AgentBarColorTheme.allCases) { theme in
+                    colorButton(theme)
+                }
+            }
+        }
+        .settingsRowStyle()
+    }
+
+    private func appearanceButton(title: String, systemImage: String, dark: Bool) -> some View {
+        let selected = useDarkAppearance == dark
+        return Button {
+            useDarkAppearance = dark
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.agentBar(size: 12, weight: .semibold))
+                .foregroundStyle(selected ? AgentBarPalette.primary : Color.primary.opacity(0.76))
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .background(
+                    selected ? AgentBarDesign.cardBackground : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
+        }
+        .tactilePlainButton()
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func colorButton(_ theme: AgentBarColorTheme) -> some View {
+        let selected = colorTheme == theme
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return Button {
+            colorTheme = theme
+        } label: {
+            VStack(spacing: 7) {
+                Circle()
+                    .fill(theme.color)
+                    .frame(width: 30, height: 30)
+                    .overlay {
+                        Circle().strokeBorder(Color.primary.opacity(0.14), lineWidth: 1)
+                    }
+                Text(theme.title(language))
+                    .font(.agentBar(size: 11, weight: .semibold))
+                    .foregroundStyle(selected ? Color.primary : Color.primary.opacity(0.68))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .frame(maxWidth: .infinity, minHeight: 72)
+            .background(selected ? AgentBarPalette.primary.opacity(0.12) : Color.clear, in: shape)
+            .overlay {
+                shape.strokeBorder(
+                    selected ? AgentBarPalette.primary : Color.primary.opacity(0.12),
+                    lineWidth: selected ? 1.5 : 1
+                )
+            }
+            .overlay(alignment: .topTrailing) {
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(AgentBarPalette.primary)
+                        .padding(8)
+                }
+            }
+        }
+        .tactilePlainButton()
+        .accessibilityLabel(theme.title(language))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

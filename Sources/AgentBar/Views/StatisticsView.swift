@@ -3001,8 +3001,8 @@ private struct QuotaPressurePanel: View {
                 .foregroundStyle(severityColor)
                 .padding(.top, 16)
 
-            metricLabel(language == .chinese ? "预计支撑" : "Estimated runway")
-                .padding(.top, 20)
+            metricLabel(language == .chinese ? "预计可用" : "Available for")
+                .padding(.top, 14)
             Text(supportText)
                 .font(.agentBar(size: 21, weight: .bold))
                 .monospacedDigit()
@@ -3020,48 +3020,228 @@ private struct QuotaPressurePanel: View {
             .frame(height: 6)
             .padding(.top, 12)
 
-            metricLabel(language == .chinese ? "基于用量估算" : "Based on usage")
-                .padding(.top, 8)
-
-            metricLabel(localized("weekly"))
-                .padding(.top, 22)
-            Text(weeklyEstimateText)
-                .font(.agentBar(size: 17, weight: .bold))
-                .monospacedDigit()
-                .padding(.top, 5)
-
-            metricLabel(localized("samples"))
-                .padding(.top, 18)
-            Text("\(history.samples.count)")
-                .font(.agentBar(size: 17, weight: .bold))
-                .monospacedDigit()
-                .padding(.top, 5)
-
-            metricLabel(language == .chinese ? "置信度" : "Confidence")
-                .padding(.top, 20)
-            HStack(spacing: 6) {
-                Text(confidenceTitle)
-                    .font(.agentBar(size: 12, weight: .bold))
-                Spacer()
-                ForEach(0..<5, id: \.self) { index in
-                    Circle()
-                        .fill(AgentBarPalette.primary.opacity(index < confidenceLevel ? 1 : 0.32))
-                        .frame(width: 7, height: 7)
-                }
+            HStack(spacing: 8) {
+                metricLabel(language == .chinese ? "基于用量估算" : "Based on usage")
+                Spacer(minLength: 0)
+                Text("\(DisplayFormatters.percentString(remainingProgress * 100)) \(language == .chinese ? "剩余" : "left")")
+                    .font(.agentBar(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
-            .padding(.top, 6)
+            .padding(.top, 8)
+
+            runwayTimeline
+                .padding(.top, 20)
+
+            Divider()
+                .padding(.top, 18)
+
+            if let fiveHourWindow = pressure.activeAccount?.fiveHourWindow {
+                quotaWindowRow(fiveHourWindow)
+                    .padding(.vertical, 12)
+                Divider()
+            }
+
+            if let weeklyWindow = pressure.activeAccount?.weeklyWindow {
+                quotaWindowRow(weeklyWindow)
+                    .padding(.vertical, 12)
+            }
 
             Spacer(minLength: 18)
 
             metricLabel(language == .chinese ? "周额度容量估算趋势" : "Estimated weekly capacity trend")
                 .padding(.bottom, 8)
 
-            QuotaPressureSparkline(values: sparklineValues)
-                .frame(height: 72)
+            if sparklineValues.count > 1 {
+                QuotaPressureSparkline(values: sparklineValues)
+                    .frame(height: 64)
+            } else {
+                Text(language == .chinese ? "等待容量样本" : "Waiting for capacity samples")
+                    .font(.agentBar(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .center)
+            }
+
+            Button {
+                showsDetails = true
+            } label: {
+                HStack(spacing: 5) {
+                    Text(language == .chinese ? "查看额度详情" : "View quota details")
+                    Image(systemName: "arrow.right")
+                        .font(.agentBar(size: 9, weight: .bold))
+                }
+                .font(.agentBar(size: 10, weight: .bold))
+                .foregroundStyle(AgentBarPalette.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .tactilePlainButton()
+            .padding(.top, 10)
         }
         .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .agentBarPanel()
+    }
+
+    private var runwayTimeline: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            timelineMilestone(
+                title: localized("now"),
+                detail: currentUsageText,
+                filled: true
+            )
+            timelineConnector()
+            timelineMilestone(
+                title: language == .chinese ? "预计耗尽" : "Estimated exhaustion",
+                detail: projectedExhaustionText,
+                filled: false
+            )
+
+            Text(gapText)
+                .font(.agentBar(size: 10, weight: .bold))
+                .foregroundStyle(gapColor)
+                .padding(.horizontal, 10)
+                .frame(height: 26)
+                .background(gapColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .padding(.leading, 32)
+                .padding(.vertical, 8)
+
+            timelineConnector()
+            timelineMilestone(
+                title: language == .chinese ? "额度重置" : "Quota reset",
+                detail: resetText,
+                filled: true
+            )
+        }
+    }
+
+    private func timelineMilestone(title: String, detail: String, filled: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(filled ? AgentBarPalette.primary : AgentBarDesign.cardBackground)
+                .overlay {
+                    Circle()
+                        .strokeBorder(AgentBarPalette.primary, lineWidth: 1.5)
+                }
+                .frame(width: 12, height: 12)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.agentBar(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text(detail)
+                    .font(.agentBar(size: 12, weight: .bold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+        }
+    }
+
+    private func timelineConnector() -> some View {
+        Rectangle()
+            .fill(AgentBarPalette.primary.opacity(0.70))
+            .frame(width: 1.5, height: 18)
+            .padding(.leading, 5.25)
+    }
+
+    private func quotaWindowRow(_ window: UsageWindow) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Text(window.kind == .fiveHour ? L.text("five_hour", language) : localized("weekly"))
+                    .font(.agentBar(size: 10, weight: .bold))
+                Spacer(minLength: 0)
+                Text("\(DisplayFormatters.percentString(window.remainingPercent)) \(language == .chinese ? "剩余" : "left")")
+                    .font(.agentBar(size: 10, weight: .bold))
+                    .monospacedDigit()
+            }
+
+            Text(window.resetLine(language: language))
+                .font(.agentBar(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+    }
+
+    private var projectedRisk: (date: Date, window: UsageWindow)? {
+        let pairs: [(Date?, UsageWindow?)] = [
+            (pressure.projectedFiveHourExhaustion, pressure.activeAccount?.fiveHourWindow),
+            (pressure.projectedWeeklyExhaustion, pressure.activeAccount?.weeklyWindow)
+        ]
+        return pairs
+            .compactMap { date, window -> (date: Date, window: UsageWindow)? in
+                guard let date, let window else { return nil }
+                guard window.resetsAt.map({ date < $0 }) ?? true else { return nil }
+                return (date, window)
+            }
+            .min { $0.date < $1.date }
+    }
+
+    private var timelineWindow: UsageWindow? {
+        projectedRisk?.window ?? [
+            pressure.activeAccount?.fiveHourWindow,
+            pressure.activeAccount?.weeklyWindow
+        ]
+        .compactMap { $0 }
+        .min { $0.remainingPercent < $1.remainingPercent }
+    }
+
+    private var currentUsageText: String {
+        let time = DisplayFormatters.localizedDateString(
+            for: Date(),
+            template: "HH:mm",
+            language: language
+        )
+        let used = DisplayFormatters.percentString(timelineWindow?.usedPercent)
+        return language == .chinese ? "\(time) · 已用 \(used)" : "\(time) · \(used) used"
+    }
+
+    private var projectedExhaustionText: String {
+        guard let date = projectedRisk?.date else {
+            return language == .chinese ? "暂无耗尽风险" : "No risk projected"
+        }
+        return compactDateTime(date)
+    }
+
+    private var resetText: String {
+        guard let date = timelineWindow?.resetsAt else {
+            return language == .chinese ? "时间未知" : "Time unknown"
+        }
+        return compactDateTime(date)
+    }
+
+    private var gapText: String {
+        guard let exhaustion = projectedRisk?.date,
+              let reset = projectedRisk?.window.resetsAt,
+              reset > exhaustion
+        else {
+            return language == .chinese ? "预计可撑过重置" : "Expected to reach reset"
+        }
+        let duration = durationText(reset.timeIntervalSince(exhaustion))
+        return language == .chinese ? "可能中断 \(duration)" : "Possible gap \(duration)"
+    }
+
+    private var gapColor: Color {
+        projectedRisk == nil ? .green : severityColor
+    }
+
+    private func compactDateTime(_ date: Date) -> String {
+        DisplayFormatters.localizedDateString(
+            for: date,
+            template: "MMM d HH:mm",
+            language: language
+        )
+    }
+
+    private func durationText(_ interval: TimeInterval) -> String {
+        let minutes = max(1, Int(ceil(interval / 60)))
+        guard minutes >= 60 else {
+            return language == .chinese ? "\(minutes) 分钟" : "\(minutes) min"
+        }
+        let hours = Int(ceil(Double(minutes) / 60))
+        return language == .chinese ? "\(hours) 小时" : "\(hours) hr"
     }
 
     private var severityColor: Color {
@@ -3084,9 +3264,7 @@ private struct QuotaPressurePanel: View {
     }
 
     private var supportText: String {
-        let date = pressure.projectedFiveHourExhaustion
-            ?? pressure.activeAccount?.fiveHourWindow?.resetsAt
-            ?? pressure.projectedWeeklyExhaustion
+        let date = projectedRisk?.date ?? timelineWindow?.resetsAt
         guard let date else { return "--" }
         let hours = max(1, Int(ceil(date.timeIntervalSinceNow / 3_600)))
         return language == .chinese ? "\(hours) 小时" : "\(hours) hr"
@@ -3102,45 +3280,14 @@ private struct QuotaPressurePanel: View {
         return min(max(remaining / 100, 0), 1)
     }
 
-    private var weeklyEstimateText: String {
-        guard let sample = history.latestEstimate, let estimate = sample.estimatedWeeklyTotalTokens else { return "-- / --" }
-        let usedPercent = sample.weeklyUsedPercent ?? 0
-        let used = Int((Double(estimate) * usedPercent / 100).rounded())
-        return "\(tokenText(used)) / \(tokenText(estimate))"
-    }
-
     private var sparklineValues: [Int] {
         history.samples.suffix(24).compactMap(\.estimatedWeeklyTotalTokens)
-    }
-
-    private var confidenceLevel: Int {
-        let estimateCount = history.samples.suffix(48).compactMap(\.estimatedWeeklyTotalTokens).count
-        switch estimateCount {
-        case 0..<4: return 2
-        case 4..<24: return 4
-        default: return 5
-        }
-    }
-
-    private var confidenceTitle: String {
-        switch (confidenceLevel, language) {
-        case (..<4, .chinese): "较低"
-        case (4, .chinese): "中等"
-        case (_, .chinese): "高"
-        case (..<4, _): "Low"
-        case (4, _): "Medium"
-        default: "High"
-        }
     }
 
     private func metricLabel(_ text: String) -> some View {
         Text(text)
             .font(.agentBar(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
-    }
-
-    private func tokenText(_ value: Int) -> String {
-        DisplayFormatters.compactTokenString(value, language: language)
     }
 
     private func localized(_ key: String) -> String {

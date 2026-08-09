@@ -3093,7 +3093,8 @@ private struct QuotaPressurePanel: View {
             timelineMilestone(
                 title: language == .chinese ? "预计耗尽" : "Estimated exhaustion",
                 detail: projectedExhaustionText,
-                filled: false
+                filled: false,
+                markerTopPadding: 16
             )
 
             Text(gapText)
@@ -3121,7 +3122,12 @@ private struct QuotaPressurePanel: View {
         }
     }
 
-    private func timelineMilestone(title: String, detail: String, filled: Bool) -> some View {
+    private func timelineMilestone(
+        title: String,
+        detail: String,
+        filled: Bool,
+        markerTopPadding: CGFloat = 2
+    ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
                 .fill(filled ? AgentBarPalette.primary : AgentBarDesign.cardBackground)
@@ -3130,7 +3136,7 @@ private struct QuotaPressurePanel: View {
                         .strokeBorder(AgentBarPalette.primary, lineWidth: 1.5)
                 }
                 .frame(width: 12, height: 12)
-                .padding(.top, 2)
+                .padding(.top, markerTopPadding)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)

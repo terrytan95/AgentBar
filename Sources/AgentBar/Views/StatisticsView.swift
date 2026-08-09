@@ -4571,7 +4571,7 @@ private struct ProviderSettingsCard: View {
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
         .agentBarPanel()
     }
 }

@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appearanceCancellable = settings.$useDarkAppearance
             .removeDuplicates()
             .sink { useDarkAppearance in
-                NSApp.appearance = useDarkAppearance ? NSAppearance(named: .darkAqua) : nil
+                NSApp.appearance = NSAppearance(named: useDarkAppearance ? .darkAqua : .aqua)
             }
 
         if let reportURL = smokeReportURL() {

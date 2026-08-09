@@ -154,7 +154,7 @@ final class StatusItemController: NSObject {
         }
     }
 
-    /// Matches `AgentBarApp` appearance policy: forced dark when enabled, otherwise system.
+    /// Matches `AgentBarApp` appearance policy: explicitly light or dark.
     private static func resolvedAppAppearance() -> NSAppearance {
         NSApp.appearance ?? NSApp.effectiveAppearance
     }

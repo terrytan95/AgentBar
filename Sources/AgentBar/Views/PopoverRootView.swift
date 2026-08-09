@@ -143,6 +143,7 @@ struct PopoverRootView: View {
             opaqueBackground: AnyShapeStyle(Color(nsColor: .windowBackgroundColor)),
             cornerRadius: 0
         )
+        .tint(AgentBarPalette.primary)
         .onDisappear {
             isConfirmingQuit = false
         }

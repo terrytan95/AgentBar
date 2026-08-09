@@ -91,6 +91,7 @@ final class SettingsPersistenceTests: XCTestCase {
             "showClaudeInMenuBar": false,
             "didMigrateActiveAccountMenuBarDefault": true,
             "useDarkAppearance": true,
+            AgentBarColorTheme.storageKey: AgentBarColorTheme.lakeGray.rawValue,
             "useTranslucentAppearance": false,
             "accountSortMode": AccountSortMode.alphabetical.rawValue,
             "showAggregatedAccountData": true,
@@ -136,6 +137,7 @@ final class SettingsPersistenceTests: XCTestCase {
         XCTAssertTrue(restored.didCompleteQuotaWidgetOnboarding)
         XCTAssertFalse(restored.showClaudeInMenuBar)
         XCTAssertTrue(restored.useDarkAppearance)
+        XCTAssertEqual(restored.colorTheme, .lakeGray)
         XCTAssertFalse(restored.useTranslucentAppearance)
         XCTAssertEqual(restored.accountSortMode, .alphabetical)
         XCTAssertTrue(restored.showAggregatedAccountData)

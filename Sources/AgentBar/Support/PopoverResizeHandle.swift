@@ -23,6 +23,7 @@ struct PopoverResizeHandle: NSViewRepresentable {
 
 final class PopoverResizeHandleView: NSView {
     private static let minimumIntermediateDelta: CGFloat = 2
+    private static let resizeInterval = 1.0 / 60.0
 
     var startHeight: CGFloat = PopoverLayout.defaultHeight
     var minHeight: CGFloat = PopoverLayout.minimumHeight
@@ -32,6 +33,8 @@ final class PopoverResizeHandleView: NSView {
     private var dragStartHeight: CGFloat?
     private var dragStartScreenY: CGFloat?
     private var lastEmittedHeight: CGFloat?
+    private var pendingHeight: CGFloat?
+    private var pendingResize: DispatchWorkItem?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -40,6 +43,9 @@ final class PopoverResizeHandleView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        pendingResize?.cancel()
+        pendingResize = nil
+        pendingHeight = nil
         dragStartHeight = startHeight
         dragStartScreenY = NSEvent.mouseLocation.y
         lastEmittedHeight = nil
@@ -59,10 +65,28 @@ final class PopoverResizeHandleView: NSView {
         guard let dragStartHeight, let dragStartScreenY else { return }
         let translation = dragStartScreenY - NSEvent.mouseLocation.y
         let nextHeight = min(max(dragStartHeight + translation, minHeight), maxHeight)
-        guard isFinal ||
-            lastEmittedHeight.map({ abs($0 - nextHeight) >= Self.minimumIntermediateDelta }) ?? true
-        else { return }
-        lastEmittedHeight = nextHeight
-        onHeightChange?(nextHeight, isFinal)
+        if isFinal {
+            pendingResize?.cancel()
+            pendingResize = nil
+            pendingHeight = nil
+            lastEmittedHeight = nextHeight
+            onHeightChange?(nextHeight, true)
+            return
+        }
+        guard lastEmittedHeight.map({ abs($0 - nextHeight) >= Self.minimumIntermediateDelta }) ?? true else {
+            return
+        }
+        pendingHeight = nextHeight
+        guard pendingResize == nil else { return }
+
+        let resize = DispatchWorkItem { [weak self] in
+            guard let self, let height = pendingHeight else { return }
+            pendingResize = nil
+            pendingHeight = nil
+            lastEmittedHeight = height
+            onHeightChange?(height, false)
+        }
+        pendingResize = resize
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.resizeInterval, execute: resize)
     }
 }

@@ -32,7 +32,7 @@ A native macOS menu bar companion for Codex, Claude Code, and Grok usage, quotas
     <td><img src="screenshots/settings-en.png" alt="AgentBar settings in English"></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><strong>Weekly quota / 每周额度</strong></td>
+    <td colspan="2" align="center"><strong>Floating window / 浮动小窗</strong></td>
   </tr>
   <tr>
     <td><img src="screenshots/weekly-quota-zh.png" alt="AgentBar 中文每周额度详情"></td>

@@ -2358,7 +2358,7 @@ private struct YearActivityPanel: View {
 
     private let spacing: CGFloat = 4
     private let dayLabelWidth: CGFloat = 34
-    private let calloutSize = CGSize(width: 238, height: 126)
+    private let calloutSize = CGSize(width: 238, height: 146)
     private var calendar: Calendar { .current }
 
     var body: some View {

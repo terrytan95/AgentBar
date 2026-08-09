@@ -49,6 +49,7 @@ AgentBar turns the usage data already available on your Mac into a compact menu 
 
 - **Menu bar at a glance:** show the active account's 5-hour and weekly windows, the lowest remaining quota, total tokens, or Codex-only remaining quota. The popover is vertically resizable.
 - **Codex accounts:** view, sort, switch, add, remove, and recover local accounts. Optional automatic rotation switches away from a low-quota account while avoiding a Codex restart during active CLI work.
+- **CLIProxyAPI auth reuse:** optionally reuse valid Codex access and ID tokens from an existing CLIProxyAPI installation for quota monitoring and account switching, avoiding another browser login while those tokens remain valid.
 - **Quota visibility:** track 5-hour and weekly windows, reset times, reset credits, quota pressure, capacity history, and access-token expiry.
 - **Grok subscription usage:** use the existing Grok CLI login to show the plan, included-credit usage, reset timing, prepaid balance, and on-demand spend. No xAI Management API key or team ID is required.
 - **Codex sidebar widget:** attach a quota card to the Codex sidebar or use it as an independent floating panel. See the active quota window's remaining percentage, progress, exact reset time and countdown, reset credits, and access-token expiry at a glance. The widget supports edge snapping, resizing, and a configurable global shortcut.
@@ -61,13 +62,13 @@ AgentBar turns the usage data already available on your Mac into a compact menu 
 
 ### Data sources and privacy
 
-AgentBar has no separate analytics backend. Network access is limited to the ChatGPT usage endpoints for the active Codex account, the same Grok CLI proxy endpoints used by the official CLI for subscription usage, and GitHub for update checks and downloads.
+AgentBar has no separate analytics backend. Network access is limited to the ChatGPT usage endpoints for configured Codex accounts, the same Grok CLI proxy endpoints used by the official CLI for subscription usage, and GitHub for update checks and downloads.
 
 - `~/.codex/sessions/**/*.jsonl` supplies local usage, task, model, token, and performance records. Source session files are not modified.
 - `~/.claude/projects/**/*.jsonl` supplies Claude Code model, token, project, and estimated-cost records. Prompts, replies, tool output, and credentials are not extracted or retained.
 - `~/.grok/auth.json` supplies the existing Grok CLI OAuth session used to request subscription quota and plan settings. AgentBar does not log or persist the token contents.
 - `~/.codex/accounts/registry.json`, `~/.codex/auth.json`, and per-account auth snapshots supply account identity, quota state, authentication health, and credential expiry. Token contents are used only when required for quota sync or account actions and are not retained in AgentBar reports.
-- With explicit opt-in, AgentBar can read CLIProxyAPI Codex access tokens in place for quota monitoring. It never writes those auth files or uses, copies, or persists their refresh tokens; CLIProxyAPI-only accounts are monitor-only.
+- With explicit opt-in, AgentBar scans CLIProxyAPI Codex credentials during quota refresh and uses valid access tokens in place. When switching accounts, it can write a short-lived access and ID token lease to Codex's own `~/.codex/auth.json`; CLIProxyAPI auth files stay read-only and refresh tokens are never copied. Select the account again after the lease expires.
 - Quota refresh and account-management actions can update Codex's local registry and auth snapshots. Parsed session metrics are cached under `~/Library/Caches/AgentBar/` for faster refreshes.
 - Audit exports contain aggregate metrics and derived thread labels, not full prompts, replies, or tool output.
 - Claude subscription quota and billing totals are not exposed by local session files; AgentBar reports local tokens and price-table estimates instead.
@@ -77,6 +78,7 @@ AgentBar has no separate analytics backend. Network access is limited to the Cha
 
 - macOS 14 Sonoma or later
 - A local Codex installation and login for Codex account/quota features
+- An existing CLIProxyAPI installation with valid Codex auth files for optional auth reuse
 - The official Grok CLI installed and signed in with `grok login` for Grok subscription usage (optional)
 - Accessibility permission only when attaching the quota widget to the Codex window; independent floating mode does not require it
 
@@ -86,7 +88,7 @@ AgentBar has no separate analytics backend. Network access is limited to the Cha
 2. Sign in with `grok login` if you want Grok subscription usage.
 3. Install and open AgentBar.
 4. Click the menu bar item to review accounts and quota windows.
-5. Open **Settings** to choose a language, display mode, refresh interval, notifications, budgets, dashboard ranking length, or the Codex sidebar widget.
+5. Open **Settings** to choose a language, display mode, refresh interval, notifications, budgets, dashboard ranking length, or the Codex sidebar widget. If you use CLIProxyAPI, enable **Reuse CLIProxyAPI auth** under **Account behavior**; leave its directory blank for automatic discovery.
 
 <a id="zh-cn"></a>
 
@@ -98,6 +100,7 @@ AgentBar 将 Mac 上已有的用量数据整理为简洁的菜单栏视图和完
 
 - **菜单栏概览：** 可显示当前账户的 5 小时与每周额度、最低剩余额度、Token 总量，或仅显示 Codex 剩余额度；弹窗支持垂直调整大小。
 - **Codex 多账户：** 查看、排序、切换、添加、移除和恢复本地账户。可选的自动轮换会在当前账户额度偏低时切换账户，并在 CLI 任务运行期间避免重启 Codex。
+- **CLIProxyAPI 授权复用：** 可选择复用现有 CLIProxyAPI 安装中的有效 Codex 访问令牌和 ID 令牌来监控额度并切换账号；令牌有效期间无需再次通过浏览器登录。
 - **额度追踪：** 查看 5 小时与每周额度窗口、重置时间、重置额度、额度压力、容量历史，以及访问令牌到期时间。
 - **Grok 订阅用量：** 使用已有的 Grok CLI 登录，查看套餐、包含额度用量、重置时间、预付余额和按量付费消耗；无需配置 xAI Management API Key 或 Team ID。
 - **Codex 侧边栏小组件：** 将额度卡片附加到 Codex 侧边栏，或作为独立悬浮面板使用；可一眼查看当前额度窗口的剩余百分比、进度、准确重置时间与倒计时、重置额度，以及访问令牌到期时间，并支持贴边、调整大小和自定义全局快捷键。
@@ -110,12 +113,13 @@ AgentBar 将 Mac 上已有的用量数据整理为简洁的菜单栏视图和完
 
 ### 数据来源与隐私
 
-AgentBar 没有独立的分析后端。网络访问仅用于通过当前 Codex 账户请求 ChatGPT 用量接口、通过 Grok 官方 CLI 使用的代理接口读取订阅用量，以及通过 GitHub 检查和下载更新。
+AgentBar 没有独立的分析后端。网络访问仅用于通过已配置的 Codex 账户请求 ChatGPT 用量接口、通过 Grok 官方 CLI 使用的代理接口读取订阅用量，以及通过 GitHub 检查和下载更新。
 
 - `~/.codex/sessions/**/*.jsonl` 提供本地用量、任务、模型、Token 与性能记录；AgentBar 不会修改这些会话源文件。
 - `~/.claude/projects/**/*.jsonl` 提供 Claude Code 的模型、Token、项目与预估费用记录；AgentBar 不提取或保留 prompt、回复、工具输出与凭证。
 - `~/.grok/auth.json` 提供已有的 Grok CLI OAuth 会话，用于请求订阅额度和套餐设置；AgentBar 不会记录或持久化其中的 Token 内容。
 - `~/.codex/accounts/registry.json`、`~/.codex/auth.json` 和各账户的认证快照用于识别账户、读取额度状态、认证健康状态与凭证到期时间。Token 内容只在同步额度或执行账户操作时使用，不会写入 AgentBar 报告。
+- 明确启用后，AgentBar 会在刷新额度时扫描 CLIProxyAPI 的 Codex 凭证，并直接使用仍然有效的访问令牌。切换账号时，AgentBar 可向 Codex 自己的 `~/.codex/auth.json` 写入短期的访问令牌与 ID 令牌租约；CLIProxyAPI 授权文件始终保持只读，且绝不复制刷新令牌。租约到期后重新选择该账号即可。
 - 额度刷新和账户管理操作可能更新 Codex 的本地注册表与认证快照。解析后的会话指标会缓存在 `~/Library/Caches/AgentBar/`，用于加快后续刷新。
 - 审计导出仅包含聚合指标和派生的线程标题，不包含完整 prompt、回复或工具输出。
 - Claude 订阅额度与账单总额不会写入本机会话文件；AgentBar 仅展示本地 Token 和按内置价格表计算的预估费用。
@@ -125,6 +129,7 @@ AgentBar 没有独立的分析后端。网络访问仅用于通过当前 Codex �
 
 - macOS 14 Sonoma 或更高版本
 - 如需使用 Codex 账户与额度功能，需要已在本机安装并登录 Codex
+- 如需选择性复用授权，需要已有 CLIProxyAPI 安装及有效的 Codex 授权文件
 - 如需查看 Grok 订阅用量，需要安装官方 Grok CLI 并运行 `grok login` 登录（可选）
 - 只有将额度小组件附加到 Codex 窗口时才需要“辅助功能”权限；独立悬浮模式不需要
 
@@ -134,7 +139,7 @@ AgentBar 没有独立的分析后端。网络访问仅用于通过当前 Codex �
 2. 如需查看 Grok 订阅用量，运行 `grok login`。
 3. 安装并打开 AgentBar。
 4. 点击菜单栏图标，查看账户与额度窗口。
-5. 打开**设置**，调整语言、显示模式、刷新间隔、通知、预算、榜单条数或 Codex 侧边栏小组件。
+5. 打开**设置**，调整语言、显示模式、刷新间隔、通知、预算、榜单条数或 Codex 侧边栏小组件。如使用 CLIProxyAPI，请在**账户行为**中启用**复用 CLIProxyAPI 授权**；目录留空即可自动发现。
 
 ## Install / 安装
 

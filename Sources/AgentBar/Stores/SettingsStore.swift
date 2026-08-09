@@ -268,12 +268,27 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    var popoverWidth: Double {
+        get { storedPopoverWidth }
+        set {
+            let width = Self.clampedPopoverWidth(newValue)
+            guard storedPopoverWidth != width else {
+                persist(width, forKey: Keys.popoverWidth)
+                return
+            }
+            objectWillChange.send()
+            storedPopoverWidth = width
+            persist(width, forKey: Keys.popoverWidth)
+        }
+    }
+
     @Published private(set) var loginItemMessage: String?
     @Published private(set) var settingsPersistenceError: SettingsPersistenceError?
 
     private let defaults: UserDefaults
     private let persistence: SettingsPersistence?
     private var persistenceWritesDisabled = false
+    private var storedPopoverWidth = Double(PopoverLayout.width)
     private var storedPopoverHeight = Double(PopoverLayout.defaultHeight)
     private var popoverMaximumHeight = Double(PopoverLayout.maximumHeight)
 
@@ -357,6 +372,10 @@ final class SettingsStore: ObservableObject {
         weeklyTokenBudget = Self.clampedBudgetCount(defaults.integer(forKey: Keys.weeklyTokenBudget))
         dailyCostBudgetUSD = Self.clampedBudgetCost(defaults.double(forKey: Keys.dailyCostBudgetUSD))
         weeklyCostBudgetUSD = Self.clampedBudgetCost(defaults.double(forKey: Keys.weeklyCostBudgetUSD))
+        let savedPopoverWidth = defaults.double(forKey: Keys.popoverWidth)
+        storedPopoverWidth = Self.clampedPopoverWidth(
+            savedPopoverWidth > 0 ? savedPopoverWidth : Double(PopoverLayout.width)
+        )
         let savedPopoverHeight = defaults.double(forKey: Keys.popoverHeight)
         storedPopoverHeight = Self.clampedPopoverHeight(
             savedPopoverHeight > 0 ? savedPopoverHeight : Double(PopoverLayout.defaultHeight),
@@ -365,6 +384,7 @@ final class SettingsStore: ObservableObject {
         persistence?.setErrorHandler { [weak self] error in
             self?.recordPersistenceError(error)
         }
+        persist(popoverWidth, forKey: Keys.popoverWidth)
         persist(popoverHeight, forKey: Keys.popoverHeight)
     }
 
@@ -379,6 +399,10 @@ final class SettingsStore: ObservableObject {
         maximumHeight: Double = Double(PopoverLayout.maximumHeight)
     ) -> Double {
         min(maximumHeight, max(Double(PopoverLayout.minimumHeight), height))
+    }
+
+    static func clampedPopoverWidth(_ width: Double) -> Double {
+        min(Double(PopoverLayout.maximumWidth), max(Double(PopoverLayout.minimumWidth), width))
     }
 
     static func clampedRotationThreshold(_ threshold: Double) -> Double {
@@ -531,6 +555,7 @@ final class SettingsStore: ObservableObject {
         static let weeklyTokenBudget = "weeklyTokenBudget"
         static let dailyCostBudgetUSD = "dailyCostBudgetUSD"
         static let weeklyCostBudgetUSD = "weeklyCostBudgetUSD"
+        static let popoverWidth = "popoverWidth"
         static let popoverHeight = "popoverHeight"
 
         static let all = [
@@ -573,6 +598,7 @@ final class SettingsStore: ObservableObject {
             weeklyTokenBudget,
             dailyCostBudgetUSD,
             weeklyCostBudgetUSD,
+            popoverWidth,
             popoverHeight
         ]
     }

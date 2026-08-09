@@ -102,6 +102,7 @@ final class StatusItemController: NSObject {
             maximumHeight: maximumHeight
         )
         settings.popoverHeight = Double(height)
+        let width = CGFloat(settings.popoverWidth)
 
         let popover = NSPopover()
         // Status-item popovers inherit the menu-bar appearance by default and ignore
@@ -111,11 +112,8 @@ final class StatusItemController: NSObject {
             store: store,
             maximumHeight: maximumHeight,
             onQuit: { NSApplication.shared.terminate(nil) },
-            onHeightChange: { [weak popover] height in
-                popover?.contentSize = NSSize(
-                    width: PopoverLayout.width,
-                    height: height
-                )
+            onSizeChange: { [weak popover] size in
+                popover?.contentSize = size
             }
         )
         .preferredColorScheme(Self.preferredColorScheme(for: appearance))
@@ -125,7 +123,7 @@ final class StatusItemController: NSObject {
         popover.delegate = self
         popover.appearance = appearance
         popover.contentSize = NSSize(
-            width: PopoverLayout.width,
+            width: width,
             height: height
         )
         let hostingController = NSHostingController(rootView: content)
@@ -145,7 +143,7 @@ final class StatusItemController: NSObject {
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let popover = self.popover, popover.isShown else { return }
-            popover.contentSize = NSSize(width: PopoverLayout.width, height: height)
+            popover.contentSize = NSSize(width: width, height: height)
             popover.contentViewController?.view.layoutSubtreeIfNeeded()
             Self.applyPopoverAppearance(appearance, to: popover.contentViewController?.view)
             if settings.useTranslucentAppearance {

@@ -12,6 +12,8 @@ enum AgentBarColorTheme: String, CaseIterable, Identifiable {
     case lakeGray
 
     static let storageKey = "colorTheme"
+    static let highSaturationStorageKey = "useHighSaturationTheme"
+    private static let highSaturationBoost: CGFloat = 0.20
 
     var id: String { rawValue }
 
@@ -62,9 +64,21 @@ enum AgentBarColorTheme: String, CaseIterable, Identifiable {
 
     private func adaptiveColor(transform: @escaping (NSColor) -> NSColor = { $0 }) -> Color {
         let colors = colors
+        let useHighSaturation = UserDefaults.standard.bool(forKey: Self.highSaturationStorageKey)
         return Color(nsColor: NSColor(name: nil) { appearance in
-            transform(appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? colors.dark : colors.light)
+            let base = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? colors.dark : colors.light
+            return transform(useHighSaturation ? highSaturationColor(base) : base)
         })
+    }
+
+    private func highSaturationColor(_ color: NSColor) -> NSColor {
+        guard let rgb = color.usingColorSpace(.deviceRGB) else { return color }
+        return NSColor(
+            deviceHue: rgb.hueComponent,
+            saturation: min(rgb.saturationComponent + Self.highSaturationBoost, 1),
+            brightness: rgb.brightnessComponent,
+            alpha: rgb.alphaComponent
+        )
     }
 }
 

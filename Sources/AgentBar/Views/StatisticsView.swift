@@ -4353,6 +4353,7 @@ private struct AppearanceSettingsPicker: View {
                 .font(.agentBar(size: 12, weight: .semibold))
                 .foregroundStyle(selected ? AgentBarPalette.primary : Color.primary.opacity(0.76))
                 .frame(maxWidth: .infinity, minHeight: 38)
+                .contentShape(Rectangle())
                 .background(
                     selected ? AgentBarDesign.cardBackground : Color.clear,
                     in: RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -4383,6 +4384,7 @@ private struct AppearanceSettingsPicker: View {
                     .minimumScaleFactor(0.78)
             }
             .frame(maxWidth: .infinity, minHeight: 72)
+            .contentShape(shape)
             .background(selected ? AgentBarPalette.primary.opacity(0.12) : Color.clear, in: shape)
             .overlay {
                 shape.strokeBorder(

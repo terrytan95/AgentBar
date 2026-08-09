@@ -45,6 +45,10 @@ enum AgentBarColorTheme: String, CaseIterable, Identifiable {
         adaptiveColor()
     }
 
+    func color(highSaturation: Bool) -> Color {
+        adaptiveColor(highSaturation: highSaturation)
+    }
+
     func color(blendedWith target: NSColor, fraction: CGFloat) -> Color {
         adaptiveColor { $0.blended(withFraction: fraction, of: target) ?? $0 }
     }
@@ -63,9 +67,12 @@ enum AgentBarColorTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    private func adaptiveColor(transform: @escaping (NSColor) -> NSColor = { $0 }) -> Color {
+    private func adaptiveColor(
+        highSaturation: Bool? = nil,
+        transform: @escaping (NSColor) -> NSColor = { $0 }
+    ) -> Color {
         let colors = colors
-        let useHighSaturation = UserDefaults.standard.bool(forKey: Self.highSaturationStorageKey)
+        let useHighSaturation = highSaturation ?? UserDefaults.standard.bool(forKey: Self.highSaturationStorageKey)
         return Color(nsColor: NSColor(name: nil) { appearance in
             let base = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? colors.dark : colors.light
             return transform(useHighSaturation ? highSaturationColor(base) : base)

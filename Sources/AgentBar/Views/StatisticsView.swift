@@ -2521,6 +2521,7 @@ private struct YearActivityPanel: View {
                     title: language == .chinese ? "峰值日" : "peak day"
                 )
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 

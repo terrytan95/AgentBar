@@ -13,7 +13,8 @@ enum AgentBarColorTheme: String, CaseIterable, Identifiable {
 
     static let storageKey = "colorTheme"
     static let highSaturationStorageKey = "useHighSaturationTheme"
-    private static let highSaturationBoost: CGFloat = 0.20
+    private static let highSaturationBoost: CGFloat = 0.35
+    private static let highSaturationBrightnessBoost: CGFloat = 0.10
 
     var id: String { rawValue }
 
@@ -76,7 +77,7 @@ enum AgentBarColorTheme: String, CaseIterable, Identifiable {
         return NSColor(
             deviceHue: rgb.hueComponent,
             saturation: min(rgb.saturationComponent + Self.highSaturationBoost, 1),
-            brightness: rgb.brightnessComponent,
+            brightness: min(rgb.brightnessComponent + Self.highSaturationBrightnessBoost, 1),
             alpha: rgb.alphaComponent
         )
     }

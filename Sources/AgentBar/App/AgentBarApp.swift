@@ -24,7 +24,7 @@ struct AgentBarApp: App {
     var body: some Scene {
         WindowGroup("AgentBar", id: "statistics") {
             StatisticsView(store: store)
-                .frame(minWidth: 1180, minHeight: 760)
+                .frame(minWidth: 787, minHeight: 760)
         }
         .defaultSize(width: 1480, height: 940)
         .commandsRemoved()

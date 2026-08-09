@@ -317,29 +317,11 @@ struct StatisticsView: View {
                 Spacer(minLength: 0)
             }
 
-            HStack(spacing: 8) {
-                topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
-                    setPage(tab: .usage, viewMode: .overview)
-                }
-                topNavigationItem(store.language == .chinese ? "效率指南" : "Efficiency Guide", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
-                    setPage(tab: .usage, viewMode: .efficiency)
-                }
-                topNavigationItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks) {
-                    setPage(tab: .usage, viewMode: .liveTasks)
-                }
-                topNavigationItem(L.text("project_billing", store.language), systemImage: "folder", active: topTab == .usage && viewMode == .projects) {
-                    setPage(tab: .usage, viewMode: .projects)
-                }
-                topNavigationItem(L.text("quota_and_resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
-                    setPage(tab: .usage, viewMode: .resets)
-                }
-                topNavigationItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
-                    setPage(tab: .usage, viewMode: .audit)
-                }
-                topNavigationItem(L.text("settings", store.language), systemImage: "gearshape", active: topTab == .settings) {
-                    setPage(tab: .settings)
-                }
+            ViewThatFits(in: .horizontal) {
+                topNavigationItems(showsTitles: true)
+                topNavigationItems(showsTitles: false)
             }
+            .padding(.horizontal, 44)
         }
         .padding(.horizontal, 14)
         .frame(height: 54)
@@ -349,6 +331,33 @@ struct StatisticsView: View {
                 .fill(topNavigationSeparatorColor)
                 .frame(height: 1)
         }
+    }
+
+    private func topNavigationItems(showsTitles: Bool) -> some View {
+        HStack(spacing: 8) {
+            topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview, showsTitle: showsTitles) {
+                setPage(tab: .usage, viewMode: .overview)
+            }
+            topNavigationItem(store.language == .chinese ? "效率指南" : "Efficiency Guide", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency, showsTitle: showsTitles) {
+                setPage(tab: .usage, viewMode: .efficiency)
+            }
+            topNavigationItem(L.text("live_tasks", store.language), systemImage: "bolt.horizontal.circle", active: topTab == .usage && viewMode == .liveTasks, showsTitle: showsTitles) {
+                setPage(tab: .usage, viewMode: .liveTasks)
+            }
+            topNavigationItem(L.text("project_billing", store.language), systemImage: "folder", active: topTab == .usage && viewMode == .projects, showsTitle: showsTitles) {
+                setPage(tab: .usage, viewMode: .projects)
+            }
+            topNavigationItem(L.text("quota_and_resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets, showsTitle: showsTitles) {
+                setPage(tab: .usage, viewMode: .resets)
+            }
+            topNavigationItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit, showsTitle: showsTitles) {
+                setPage(tab: .usage, viewMode: .audit)
+            }
+            topNavigationItem(L.text("settings", store.language), systemImage: "gearshape", active: topTab == .settings, showsTitle: showsTitles) {
+                setPage(tab: .settings)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var topNavigationSeparatorColor: Color {
@@ -368,14 +377,16 @@ struct StatisticsView: View {
         .help(L.text(helpKey, store.language))
     }
 
-    private func topNavigationItem(_ title: String, systemImage: String, active: Bool, action: @escaping () -> Void) -> some View {
+    private func topNavigationItem(_ title: String, systemImage: String, active: Bool, showsTitle: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Image(systemName: systemImage)
                     .font(.agentBar(size: 12, weight: .semibold))
-                Text(title)
-                    .font(.agentBar(size: 12, weight: .semibold))
-                    .lineLimit(1)
+                if showsTitle {
+                    Text(title)
+                        .font(.agentBar(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                }
             }
             .foregroundStyle(active ? AgentBarPalette.primary : Color.primary.opacity(0.86))
             .padding(.horizontal, 10)
@@ -384,6 +395,8 @@ struct StatisticsView: View {
             .background(active ? AgentBarPalette.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .tactilePlainButton()
+        .accessibilityLabel(title)
+        .help(title)
     }
 
     private var sidebarAccountSelector: some View {

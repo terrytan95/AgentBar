@@ -43,7 +43,6 @@ struct StatisticsView: View {
     @State private var dismissedUpdateVersion: String?
     @State private var usesCompactNavigation = false
     @State private var stacksActivityPanels = false
-    @GestureState private var sidebarDragOffset: CGFloat = 0
     @AppStorage("dashboardSidebarWidth") private var storedSidebarWidth = 236.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -53,7 +52,7 @@ struct StatisticsView: View {
     private static let dashboardContentBottomPadding: CGFloat = 26
     private static let minimumSidebarWidth: CGFloat = 220
     private static let maximumSidebarWidth: CGFloat = 360
-    private static let minimumDashboardContentWidth: CGFloat = 980
+    private static let minimumDashboardContentWidth: CGFloat = 800
 
     init(
         store: UsageStore,
@@ -132,7 +131,7 @@ struct StatisticsView: View {
     }
 
     private var sidebarWidth: CGFloat {
-        clampedSidebarWidth(clampedSidebarWidth(CGFloat(storedSidebarWidth)) + sidebarDragOffset)
+        clampedSidebarWidth(CGFloat(storedSidebarWidth))
     }
 
     @ViewBuilder
@@ -235,41 +234,23 @@ struct StatisticsView: View {
     }
 
     private var sidebarResizeHandle: some View {
-        Rectangle()
-            .fill(sidebarSeparatorColor)
-            .frame(width: 1)
-            .frame(width: 9)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .updating($sidebarDragOffset) { value, offset, _ in
-                        offset = value.translation.width
-                    }
-                    .onEnded { value in
-                        storedSidebarWidth = Double(
-                            clampedSidebarWidth(
-                                clampedSidebarWidth(CGFloat(storedSidebarWidth)) + value.translation.width
-                            )
-                        )
-                    }
+        DashboardSidebarResizeHandle(
+            color: sidebarSeparatorColor,
+            accessibilityLabel: store.language == .chinese ? "调整侧边栏宽度" : "Resize sidebar"
+        ) { translation in
+            storedSidebarWidth = Double(
+                clampedSidebarWidth(sidebarWidth + translation)
             )
-            .onHover { isHovering in
-                (isHovering ? NSCursor.resizeLeftRight : NSCursor.arrow).set()
+        } onAccessibilityAdjust: { direction in
+            switch direction {
+            case .increment:
+                storedSidebarWidth = Double(clampedSidebarWidth(sidebarWidth + 16))
+            case .decrement:
+                storedSidebarWidth = Double(clampedSidebarWidth(sidebarWidth - 16))
+            @unknown default:
+                break
             }
-            .onDisappear {
-                NSCursor.arrow.set()
-            }
-            .accessibilityLabel(store.language == .chinese ? "调整侧边栏宽度" : "Resize sidebar")
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment:
-                    storedSidebarWidth = Double(clampedSidebarWidth(sidebarWidth + 16))
-                case .decrement:
-                    storedSidebarWidth = Double(clampedSidebarWidth(sidebarWidth - 16))
-                @unknown default:
-                    break
-                }
-            }
+        }
     }
 
     private func clampedSidebarWidth(_ width: CGFloat) -> CGFloat {
@@ -4906,6 +4887,39 @@ private struct BudgetCostField: View {
                 .frame(width: 86)
                 .accessibilityLabel(label)
         }
+    }
+}
+
+private struct DashboardSidebarResizeHandle: View {
+    var color: Color
+    var accessibilityLabel: String
+    var onResize: (CGFloat) -> Void
+    var onAccessibilityAdjust: (AccessibilityAdjustmentDirection) -> Void
+    @GestureState private var dragOffset: CGFloat = 0
+
+    var body: some View {
+        Rectangle()
+            .fill(color)
+            .frame(width: 1)
+            .frame(width: 9)
+            .contentShape(Rectangle())
+            // ponytail: preview only the divider; use a native split view if live content resizing becomes required.
+            .offset(x: dragOffset)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($dragOffset) { value, offset, _ in
+                        offset = value.translation.width
+                    }
+                    .onEnded { onResize($0.translation.width) }
+            )
+            .onHover { isHovering in
+                (isHovering ? NSCursor.resizeLeftRight : NSCursor.arrow).set()
+            }
+            .onDisappear {
+                NSCursor.arrow.set()
+            }
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityAdjustableAction(onAccessibilityAdjust)
     }
 }
 

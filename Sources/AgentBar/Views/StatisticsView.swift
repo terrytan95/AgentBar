@@ -61,10 +61,18 @@ struct StatisticsView: View {
     var body: some View {
         Group {
             if showsSidebarNavigation {
-                HStack(spacing: 0) {
-                    sidebar
-                        .frame(width: 236)
-                    contentColumn
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 0) {
+                        sidebar
+                            .frame(width: 236)
+                        contentColumn
+                    }
+                    .frame(minWidth: 900)
+
+                    VStack(spacing: 0) {
+                        topNavigationBar
+                        contentColumn
+                    }
                 }
             } else {
                 VStack(spacing: 0) {
@@ -749,26 +757,32 @@ struct StatisticsView: View {
             )
             .agentBarPanel(cornerRadius: 16)
 
-            HStack(alignment: .top, spacing: 14) {
-                VStack(alignment: .leading, spacing: 14) {
-                    dailyUsagePanel
+            if settings.showQuotaPressureSection {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 14) {
+                        dashboardActivityPanels
+                            .frame(minWidth: 640)
+                        QuotaPressurePanel(
+                            pressure: quotaPressure,
+                            history: store.quotaCapacityHistory,
+                            language: store.language
+                        )
+                        .frame(width: 230)
+                        .frame(maxHeight: .infinity)
+                    }
 
-                    Panel(title: yearActivityLocalized("year_activity")) {
-                        YearActivityPanel(bars: yearActivityBars, language: store.language)
+                    VStack(alignment: .leading, spacing: 14) {
+                        dashboardActivityPanels
+                        QuotaPressurePanel(
+                            pressure: quotaPressure,
+                            history: store.quotaCapacityHistory,
+                            language: store.language
+                        )
                     }
                 }
-
-                if settings.showQuotaPressureSection {
-                    QuotaPressurePanel(
-                        pressure: quotaPressure,
-                        history: store.quotaCapacityHistory,
-                        language: store.language
-                    )
-                    .frame(width: 230)
-                    .frame(maxHeight: .infinity)
-                }
+            } else {
+                dashboardActivityPanels
             }
-            .frame(maxWidth: .infinity, alignment: .top)
 
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -795,6 +809,17 @@ struct StatisticsView: View {
                 currentLimitsRows
             }
         }
+    }
+
+    private var dashboardActivityPanels: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            dailyUsagePanel
+
+            Panel(title: yearActivityLocalized("year_activity")) {
+                YearActivityPanel(bars: yearActivityBars, language: store.language)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var dashboardOverviewHeader: some View {

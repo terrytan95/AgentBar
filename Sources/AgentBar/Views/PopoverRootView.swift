@@ -622,7 +622,7 @@ struct AccountRowView: View {
                 .fixedSize(horizontal: true, vertical: false)
             }
 
-            Grid(horizontalSpacing: 12, verticalSpacing: 6) {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
                 GridRow(alignment: .firstTextBaseline) {
                     metadataLabel(L.text("account_source", language))
                     metadataValue(account.sourceDescription)

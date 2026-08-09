@@ -27,6 +27,7 @@ struct AgentBarApp: App {
                 .frame(minWidth: 1180, minHeight: 760)
         }
         .defaultSize(width: 1480, height: 940)
+        .windowStyle(.hiddenTitleBar)
         .commandsRemoved()
         .commands {
             CommandGroup(replacing: .newItem) {

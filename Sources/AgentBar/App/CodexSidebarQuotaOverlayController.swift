@@ -46,19 +46,42 @@ private func codexSidebarQuotaAXCallback(
 }
 
 private final class CodexSidebarQuotaHostingView: NSHostingView<CodexSidebarQuotaCard> {
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        guard window?.styleMask.contains(.resizable) == true else { return }
+    private static let resizeEdgeWidth: CGFloat = 5
+    private var resizeTrackingArea: NSTrackingArea?
+    private var isShowingResizeCursor = false
 
-        let edgeWidth: CGFloat = 5
-        addCursorRect(
-            CGRect(x: bounds.minX, y: bounds.minY, width: edgeWidth, height: bounds.height),
-            cursor: .resizeLeftRight
+    override func updateTrackingAreas() {
+        if let resizeTrackingArea {
+            removeTrackingArea(resizeTrackingArea)
+        }
+        super.updateTrackingAreas()
+
+        let resizeTrackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.activeAlways, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
         )
-        addCursorRect(
-            CGRect(x: bounds.maxX - edgeWidth, y: bounds.minY, width: edgeWidth, height: bounds.height),
-            cursor: .resizeLeftRight
-        )
+        addTrackingArea(resizeTrackingArea)
+        self.resizeTrackingArea = resizeTrackingArea
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let x = convert(event.locationInWindow, from: nil).x
+        let isResizeEdge = window?.styleMask.contains(.resizable) == true
+            && (x <= Self.resizeEdgeWidth || x >= bounds.maxX - Self.resizeEdgeWidth)
+        guard isResizeEdge != isShowingResizeCursor else { return }
+
+        isShowingResizeCursor = isResizeEdge
+        (isResizeEdge ? NSCursor.resizeLeftRight : .arrow).set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        guard isShowingResizeCursor else { return }
+        isShowingResizeCursor = false
+        NSCursor.arrow.set()
     }
 }
 

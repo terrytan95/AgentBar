@@ -44,6 +44,7 @@ struct StatisticsView: View {
     @State private var usesCompactNavigation = false
     @State private var stacksActivityPanels = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
 
     private static let dashboardContentTopPadding: CGFloat = 12
@@ -79,11 +80,10 @@ struct StatisticsView: View {
             proxy.size.width < 900
         } action: { usesCompactNavigation = $0 }
         .tint(AgentBarPalette.primary)
-        .background(
-            settings.useTranslucentAppearance
-                ? Color.clear
-                : AgentBarDesign.appBackground
-        )
+        .background {
+            windowSurface
+                .ignoresSafeArea(.container, edges: .top)
+        }
         .onAppear {
             if let tab = DashboardNavigation.consumePendingTab() {
                 setTopTab(tab)
@@ -112,6 +112,15 @@ struct StatisticsView: View {
                 overlay: codexOverlay,
                 language: store.language
             )
+        }
+    }
+
+    @ViewBuilder
+    private var windowSurface: some View {
+        if settings.useTranslucentAppearance && !reduceTransparency {
+            CodexSidebarMaterialView(material: .underWindowBackground)
+        } else {
+            AgentBarDesign.appBackground
         }
     }
 
@@ -331,7 +340,11 @@ struct StatisticsView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 54)
-        .background(AgentBarDesign.cardBackground)
+        .agentBarGlassSurface(
+            isEnabled: settings.useTranslucentAppearance,
+            opaqueBackground: AnyShapeStyle(AgentBarDesign.cardBackground),
+            cornerRadius: 0
+        )
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(topNavigationSeparatorColor)

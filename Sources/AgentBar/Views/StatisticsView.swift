@@ -2501,7 +2501,10 @@ private struct YearActivityPanel: View {
                 ChartHoverCallout(bar: hoveredBar, language: language)
                     .frame(width: calloutSize.width, height: calloutSize.height)
                     .allowsHitTesting(false)
-                    .position(tooltipPosition)
+                    .position(
+                        x: tooltipPosition.x,
+                        y: tooltipPosition.y - max(0, calloutSize.height - gridHeight)
+                    )
             }
         }
         .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)

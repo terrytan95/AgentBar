@@ -201,9 +201,9 @@ struct CodexUsageReader {
                 maskedEmail: maskEmail(raw.email),
                 plan: raw.plan ?? raw.lastUsage?.planType,
                 sourceDescription: raw.externalAuthOnly
-                    ? "CLIProxyAPI auth · read-only monitoring"
+                    ? "CLIProxyAPI auth · usage and sign-in lease"
                     : raw.externalAuthSource == CLIProxyCodexRegistryMetadata.sourceValue
-                        ? "Local Codex account registry · CLIProxyAPI usage"
+                        ? "Local Codex account registry · CLIProxyAPI usage and sign-in lease"
                         : "Local Codex account registry",
                 status: .live,
                 fiveHourWindow: quotaWindows.fiveHour,
@@ -219,7 +219,7 @@ struct CodexUsageReader {
                 workspaces: workspaces,
                 accessTokenExpiresAt: accessTokenExpiresAt,
                 accessTokenSource: usesExternalAccessToken ? "CLIProxyAPI" : nil,
-                canSwitchAccount: raw.externalAuthOnly ? false : nil,
+                canSwitchAccount: nil,
                 canRemoveAccount: raw.externalAuthOnly ? false : nil
             )
         }

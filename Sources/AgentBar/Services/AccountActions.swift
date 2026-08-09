@@ -8,6 +8,7 @@ enum AccountActionError: LocalizedError, Equatable {
     case invalidRegistry
     case missingAccount
     case missingAccountSnapshot
+    case expiredAccountSnapshot
     case mismatchedAccountSnapshot
     case emptyAccessToken
     case codexExecutableNotFound
@@ -22,6 +23,7 @@ enum AccountActionError: LocalizedError, Equatable {
         case .invalidRegistry: "Codex account registry could not be parsed."
         case .missingAccount: "The selected account was not found in the Codex registry."
         case .missingAccountSnapshot: "The selected Codex account auth snapshot was not found."
+        case .expiredAccountSnapshot: "The selected Codex account auth snapshot has expired."
         case .mismatchedAccountSnapshot: "The selected Codex account auth snapshot belongs to a different login."
         case .emptyAccessToken: "No Codex access token was entered."
         case .codexExecutableNotFound: "The Codex executable could not be found in a trusted install location."
@@ -45,6 +47,9 @@ struct CodexAccountSwitchRecovery: @unchecked Sendable {
 struct CodexAccountSwitcher {
     var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     var fileManager: FileManager = .default
+    var reusesCLIProxyAPIAuth = false
+    var cliProxyAPIAuthDirectory = ""
+    var now: @Sendable () -> Date = Date.init
 
     func switchActiveAccount(accountID: String) throws {
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
@@ -53,9 +58,6 @@ struct CodexAccountSwitcher {
         let activeAuthURL = storage.activeAuthURL
         guard fileManager.fileExists(atPath: registryURL.path) else {
             throw AccountActionError.missingRegistry
-        }
-        guard fileManager.fileExists(atPath: accountSnapshotURL.path) else {
-            throw AccountActionError.missingAccountSnapshot
         }
         let data = try Data(contentsOf: registryURL)
         guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -66,8 +68,14 @@ struct CodexAccountSwitcher {
         guard let selectedAccount = accounts.first(where: { $0["account_key"] as? String == accountID }) else {
             throw AccountActionError.missingAccount
         }
-        let selectedAuth = try Data(contentsOf: accountSnapshotURL)
-        if let identity = CodexAccountStorage.chatGPTAuthIdentity(from: selectedAuth),
+        let nativeAuth: Data?
+        if fileManager.fileExists(atPath: accountSnapshotURL.path) {
+            nativeAuth = try Data(contentsOf: accountSnapshotURL)
+        } else {
+            nativeAuth = nil
+        }
+        if let nativeAuth,
+           let identity = CodexAccountStorage.chatGPTAuthIdentity(from: nativeAuth),
            !identity.matches(
             accountKey: selectedAccount["account_key"] as? String,
             email: selectedAccount["email"] as? String,
@@ -76,6 +84,32 @@ struct CodexAccountSwitcher {
             accountID: selectedAccount["account_id"] as? String
            ) {
             throw AccountActionError.mismatchedAccountSnapshot
+        }
+        let nativeAuthHasExpired = nativeAuth
+            .flatMap(CodexAccountStorage.accessTokenExpiration)
+            .map { $0 <= now() } ?? false
+        let selectedAuth: Data
+        if let nativeAuth, !nativeAuthHasExpired {
+            selectedAuth = nativeAuth
+        } else if reusesCLIProxyAPIAuth,
+                  let leasedAuth = CLIProxyCodexAuthReader(
+                    homeDirectory: homeDirectory,
+                    configuredDirectory: cliProxyAPIAuthDirectory,
+                    now: now
+                  ).discover().credentials.first(where: { credential in
+                      credential.nativeAuthLease != nil && credential.identity.matches(
+                        accountKey: selectedAccount["account_key"] as? String,
+                        email: selectedAccount["email"] as? String,
+                        chatGPTAccountID: selectedAccount["chatgpt_account_id"] as? String,
+                        workspaceID: selectedAccount["workspace_id"] as? String,
+                        accountID: selectedAccount["account_id"] as? String
+                      )
+                  })?.nativeAuthLease {
+            selectedAuth = leasedAuth
+        } else if nativeAuth == nil {
+            throw AccountActionError.missingAccountSnapshot
+        } else {
+            throw AccountActionError.expiredAccountSnapshot
         }
 
         let previous = json["active_account_key"] as? String
@@ -87,12 +121,9 @@ struct CodexAccountSwitcher {
 
         let previousAuth = try? Data(contentsOf: activeAuthURL)
         let activeAuthPermissions = try? fileManager.attributesOfItem(atPath: activeAuthURL.path)[.posixPermissions]
-        try selectedAuth.write(to: activeAuthURL, options: [.atomic])
-        if let activeAuthPermissions {
-            try? fileManager.setAttributes([.posixPermissions: activeAuthPermissions], ofItemAtPath: activeAuthURL.path)
-        }
-
         do {
+            try selectedAuth.write(to: activeAuthURL, options: [.atomic])
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: activeAuthURL.path)
             try storage.writeRegistry(json)
         } catch {
             restoreAuth(previousAuth, to: activeAuthURL, permissions: activeAuthPermissions)

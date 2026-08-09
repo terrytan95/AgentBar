@@ -41,7 +41,7 @@ struct StatisticsView: View {
     @State private var settingsSection: SettingsSection = .accounts
     @State private var showsAdvancedRefreshSettings = false
     @State private var dismissedUpdateVersion: String?
-    @State private var usesCompactNavigation = false
+    @State private var dashboardWidth: CGFloat = .greatestFiniteMagnitude
     @State private var stacksActivityPanels = false
     @GestureState private var sidebarDragOffset: CGFloat = 0
     @AppStorage("dashboardSidebarWidth") private var storedSidebarWidth = 236.0
@@ -53,6 +53,7 @@ struct StatisticsView: View {
     private static let dashboardContentBottomPadding: CGFloat = 26
     private static let minimumSidebarWidth: CGFloat = 220
     private static let maximumSidebarWidth: CGFloat = 360
+    private static let minimumDashboardContentWidth: CGFloat = 1180
 
     init(
         store: UsageStore,
@@ -78,9 +79,9 @@ struct StatisticsView: View {
             contentColumn
         }
         .animation(AgentBarDesign.smoothAnimation(reduceMotion: false, duration: 0.28), value: usesSidebarLayout)
-        .onGeometryChange(for: Bool.self) { proxy in
-            proxy.size.width < 900
-        } action: { usesCompactNavigation = $0 }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { dashboardWidth = $0 }
         .tint(AgentBarPalette.primary)
         .background {
             windowSurface
@@ -119,6 +120,11 @@ struct StatisticsView: View {
 
     private var usesSidebarLayout: Bool {
         showsSidebarNavigation && !usesCompactNavigation
+    }
+
+    private var usesCompactNavigation: Bool {
+        dashboardWidth < Self.minimumDashboardContentWidth
+            + clampedSidebarWidth(CGFloat(storedSidebarWidth))
     }
 
     private var dashboardLayout: AnyLayout {

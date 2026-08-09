@@ -5,6 +5,7 @@ struct CLIProxyCodexCredential: Sendable {
     var identity: CodexAuthIdentity
     var authInfo: CodexUsageAuthInfo
     var accessTokenExpiresAt: Date?
+    var nativeAuthLease: Data?
 }
 
 struct CLIProxyCodexDiscovery: Sendable {
@@ -184,13 +185,15 @@ struct CLIProxyCodexAuthReader {
             return .ignored
         }
         let expiration = CodexAccountStorage.accessTokenExpiration(from: data)
-        guard expiration.map({ $0 > now() }) ?? true else { return .ignored }
+        let readAt = now()
+        guard expiration.map({ $0 > readAt }) ?? true else { return .ignored }
 
         return .credential(
             CLIProxyCodexCredential(
                 identity: identity,
                 authInfo: authInfo,
-                accessTokenExpiresAt: expiration
+                accessTokenExpiresAt: expiration,
+                nativeAuthLease: CodexAccountStorage.chatGPTAuthLease(from: data, now: readAt)
             ),
             broadPermissions: info.st_mode & mode_t(0o077) != 0
         )

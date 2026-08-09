@@ -184,6 +184,29 @@ struct CodexAccountStorage {
         return Date(timeIntervalSince1970: seconds)
     }
 
+    static func chatGPTAuthLease(from externalAuthData: Data, now: Date) -> Data? {
+        guard let root = try? JSONSerialization.jsonObject(with: externalAuthData) as? [String: Any],
+              let accessToken = firstNonEmptyString([root["access_token"]]),
+              let idToken = firstNonEmptyString([root["id_token"]]),
+              let accountID = firstNonEmptyString([root["account_id"]])
+        else { return nil }
+
+        let lease: [String: Any] = [
+            "auth_mode": "chatgpt",
+            "last_refresh": ISO8601DateFormatter().string(from: now),
+            "tokens": [
+                "access_token": accessToken,
+                "account_id": accountID,
+                "id_token": idToken,
+                "refresh_token": ""
+            ]
+        ]
+        return try? JSONSerialization.data(
+            withJSONObject: lease,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        )
+    }
+
     func writeRegistry(_ registry: [String: Any]) throws {
         let permissions = try? fileManager.attributesOfItem(atPath: registryURL.path)[.posixPermissions]
         let output = try JSONSerialization.data(withJSONObject: registry, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])

@@ -71,7 +71,7 @@ final class UsageStore: ObservableObject {
     private let refreshLifecycle: UsageRefreshLifecycle
     private let codexTaskReader: @Sendable () -> [AgentTask]
     private let codexAccountLifecycle = CodexAccountLifecycle()
-    private let codexAccountSwitcher: @Sendable (String) throws -> Void
+    private let codexAccountSwitcher: (@Sendable (String) throws -> Void)?
     private let codexAccountRemover: @Sendable (String) throws -> Void
     private let automaticCodexRestarter: @Sendable () -> CodexAppRestartResult
     private let manualCodexAppRestarter: @Sendable () -> Void
@@ -118,9 +118,7 @@ final class UsageStore: ObservableObject {
             await XAIUsageReader().read()
         },
         cursorUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
-        codexAccountSwitcher: @escaping @Sendable (String) throws -> Void = { accountID in
-            try CodexAccountSwitcher().switchActiveAccount(accountID: accountID)
-        },
+        codexAccountSwitcher: (@Sendable (String) throws -> Void)? = nil,
         codexAccountRemover: @escaping @Sendable (String) throws -> Void = { accountID in
             try CodexAccountRemover().removeAccount(accountID: accountID)
         },
@@ -729,6 +727,8 @@ final class UsageStore: ObservableObject {
         }
         lastError = nil
         let switcher = codexAccountSwitcher
+        let reusesCLIProxyAPIAuth = settings.reuseCLIProxyAPIAuthEnabled
+        let cliProxyAPIAuthDirectory = settings.cliProxyAPIAuthDirectory
         let restarter = automaticCodexRestarter
         let manualRestarter = manualCodexAppRestarter
         let promptRelogin = codexAccountSwitchFailurePrompter
@@ -736,7 +736,14 @@ final class UsageStore: ObservableObject {
 
         DispatchQueue.global(qos: .utility).async {
             let result = Result {
-                try switcher(account.id)
+                if let switcher {
+                    try switcher(account.id)
+                } else {
+                    try CodexAccountSwitcher(
+                        reusesCLIProxyAPIAuth: reusesCLIProxyAPIAuth,
+                        cliProxyAPIAuthDirectory: cliProxyAPIAuthDirectory
+                    ).switchActiveAccount(accountID: account.id)
+                }
             }
             if case .success = result {
                 switch restartMode {

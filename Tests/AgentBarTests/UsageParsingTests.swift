@@ -87,6 +87,7 @@ final class UsageParsingTests: XCTestCase {
         checkAccountMetadataShowsResetActivityAndAccountType()
         checkExpiredResetCreditUsesExpiredLabel()
         try checkCodexAccountSwitcherCopiesSnapshotToActiveAuthAndTracksPrevious()
+        try checkCodexAccountSwitcherLeasesCLIProxyAuthWithoutRefreshToken()
         try checkCodexAccountSwitcherRejectsMismatchedSnapshot()
         try checkCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails()
     }
@@ -2353,6 +2354,53 @@ final class UsageParsingTests: XCTestCase {
             XCTAssertEqual(error as? AccountActionError, .mismatchedAccountSnapshot)
         }
         XCTAssertEqual(try String(contentsOf: activeAuth, encoding: .utf8), "old active auth")
+    }
+
+    private func checkCodexAccountSwitcherLeasesCLIProxyAuthWithoutRefreshToken() throws {
+        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let accountDir = temp.appending(path: ".codex/accounts")
+        let proxyDir = temp.appending(path: ".cli-proxy-api")
+        try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: proxyDir, withIntermediateDirectories: true)
+
+        let registry = accountDir.appending(path: "registry.json")
+        try """
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"a@example.com"},{"account_key":"acct-b","email":"b@example.com","chatgpt_account_id":"workspace-b"}]}
+        """.data(using: .utf8)!.write(to: registry)
+
+        let expiredToken = accessToken(expiry: Date(timeIntervalSince1970: 1_000))
+        let nativeSnapshot = authJSON(accessToken: expiredToken, accountID: "workspace-b", email: "b@example.com")
+        try nativeSnapshot.data(using: .utf8)!.write(to: accountDir.appending(path: "acct-b.auth.json"))
+
+        let leasedToken = accessToken(expiry: Date(timeIntervalSince1970: 3_000))
+        let proxyAuthURL = proxyDir.appending(path: "codex.json")
+        let proxyAuth = """
+        {"type":"codex","access_token":"\(leasedToken)","id_token":"\(idToken(email: "b@example.com"))","refresh_token":"cli-refresh-secret","account_id":"workspace-b","email":"b@example.com","expired":false}
+        """
+        try proxyAuth.data(using: .utf8)!.write(to: proxyAuthURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: proxyAuthURL.path)
+
+        let activeAuthURL = temp.appending(path: ".codex/auth.json")
+        try Data("old active auth".utf8).write(to: activeAuthURL)
+        try CodexAccountSwitcher(
+            homeDirectory: temp,
+            reusesCLIProxyAPIAuth: true,
+            cliProxyAPIAuthDirectory: proxyDir.path,
+            now: { Date(timeIntervalSince1970: 2_000) }
+        ).switchActiveAccount(accountID: "acct-b")
+
+        let activeAuth = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: activeAuthURL)) as? [String: Any]
+        )
+        let tokens = try XCTUnwrap(activeAuth["tokens"] as? [String: Any])
+        XCTAssertEqual(tokens["access_token"] as? String, leasedToken)
+        XCTAssertEqual(tokens["refresh_token"] as? String, "")
+        XCTAssertEqual(activeAuth["last_refresh"] as? String, "1970-01-01T00:33:20Z")
+        XCTAssertEqual(try String(contentsOf: proxyAuthURL, encoding: .utf8), proxyAuth)
+        XCTAssertEqual(try String(contentsOf: accountDir.appending(path: "acct-b.auth.json"), encoding: .utf8), nativeSnapshot)
+        let permissions = try FileManager.default.attributesOfItem(atPath: activeAuthURL.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(permissions?.intValue, 0o600)
     }
 
     private func checkCodexAccountSwitcherRestoresAuthWhenRegistryWriteFails() throws {

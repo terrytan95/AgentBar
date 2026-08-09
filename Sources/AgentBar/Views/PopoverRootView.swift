@@ -549,24 +549,13 @@ struct AccountRowView: View {
     @State private var isConfirmingRemoval = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(account.providerAccountDisplayName)
-                        .font(.callout.weight(.semibold))
-                        .lineLimit(1)
-                    Text(secondaryIdentity)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    ForEach(account.workspaceLines(language: language), id: \.self) { line in
-                        Text(line)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(account.providerAccountDisplayName)
+                    .font(.callout.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
+                Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     if account.needsLogin {
                         Button {
@@ -606,15 +595,22 @@ struct AccountRowView: View {
                     }
 
                     if account.service == .codex, account.supportsAccountRemoval {
-                        Button(role: .destructive) {
-                            isConfirmingRemoval = true
+                        Menu {
+                            Button(role: .destructive) {
+                                isConfirmingRemoval = true
+                            } label: {
+                                Label(L.text("remove_account", language), systemImage: "trash")
+                            }
                         } label: {
-                            Image(systemName: "trash")
+                            Image(systemName: "ellipsis")
+                                .frame(width: 22, height: 20)
+                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
-                        .foregroundStyle(.red)
-                        .help(L.text("remove_account", language))
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .accessibilityLabel(L.text("account_actions", language))
+                        .help(L.text("account_actions", language))
                         .pointingHandCursor()
                     }
                     if account.service == .codex, !account.supportsAccountSwitching {
@@ -623,7 +619,40 @@ struct AccountRowView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
+
+            Grid(horizontalSpacing: 12, verticalSpacing: 6) {
+                GridRow(alignment: .firstTextBaseline) {
+                    metadataLabel(L.text("account_source", language))
+                    metadataValue(account.sourceDescription)
+                }
+
+                if !account.workspaceDisplayValues.isEmpty {
+                    GridRow(alignment: .firstTextBaseline) {
+                        metadataLabel(L.text("workspace", language))
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(account.workspaceDisplayValues, id: \.self) { workspace in
+                                metadataValue(workspace)
+                            }
+                        }
+                    }
+                }
+
+                if account.service == .codex {
+                    GridRow(alignment: .firstTextBaseline) {
+                        metadataLabel(L.text("access_token_expiry", language), systemImage: "key.fill")
+                        metadataValue(accessTokenExpiryValue, color: accessTokenExpiryColor)
+                    }
+                    if let source = account.accessTokenSource {
+                        GridRow(alignment: .firstTextBaseline) {
+                            metadataLabel(L.text("token_source", language), systemImage: "key.horizontal")
+                            metadataValue(source)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if let warning = account.loginWarningLine(language: language) {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
@@ -637,20 +666,8 @@ struct AccountRowView: View {
                     .background(.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
             }
 
-            if account.service == .codex {
-                Label(accessTokenExpiryText, systemImage: "key.fill")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(accessTokenExpiryColor)
-                    .lineLimit(1)
-                if let source = account.accessTokenSource {
-                    Label("\(L.text("token_source", language)): \(source)", systemImage: "key.horizontal")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
             if account.fiveHourWindow != nil || account.weeklyWindow != nil {
+                Divider()
                 HStack(spacing: 10) {
                     UsageWindowGauge(title: L.text("five_hour", language), window: account.fiveHourWindow, language: language)
                     UsageWindowGauge(title: L.text("weekly", language), window: account.weeklyWindow, language: language)
@@ -668,8 +685,7 @@ struct AccountRowView: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             if let usage = account.grokSubscriptionUsage {
@@ -681,8 +697,7 @@ struct AccountRowView: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             if let usage = account.cursorSubscriptionUsage {
@@ -695,18 +710,13 @@ struct AccountRowView: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: 6) {
-                Text(account.accountTypeValue(language: language))
-                Text("·")
-                Text(lastActivitySummary)
-            }
+            Text("\(account.accountTypeValue(language: language)) · \(lastActivitySummary)")
             .font(.caption2)
             .foregroundStyle(.secondary)
-            .lineLimit(1)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -732,8 +742,26 @@ struct AccountRowView: View {
         }
     }
 
-    private var secondaryIdentity: String {
-        "\(account.sourceDescription) · \(account.service.rawValue)"
+    private func metadataLabel(_ text: String, systemImage: String? = nil) -> some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .frame(width: 12)
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func metadataValue(_ text: String, color: Color = .secondary) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var lastActivitySummary: String {
@@ -741,15 +769,15 @@ struct AccountRowView: View {
         return "\(L.text("last_activity", language)): \(DisplayFormatters.relativeString(for: lastUpdated, language: language))"
     }
 
-    private var accessTokenExpiryText: String {
+    private var accessTokenExpiryValue: String {
         guard let expiry = account.accessTokenExpiresAt else {
-            return "\(L.text("access_token_expiry", language)): \(L.text("expiry_date_unavailable", language))"
+            return L.text("expiry_date_unavailable", language)
         }
         let date = DisplayFormatters.shortDateTimeString(for: expiry, language: language)
         let status = expiry <= Date()
             ? L.text("expired", language)
             : DisplayFormatters.relativeString(for: expiry, language: language)
-        return "\(L.text("access_token_expiry", language)): \(date) · \(status)"
+        return "\(date) · \(status)"
     }
 
     private var accessTokenExpiryColor: Color {
@@ -806,8 +834,7 @@ struct UsageWindowGauge: View {
                 Text(window.resetLine(language: language))
                     .font(.agentBar(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

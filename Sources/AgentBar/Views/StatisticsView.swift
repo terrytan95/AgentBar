@@ -3001,9 +3001,9 @@ private struct QuotaPressurePanel: View {
                 .foregroundStyle(severityColor)
                 .padding(.top, 16)
 
-            metricLabel(language == .chinese ? "预计可用" : "Available for")
+            metricLabel(language == .chinese ? "预估剩余 Token 额度" : "Estimated tokens left")
                 .padding(.top, 14)
-            Text(supportText)
+            Text(estimatedRemainingTokensText)
                 .font(.agentBar(size: 21, weight: .bold))
                 .monospacedDigit()
                 .padding(.top, 5)
@@ -3090,7 +3090,6 @@ private struct QuotaPressurePanel: View {
                 detail: currentUsageText,
                 filled: true
             )
-            timelineConnector()
             timelineMilestone(
                 title: language == .chinese ? "预计耗尽" : "Estimated exhaustion",
                 detail: projectedExhaustionText,
@@ -3106,12 +3105,19 @@ private struct QuotaPressurePanel: View {
                 .padding(.leading, 32)
                 .padding(.vertical, 8)
 
-            timelineConnector()
             timelineMilestone(
                 title: language == .chinese ? "额度重置" : "Quota reset",
                 detail: resetText,
                 filled: true
             )
+        }
+        .background(alignment: .leading) {
+            Rectangle()
+                .fill(AgentBarPalette.primary.opacity(0.70))
+                .frame(width: 1.5)
+                .padding(.leading, 5.25)
+                .padding(.top, 8)
+                .padding(.bottom, 23)
         }
     }
 
@@ -3137,13 +3143,6 @@ private struct QuotaPressurePanel: View {
                     .minimumScaleFactor(0.78)
             }
         }
-    }
-
-    private func timelineConnector() -> some View {
-        Rectangle()
-            .fill(AgentBarPalette.primary.opacity(0.70))
-            .frame(width: 1.5, height: 18)
-            .padding(.leading, 5.25)
     }
 
     private func quotaWindowRow(_ window: UsageWindow) -> some View {
@@ -3263,11 +3262,21 @@ private struct QuotaPressurePanel: View {
         }
     }
 
-    private var supportText: String {
-        let date = projectedRisk?.date ?? timelineWindow?.resetsAt
-        guard let date else { return "--" }
-        let hours = max(1, Int(ceil(date.timeIntervalSinceNow / 3_600)))
-        return language == .chinese ? "\(hours) 小时" : "\(hours) hr"
+    private var estimatedRemainingTokensText: String {
+        guard let account = pressure.activeAccount,
+              let window = timelineWindow,
+              let sample = history.samples.last(where: { sample in
+                  sample.accountID == account.id &&
+                      (window.kind == .fiveHour
+                          ? sample.estimatedFiveHourTotalTokens != nil
+                          : sample.estimatedWeeklyTotalTokens != nil)
+              }),
+              let total = window.kind == .fiveHour
+                  ? sample.estimatedFiveHourTotalTokens
+                  : sample.estimatedWeeklyTotalTokens
+        else { return "--" }
+        let remaining = Int((Double(total) * window.remainingPercent / 100).rounded())
+        return DisplayFormatters.compactTokenString(remaining, language: language)
     }
 
     private var remainingProgress: Double {

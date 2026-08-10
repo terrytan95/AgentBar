@@ -50,9 +50,10 @@ struct StatisticsView: View {
 
     private static let dashboardContentTopPadding: CGFloat = 12
     private static let dashboardContentBottomPadding: CGFloat = 26
+    static let minimumWindowWidth: CGFloat = 787
     private static let minimumSidebarWidth: CGFloat = 231
     private static let maximumSidebarWidth: CGFloat = 360
-    private static let minimumDashboardContentWidth: CGFloat = 800
+    private static let minimumDashboardContentWidth: CGFloat = 950
 
     init(
         store: UsageStore,

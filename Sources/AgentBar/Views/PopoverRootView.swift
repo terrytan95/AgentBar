@@ -465,7 +465,7 @@ enum AgentBarWindowPresenter {
 
         let controller = NSHostingController(
             rootView: StatisticsView(store: store, initialTab: initialTab)
-                .frame(minWidth: 1180, minHeight: 760)
+                .frame(minWidth: StatisticsView.minimumWindowWidth, minHeight: 760)
         )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1480, height: 940),
@@ -479,7 +479,7 @@ enum AgentBarWindowPresenter {
         window.titlebarAppearsTransparent = true
         window.title = "AgentBar"
         window.contentViewController = controller
-        window.minSize = NSSize(width: 1180, height: 760)
+        window.minSize = NSSize(width: StatisticsView.minimumWindowWidth, height: 760)
         window.isReleasedWhenClosed = false
         window.center()
         statisticsWindow = window

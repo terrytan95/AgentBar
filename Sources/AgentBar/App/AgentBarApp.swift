@@ -24,9 +24,10 @@ struct AgentBarApp: App {
     var body: some Scene {
         WindowGroup("AgentBar", id: "statistics") {
             StatisticsView(store: store)
-                .frame(minWidth: 787, minHeight: 760)
+                .frame(minWidth: StatisticsView.minimumWindowWidth, minHeight: 760)
         }
         .defaultSize(width: 1480, height: 940)
+        .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
         .commandsRemoved()
         .commands {

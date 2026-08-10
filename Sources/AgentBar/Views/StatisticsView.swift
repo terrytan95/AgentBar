@@ -2610,7 +2610,7 @@ private struct QuotaTimelineTrack: View {
                     let start = resetsAt.addingTimeInterval(-duration)
                     let previousStart = start.addingTimeInterval(-duration)
                     let nextEnd = resetsAt.addingTimeInterval(duration)
-                    let usedEnd = start.addingTimeInterval(duration * min(100, max(0, window.usedPercent)) / 100)
+                    let remainingEnd = start.addingTimeInterval(duration * min(100, max(0, window.remainingPercent)) / 100)
 
                     if let previous = segment(from: previousStart, to: start, width: size.width) {
                         Capsule()
@@ -2627,11 +2627,11 @@ private struct QuotaTimelineTrack: View {
                             .offset(x: current.x)
                     }
 
-                    if let used = segment(from: start, to: usedEnd, width: size.width) {
+                    if let remaining = segment(from: start, to: remainingEnd, width: size.width) {
                         Capsule()
                             .fill(color.opacity(0.48))
-                            .frame(width: used.length, height: 20)
-                            .offset(x: used.x)
+                            .frame(width: remaining.length, height: 20)
+                            .offset(x: remaining.x)
                     }
 
                     if let upcoming = segment(from: resetsAt, to: nextEnd, width: size.width) {

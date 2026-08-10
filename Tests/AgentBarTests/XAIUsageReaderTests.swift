@@ -43,7 +43,9 @@ final class XAIUsageReaderTests: XCTestCase {
                 let billing = """
                 {
                   "config": {
-                    "creditUsagePercent": 42.5,
+                    "productUsage": [
+                      {"product": "GrokBuild", "usagePercent": 42.5}
+                    ],
                     "currentPeriod": {
                       "type": "USAGE_PERIOD_TYPE_WEEKLY",
                       "start": "2026-07-27T00:00:00Z",

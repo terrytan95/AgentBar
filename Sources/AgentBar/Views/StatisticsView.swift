@@ -74,14 +74,13 @@ struct StatisticsView: View {
             if usesSidebarLayout {
                 sidebar
                     .frame(width: sidebarWidth)
-                    .transition(.opacity)
+                    .transition(.opacity.animation(AgentBarDesign.smoothAnimation(reduceMotion: false)))
             } else {
                 topNavigationBar
-                    .transition(.opacity)
+                    .transition(.opacity.animation(AgentBarDesign.smoothAnimation(reduceMotion: false)))
             }
             contentColumn
         }
-        .animation(AgentBarDesign.smoothAnimation(reduceMotion: false, duration: 0.28), value: usesSidebarLayout)
         .onGeometryChange(for: Bool.self) { proxy in
             proxy.size.width < compactNavigationThreshold
         } action: { usesCompactNavigation = $0 }

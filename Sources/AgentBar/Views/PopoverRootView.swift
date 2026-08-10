@@ -112,29 +112,20 @@ struct ResizablePopoverRootView: View {
     }
 
     private func widthResizeBorder(edge: PopoverResizeHandle.Edge) -> some View {
-        ZStack(alignment: edge == .leading ? .leading : .trailing) {
-            PopoverResizeHandle(
-                edge: edge,
-                startSize: CGFloat(settings.popoverWidth),
-                minimumSize: PopoverLayout.minimumWidth,
-                maximumSize: PopoverLayout.maximumWidth
-            ) { width, isFinal in
-                reportSize(width: width)
-                if isFinal {
-                    settings.popoverWidth = Double(width)
-                    reportSize()
-                }
+        PopoverResizeHandle(
+            edge: edge,
+            startSize: CGFloat(settings.popoverWidth),
+            minimumSize: PopoverLayout.minimumWidth,
+            maximumSize: PopoverLayout.maximumWidth
+        ) { width, isFinal in
+            reportSize(width: width)
+            if isFinal {
+                settings.popoverWidth = Double(width)
+                reportSize()
             }
-            .frame(width: 12)
-            .accessibilityLabel(L.text("resize_popover", store.language))
-
-            Capsule()
-                .fill(AgentBarPalette.primary.opacity(0.30))
-                .frame(width: 4, height: 48)
-                .padding(.horizontal, 3)
-                .allowsHitTesting(false)
         }
         .frame(width: 12)
+        .accessibilityLabel(L.text("resize_popover", store.language))
         .frame(maxHeight: .infinity)
     }
 }

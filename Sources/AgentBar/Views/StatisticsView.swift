@@ -2492,7 +2492,8 @@ private struct QuotaWindowTimelinePanel: View {
                 .frame(width: 40, height: 32)
                 .contentShape(Rectangle())
         }
-        .tactilePlainButton()
+        .buttonStyle(QuotaTimelineNavigationButtonStyle())
+        .pointingHandCursor()
         .accessibilityLabel(systemImage == "chevron.left"
             ? (language == .chinese ? "上一段" : "Previous period")
             : (language == .chinese ? "下一段" : "Next period"))
@@ -2582,6 +2583,29 @@ private struct QuotaWindowTimelinePanel: View {
         case .xaiAPI: .purple
         case .cursorAgent: AgentBarPalette.primary
         }
+    }
+}
+
+private struct QuotaTimelineNavigationButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.13 : (isHovered ? 0.07 : 0)))
+            }
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(
+                AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion, duration: 0.12),
+                value: isHovered
+            )
+            .animation(
+                AgentBarDesign.smoothAnimation(reduceMotion: reduceMotion, duration: 0.10),
+                value: configuration.isPressed
+            )
+            .onHover { isHovered = $0 }
     }
 }
 

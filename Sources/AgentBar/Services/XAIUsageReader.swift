@@ -440,7 +440,7 @@ struct XAIUsageReader {
     }
 
     private static func usedPercent(_ config: GrokBillingConfig?) -> Double? {
-        if let value = config?.creditUsagePercent {
+        if let value = config?.creditUsagePercent ?? config?.productUsage?.compactMap(\.usagePercent).max() {
             return min(100, max(0, value))
         }
         guard let used = config?.used?.val,
@@ -557,6 +557,7 @@ private struct GrokBillingResponse: Decodable {
 
 private struct GrokBillingConfig: Decodable {
     var creditUsagePercent: Double?
+    var productUsage: [GrokProductUsage]?
     var currentPeriod: GrokUsagePeriod?
     var monthlyLimit: GrokCent?
     var used: GrokCent?
@@ -565,6 +566,10 @@ private struct GrokBillingConfig: Decodable {
     var prepaidBalance: GrokCent?
     var billingPeriodStart: String?
     var billingPeriodEnd: String?
+}
+
+private struct GrokProductUsage: Decodable {
+    var usagePercent: Double?
 }
 
 private struct GrokUsagePeriod: Decodable {

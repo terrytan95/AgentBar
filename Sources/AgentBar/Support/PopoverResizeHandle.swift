@@ -71,7 +71,7 @@ final class PopoverResizeHandleView: NSView {
 
         let resizeTrackingArea = NSTrackingArea(
             rect: .zero,
-            options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited],
+            options: [.activeAlways, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited],
             owner: self,
             userInfo: nil
         )
@@ -81,6 +81,11 @@ final class PopoverResizeHandleView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
+        edge.cursor.set()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
         edge.cursor.set()
     }
 

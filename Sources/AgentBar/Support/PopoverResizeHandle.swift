@@ -2,12 +2,28 @@ import AppKit
 import SwiftUI
 
 struct PopoverResizeHandle: NSViewRepresentable {
-    enum Axis {
-        case width
-        case height
+    enum Edge {
+        case bottom
+        case leading
+        case trailing
+
+        var cursor: NSCursor {
+            self == .bottom ? .resizeUpDown : .resizeLeftRight
+        }
+
+        func translation(from start: NSPoint, to current: NSPoint) -> CGFloat {
+            switch self {
+            case .bottom:
+                start.y - current.y
+            case .leading:
+                start.x - current.x
+            case .trailing:
+                current.x - start.x
+            }
+        }
     }
 
-    var axis: Axis = .height
+    var edge: Edge = .bottom
     var startSize: CGFloat
     var minimumSize: CGFloat
     var maximumSize: CGFloat
@@ -20,12 +36,11 @@ struct PopoverResizeHandle: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: PopoverResizeHandleView, context: Context) {
-        nsView.axis = axis
+        nsView.edge = edge
         nsView.startSize = startSize
         nsView.minimumSize = minimumSize
         nsView.maximumSize = maximumSize
         nsView.onSizeChange = onSizeChange
-        nsView.window?.invalidateCursorRects(for: nsView)
     }
 }
 
@@ -33,7 +48,7 @@ final class PopoverResizeHandleView: NSView {
     private static let minimumIntermediateDelta: CGFloat = 2
     private static let resizeInterval = 1.0 / 60.0
 
-    var axis: PopoverResizeHandle.Axis = .height
+    var edge: PopoverResizeHandle.Edge = .bottom
     var startSize: CGFloat = PopoverLayout.defaultHeight
     var minimumSize: CGFloat = PopoverLayout.minimumHeight
     var maximumSize: CGFloat = PopoverLayout.maximumHeight
@@ -44,11 +59,36 @@ final class PopoverResizeHandleView: NSView {
     private var lastEmittedSize: CGFloat?
     private var pendingSize: CGFloat?
     private var pendingResize: DispatchWorkItem?
+    private var resizeTrackingArea: NSTrackingArea?
 
     override var acceptsFirstResponder: Bool { true }
 
-    override func resetCursorRects() {
-        addCursorRect(bounds, cursor: axis == .width ? .resizeLeftRight : .resizeUpDown)
+    override func updateTrackingAreas() {
+        if let resizeTrackingArea {
+            removeTrackingArea(resizeTrackingArea)
+        }
+        super.updateTrackingAreas()
+
+        let resizeTrackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(resizeTrackingArea)
+        self.resizeTrackingArea = resizeTrackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        edge.cursor.set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        if dragStartSize == nil {
+            NSCursor.arrow.set()
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -68,14 +108,15 @@ final class PopoverResizeHandleView: NSView {
         updateSize(isFinal: true)
         dragStartSize = nil
         dragStartScreenPoint = nil
+        if !bounds.contains(convert(event.locationInWindow, from: nil)) {
+            NSCursor.arrow.set()
+        }
     }
 
     private func updateSize(isFinal: Bool) {
         guard let dragStartSize, let dragStartScreenPoint else { return }
         let currentPoint = NSEvent.mouseLocation
-        let translation = axis == .width
-            ? currentPoint.x - dragStartScreenPoint.x
-            : dragStartScreenPoint.y - currentPoint.y
+        let translation = edge.translation(from: dragStartScreenPoint, to: currentPoint)
         let nextSize = min(max(dragStartSize + translation, minimumSize), maximumSize)
         if isFinal {
             pendingResize?.cancel()

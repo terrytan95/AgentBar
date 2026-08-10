@@ -31,8 +31,11 @@ struct ResizablePopoverRootView: View {
         .overlay(alignment: .bottom) {
             heightResizeBorder
         }
+        .overlay(alignment: .leading) {
+            widthResizeBorder(edge: .leading)
+        }
         .overlay(alignment: .trailing) {
-            widthResizeBorder
+            widthResizeBorder(edge: .trailing)
         }
         .onAppear {
             refreshPopoverLayout()
@@ -108,10 +111,10 @@ struct ResizablePopoverRootView: View {
         .frame(height: 12)
     }
 
-    private var widthResizeBorder: some View {
-        ZStack(alignment: .trailing) {
+    private func widthResizeBorder(edge: PopoverResizeHandle.Edge) -> some View {
+        ZStack(alignment: edge == .leading ? .leading : .trailing) {
             PopoverResizeHandle(
-                axis: .width,
+                edge: edge,
                 startSize: CGFloat(settings.popoverWidth),
                 minimumSize: PopoverLayout.minimumWidth,
                 maximumSize: PopoverLayout.maximumWidth
@@ -128,7 +131,7 @@ struct ResizablePopoverRootView: View {
             Capsule()
                 .fill(AgentBarPalette.primary.opacity(0.30))
                 .frame(width: 4, height: 48)
-                .padding(.trailing, 3)
+                .padding(.horizontal, 3)
                 .allowsHitTesting(false)
         }
         .frame(width: 12)

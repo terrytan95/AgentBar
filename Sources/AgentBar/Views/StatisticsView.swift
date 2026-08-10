@@ -973,6 +973,11 @@ struct StatisticsView: View {
                     serviceMixRows
                 }
             } else {
+                QuotaWindowTimelinePanel(
+                    accounts: currentLimitAccounts,
+                    language: store.language
+                )
+
                 HStack(alignment: .top, spacing: 14) {
                     Panel(title: L.text("expiry_watch", store.language)) {
                         resetExpiryRows
@@ -2246,6 +2251,449 @@ private struct Panel<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .agentBarPanel()
+    }
+}
+
+private enum QuotaTimelineKind: String, CaseIterable, Identifiable {
+    case weekly
+    case fiveHour
+
+    var id: String { rawValue }
+
+    func title(_ language: AppLanguage) -> String {
+        switch self {
+        case .weekly: language == .chinese ? "按周" : "Weekly"
+        case .fiveHour: language == .chinese ? "5 小时" : "5 hours"
+        }
+    }
+}
+
+private struct QuotaWindowTimelinePanel: View {
+    var accounts: [UsageAccount]
+    var language: AppLanguage
+    @State private var kind: QuotaTimelineKind = .weekly
+    @State private var anchorDate = Date()
+
+    private let accountColumnWidth: CGFloat = 190
+    private let calendar = Calendar.current
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(language == .chinese ? "配额窗口" : "Quota windows")
+                        .font(.agentBar(size: 14, weight: .bold))
+                    Text(periodSummary)
+                        .font(.agentBar(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                HStack(spacing: 8) {
+                    HStack(spacing: 0) {
+                        timelineButton(systemImage: "chevron.left") { shift(-1) }
+                        Button(language == .chinese ? "今天" : "Today") {
+                            anchorDate = Date()
+                        }
+                        .font(.agentBar(size: 10, weight: .semibold))
+                        .frame(height: 28)
+                        .padding(.horizontal, 10)
+                        .tactilePlainButton()
+                        timelineButton(systemImage: "chevron.right") { shift(1) }
+                    }
+                    .background(.thinMaterial, in: Capsule())
+
+                    Picker("", selection: $kind) {
+                        ForEach(QuotaTimelineKind.allCases) { kind in
+                            Text(kind.title(language)).tag(kind)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 148)
+                    .accessibilityLabel(language == .chinese ? "配额窗口类型" : "Quota window type")
+                }
+            }
+
+            VStack(spacing: 0) {
+                timelineHeader
+                Divider()
+
+                if visibleAccounts.isEmpty {
+                    EmptyPanelMessage(L.text("no_quota_windows", language))
+                        .frame(maxWidth: .infinity, minHeight: 72)
+                } else {
+                    ForEach(visibleAccounts) { account in
+                        timelineRow(account)
+                        if account.id != visibleAccounts.last?.id {
+                            Divider()
+                        }
+                    }
+                }
+            }
+            .background(Color.primary.opacity(0.018), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            HStack(spacing: 14) {
+                timelineLegend(fill: AgentBarPalette.tertiary.opacity(0.18), stroke: AgentBarPalette.tertiary.opacity(0.55), dashed: false, title: language == .chinese ? "当前窗口" : "Current")
+                timelineLegend(fill: .clear, stroke: AgentBarPalette.tertiary.opacity(0.38), dashed: true, title: language == .chinese ? "即将开始" : "Upcoming")
+                timelineLegend(fill: Color.secondary.opacity(0.08), stroke: .clear, dashed: false, title: language == .chinese ? "已结束" : "Ended")
+                HStack(spacing: 5) {
+                    Rectangle().fill(.orange).frame(width: 2, height: 14)
+                    Text(language == .chinese ? "重置过期" : "Reset expiry")
+                }
+                .font(.agentBar(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .agentBarPanel()
+        .onChange(of: kind) { _, _ in anchorDate = Date() }
+    }
+
+    private var visibleAccounts: [UsageAccount] {
+        accounts
+            .filter { window(for: $0) != nil }
+            .sorted {
+                if $0.isActive != $1.isActive { return $0.isActive }
+                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+    }
+
+    private var rangeStart: Date {
+        switch kind {
+        case .weekly:
+            calendar.dateInterval(of: .weekOfYear, for: anchorDate)?.start
+                ?? calendar.startOfDay(for: anchorDate)
+        case .fiveHour:
+            calendar.startOfDay(for: anchorDate)
+        }
+    }
+
+    private var rangeEnd: Date {
+        calendar.date(byAdding: .day, value: kind == .weekly ? 14 : 1, to: rangeStart)
+            ?? rangeStart.addingTimeInterval(kind == .weekly ? 14 * 86_400 : 86_400)
+    }
+
+    private var ticks: [Date] {
+        let count = kind == .weekly ? 14 : 12
+        let component: Calendar.Component = kind == .weekly ? .day : .hour
+        let step = kind == .weekly ? 1 : 2
+        return (0..<count).map {
+            calendar.date(byAdding: component, value: $0 * step, to: rangeStart) ?? rangeStart
+        }
+    }
+
+    private var periodSummary: String {
+        let start = shortDate(rangeStart)
+        let end = shortDate(calendar.date(byAdding: .day, value: -1, to: rangeEnd) ?? rangeEnd)
+        let isCurrent = Date() >= rangeStart && Date() < rangeEnd
+        if kind == .fiveHour {
+            return language == .chinese
+                ? "\(start) · 24 小时\(isCurrent ? " · 当前" : "")"
+                : "\(start) · 24 hours\(isCurrent ? " · Current" : "")"
+        }
+        return language == .chinese
+            ? "\(start) – \(end) · 两周\(isCurrent ? " · 当前" : "")"
+            : "\(start) – \(end) · Two weeks\(isCurrent ? " · Current" : "")"
+    }
+
+    private var timelineHeader: some View {
+        HStack(spacing: 0) {
+            Text(language == .chinese ? "账户" : "Account")
+                .font(.agentBar(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 12)
+                .frame(width: accountColumnWidth, height: 42, alignment: .leading)
+                .overlay(alignment: .trailing) { Divider() }
+
+            HStack(spacing: 0) {
+                ForEach(Array(ticks.enumerated()), id: \.offset) { _, date in
+                    VStack(spacing: 2) {
+                        Text(tickTopLabel(date))
+                            .foregroundStyle(.secondary)
+                        Text(tickBottomLabel(date))
+                            .foregroundStyle(.primary.opacity(0.72))
+                    }
+                    .font(.agentBarMono(size: 8, weight: .semibold))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .trailing) {
+                        Rectangle().fill(Color.primary.opacity(0.07)).frame(width: 1)
+                    }
+                }
+            }
+            .frame(height: 42)
+        }
+    }
+
+    private func timelineRow(_ account: UsageAccount) -> some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(serviceColor(account.service))
+                        .frame(width: 6, height: 6)
+                    Text(account.displayNameWithWorkspace(language: language))
+                        .font(.agentBar(size: 10, weight: .bold))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(kind == .weekly ? "7d" : "5h")
+                        .font(.agentBarMono(size: 8, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.1), in: Capsule())
+                }
+
+                if let window = window(for: account) {
+                    Text(windowLabel(window))
+                        .font(.agentBarMono(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(width: accountColumnWidth, height: 56, alignment: .leading)
+            .overlay(alignment: .trailing) { Divider() }
+
+            if let window = window(for: account) {
+                QuotaTimelineTrack(
+                    account: account,
+                    window: window,
+                    rangeStart: rangeStart,
+                    rangeEnd: rangeEnd,
+                    columnCount: ticks.count,
+                    color: serviceColor(account.service),
+                    language: language
+                )
+                .frame(height: 56)
+            }
+        }
+    }
+
+    private func timelineButton(systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.agentBar(size: 8, weight: .bold))
+                .frame(width: 28, height: 28)
+        }
+        .tactilePlainButton()
+        .accessibilityLabel(systemImage == "chevron.left"
+            ? (language == .chinese ? "上一段" : "Previous period")
+            : (language == .chinese ? "下一段" : "Next period"))
+    }
+
+    private func timelineLegend(fill: Color, stroke: Color, dashed: Bool, title: String) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(fill)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .stroke(stroke, style: StrokeStyle(lineWidth: 1, dash: dashed ? [3, 2] : []))
+                }
+                .frame(width: 20, height: 9)
+            Text(title)
+        }
+        .font(.agentBar(size: 9, weight: .semibold))
+        .foregroundStyle(.secondary)
+    }
+
+    private func window(for account: UsageAccount) -> UsageWindow? {
+        kind == .weekly ? account.weeklyWindow : account.fiveHourWindow
+    }
+
+    private func windowLabel(_ window: UsageWindow) -> String {
+        let remaining = Int(window.remainingPercent.rounded())
+        return language == .chinese
+            ? "\(kind == .weekly ? "周限额" : "5 小时限额") \(remaining)%"
+            : "\(kind == .weekly ? "Weekly" : "5-hour") \(remaining)%"
+    }
+
+    private func shift(_ direction: Int) {
+        let component: Calendar.Component = .day
+        let value = direction * (kind == .weekly ? 7 : 1)
+        anchorDate = calendar.date(byAdding: component, value: value, to: anchorDate) ?? anchorDate
+    }
+
+    private func tickTopLabel(_ date: Date) -> String {
+        if kind == .fiveHour { return shortDate(date) }
+        let weekday = calendar.component(.weekday, from: date) - 1
+        let names = language == .chinese
+            ? ["日", "一", "二", "三", "四", "五", "六"]
+            : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        return names[weekday]
+    }
+
+    private func tickBottomLabel(_ date: Date) -> String {
+        guard kind == .weekly else {
+            return String(format: "%02d:00", calendar.component(.hour, from: date))
+        }
+        return shortDate(date)
+    }
+
+    private func shortDate(_ date: Date) -> String {
+        String(
+            format: "%02d/%02d",
+            calendar.component(.month, from: date),
+            calendar.component(.day, from: date)
+        )
+    }
+
+    private func serviceColor(_ service: UsageService) -> Color {
+        switch service {
+        case .codex: AgentBarPalette.tertiary
+        case .claudeCode: AgentBarPalette.secondary
+        case .xaiAPI: .purple
+        case .cursorAgent: AgentBarPalette.primary
+        }
+    }
+}
+
+private struct QuotaTimelineTrack: View {
+    var account: UsageAccount
+    var window: UsageWindow
+    var rangeStart: Date
+    var rangeEnd: Date
+    var columnCount: Int
+    var color: Color
+    var language: AppLanguage
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            ZStack(alignment: .leading) {
+                ForEach(0...columnCount, id: \.self) { index in
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.055))
+                        .frame(width: 1, height: size.height)
+                        .offset(x: size.width * CGFloat(index) / CGFloat(columnCount))
+                }
+
+                if let resetsAt = window.resetsAt {
+                    let duration = TimeInterval(max(1, window.windowMinutes) * 60)
+                    let start = resetsAt.addingTimeInterval(-duration)
+                    let previousStart = start.addingTimeInterval(-duration)
+                    let nextEnd = resetsAt.addingTimeInterval(duration)
+                    let usedEnd = start.addingTimeInterval(duration * min(100, max(0, window.usedPercent)) / 100)
+
+                    if let previous = segment(from: previousStart, to: start, width: size.width) {
+                        Capsule()
+                            .fill(Color.secondary.opacity(0.08))
+                            .frame(width: previous.length, height: 20)
+                            .offset(x: previous.x)
+                    }
+
+                    if let current = segment(from: start, to: resetsAt, width: size.width) {
+                        Capsule()
+                            .fill(color.opacity(0.16))
+                            .overlay { Capsule().stroke(color.opacity(0.55), lineWidth: 1) }
+                            .frame(width: current.length, height: 20)
+                            .offset(x: current.x)
+                    }
+
+                    if let used = segment(from: start, to: usedEnd, width: size.width) {
+                        Capsule()
+                            .fill(color.opacity(0.48))
+                            .frame(width: used.length, height: 20)
+                            .offset(x: used.x)
+                    }
+
+                    if let upcoming = segment(from: resetsAt, to: nextEnd, width: size.width) {
+                        Capsule()
+                            .stroke(color.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                            .frame(width: upcoming.length, height: 20)
+                            .offset(x: upcoming.x)
+                    }
+
+                    if let current = segment(from: start, to: resetsAt, width: size.width), current.length > 76 {
+                        Text(currentLabel(resetsAt))
+                            .font(.agentBarMono(size: 8, weight: .semibold))
+                            .foregroundStyle(Color.primary.opacity(0.68))
+                            .lineLimit(1)
+                            .frame(width: current.length - 12, alignment: .leading)
+                            .offset(x: current.x + 6)
+                    }
+                } else {
+                    Capsule()
+                        .stroke(Color.secondary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                        .frame(height: 20)
+                        .overlay {
+                            Text(language == .chinese ? "重置时间未知" : "Reset time unavailable")
+                                .font(.agentBar(size: 8, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 8)
+                }
+
+                ForEach(resetExpiries, id: \.self) { expiry in
+                    Rectangle()
+                        .fill(.orange)
+                        .frame(width: 2, height: 30)
+                        .offset(x: x(for: expiry, width: size.width))
+                        .help(resetExpiryHelp(expiry))
+                }
+
+                if Date() >= rangeStart, Date() < rangeEnd {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.24))
+                        .frame(width: 1, height: size.height)
+                        .offset(x: x(for: Date(), width: size.width))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .help(trackHelp)
+        }
+    }
+
+    private var resetExpiries: [Date] {
+        (account.resetCredits?.resets ?? [])
+            .compactMap(\.expiresAt)
+            .filter { $0 >= rangeStart && $0 < rangeEnd }
+    }
+
+    private var trackHelp: String {
+        let remaining = Int(window.remainingPercent.rounded())
+        let reset = window.resetsAt.map {
+            DisplayFormatters.shortDateTimeString(for: $0, language: language)
+        } ?? L.text("reset_time_unknown", language)
+        return language == .chinese
+            ? "剩余 \(remaining)% · 重置 \(reset)"
+            : "\(remaining)% remaining · Resets \(reset)"
+    }
+
+    private func currentLabel(_ resetsAt: Date) -> String {
+        let remaining = Int(window.remainingPercent.rounded())
+        let reset = DisplayFormatters.shortDateTimeString(for: resetsAt, language: language)
+        return "\(remaining)% · \(reset)"
+    }
+
+    private func resetExpiryHelp(_ date: Date) -> String {
+        let value = DisplayFormatters.shortDateTimeString(for: date, language: language)
+        return language == .chinese ? "重置将于 \(value) 过期" : "Reset expires \(value)"
+    }
+
+    private func segment(from start: Date, to end: Date, width: CGFloat) -> (x: CGFloat, length: CGFloat)? {
+        let clippedStart = max(start, rangeStart)
+        let clippedEnd = min(end, rangeEnd)
+        guard clippedEnd > clippedStart else { return nil }
+        let startX = x(for: clippedStart, width: width)
+        return (startX, max(1, x(for: clippedEnd, width: width) - startX))
+    }
+
+    private func x(for date: Date, width: CGFloat) -> CGFloat {
+        let duration = rangeEnd.timeIntervalSince(rangeStart)
+        guard duration > 0 else { return 0 }
+        let fraction = date.timeIntervalSince(rangeStart) / duration
+        return width * min(1, max(0, fraction))
     }
 }
 

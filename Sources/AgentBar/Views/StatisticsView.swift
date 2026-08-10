@@ -80,6 +80,16 @@ struct StatisticsView: View {
                     .transition(.opacity.animation(AgentBarDesign.smoothAnimation(reduceMotion: false)))
             }
             contentColumn
+                .phaseAnimator([true, false, true], trigger: usesSidebarLayout) { content, isSettled in
+                    content
+                        .opacity(isSettled ? 1 : 0.94)
+                        .offset(
+                            x: isSettled ? 0 : (usesSidebarLayout ? -14 : 14),
+                            y: isSettled ? 0 : (usesSidebarLayout ? 6 : -6)
+                        )
+                } animation: { isSettled in
+                    isSettled ? AgentBarDesign.smoothAnimation(reduceMotion: false, duration: 0.18) : nil
+                }
         }
         .onGeometryChange(for: Bool.self) { proxy in
             proxy.size.width < compactNavigationThreshold

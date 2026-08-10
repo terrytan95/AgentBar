@@ -2297,12 +2297,17 @@ private struct QuotaWindowTimelinePanel: View {
                             anchorDate = Date()
                         }
                         .font(.agentBar(size: 10, weight: .semibold))
-                        .frame(height: 28)
-                        .padding(.horizontal, 10)
+                        .frame(minWidth: 52, minHeight: 32)
+                        .contentShape(Rectangle())
                         .tactilePlainButton()
                         timelineButton(systemImage: "chevron.right") { shift(1) }
                     }
-                    .background(.thinMaterial, in: Capsule())
+                    .background {
+                        Capsule()
+                            .fill(.thinMaterial)
+                            .overlay { Capsule().stroke(Color.primary.opacity(0.07), lineWidth: 1) }
+                            .shadow(color: Color.black.opacity(0.14), radius: 8, y: 3)
+                    }
 
                     Picker("", selection: $kind) {
                         ForEach(QuotaTimelineKind.allCases) { kind in
@@ -2483,7 +2488,9 @@ private struct QuotaWindowTimelinePanel: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.agentBar(size: 8, weight: .bold))
-                .frame(width: 28, height: 28)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(width: 40, height: 32)
+                .contentShape(Rectangle())
         }
         .tactilePlainButton()
         .accessibilityLabel(systemImage == "chevron.left"

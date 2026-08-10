@@ -2262,7 +2262,7 @@ private enum QuotaTimelineKind: String, CaseIterable, Identifiable {
 
     func title(_ language: AppLanguage) -> String {
         switch self {
-        case .weekly: language == .chinese ? "按周" : "Weekly"
+        case .weekly: language == .chinese ? "周 / 月" : "Week / month"
         case .fiveHour: language == .chinese ? "5 小时" : "5 hours"
         }
     }
@@ -2443,7 +2443,7 @@ private struct QuotaWindowTimelinePanel: View {
                         .font(.agentBar(size: 10, weight: .bold))
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    Text(kind == .weekly ? "7d" : "5h")
+                    Text(windowBadge(for: account))
                         .font(.agentBarMono(size: 8, weight: .bold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5)
@@ -2452,7 +2452,7 @@ private struct QuotaWindowTimelinePanel: View {
                 }
 
                 if let window = window(for: account) {
-                    Text(windowLabel(window))
+                    Text(windowLabel(window, account: account))
                         .font(.agentBarMono(size: 8, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5)
@@ -2507,14 +2507,35 @@ private struct QuotaWindowTimelinePanel: View {
     }
 
     private func window(for account: UsageAccount) -> UsageWindow? {
-        kind == .weekly ? account.weeklyWindow : account.fiveHourWindow
+        if kind == .fiveHour { return account.fiveHourWindow }
+        if let weeklyWindow = account.weeklyWindow { return weeklyWindow }
+        guard let usage = account.cursorSubscriptionUsage else { return nil }
+        let minutes = usage.periodEndsAt.flatMap { end in
+            calendar.date(byAdding: .month, value: -1, to: end).map {
+                Int(end.timeIntervalSince($0) / 60)
+            }
+        } ?? 30 * 24 * 60
+        return UsageWindow(
+            kind: .weekly,
+            usedPercent: usage.includedUsedPercent,
+            windowMinutes: minutes,
+            resetsAt: usage.periodEndsAt
+        )
     }
 
-    private func windowLabel(_ window: UsageWindow) -> String {
+    private func windowLabel(_ window: UsageWindow, account: UsageAccount) -> String {
         let remaining = Int(window.remainingPercent.rounded())
+        if account.service == .cursorAgent {
+            return language == .chinese ? "套餐周期 \(remaining)%" : "Billing cycle \(remaining)%"
+        }
         return language == .chinese
             ? "\(kind == .weekly ? "周限额" : "5 小时限额") \(remaining)%"
             : "\(kind == .weekly ? "Weekly" : "5-hour") \(remaining)%"
+    }
+
+    private func windowBadge(for account: UsageAccount) -> String {
+        if kind == .fiveHour { return "5h" }
+        return account.service == .cursorAgent ? "1mo" : "7d"
     }
 
     private func shift(_ direction: Int) {

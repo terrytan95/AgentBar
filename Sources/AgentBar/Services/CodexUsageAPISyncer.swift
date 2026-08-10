@@ -192,8 +192,11 @@ struct CodexUsageAPISyncer {
                 }
                 continue
             }
+            let previousResetCredits = (accounts[index]["last_usage"] as? [String: Any])?["reset_credits"]
             if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
                 usage["reset_credits"] = detailedResetCredits
+            } else if usage["reset_credits"] == nil, let previousResetCredits {
+                usage["reset_credits"] = previousResetCredits
             }
 
             if !usesExternalCredential,
@@ -333,8 +336,10 @@ struct CodexUsageAPISyncer {
         guard let object = value as? [String: Any] else { return nil }
         let resetItems = firstArray([object["resets"], object["credits"], object["items"]])
             .compactMap(parseResetCredit)
-        let availableCount = firstNumber([object["available_count"], object["availableCount"], object["count"]])?.intValue ?? resetItems.count
-        guard availableCount > 0 || !resetItems.isEmpty else { return nil }
+        let explicitCount = firstNumber([object["available_count"], object["availableCount"], object["count"]])?.intValue
+        guard explicitCount != nil || !resetItems.isEmpty else { return nil }
+        let availableCount = explicitCount ?? resetItems.count
+        guard availableCount >= 0 else { return nil }
 
         var output: [String: Any] = ["available_count": availableCount]
         if !resetItems.isEmpty {
@@ -381,8 +386,11 @@ struct CodexUsageAPISyncer {
         let credits = firstArray([root["credits"], root["resets"], root["items"]])
             .compactMap(parseDetailedResetCredit)
         let available = credits.filter { ($0["is_available"] as? Bool) ?? true }
-        let availableCount = firstNumber([root["available_count"], root["availableCount"], root["count"]])?.intValue ?? available.count
-        guard availableCount > 0 || !available.isEmpty else { return nil }
+        let explicitCount = firstNumber([root["available_count"], root["availableCount"], root["count"]])?.intValue
+        let hasCreditList = root["credits"] is [Any] || root["resets"] is [Any] || root["items"] is [Any]
+        guard explicitCount != nil || hasCreditList else { return nil }
+        let availableCount = explicitCount ?? available.count
+        guard availableCount >= 0 else { return nil }
         var output: [String: Any] = ["available_count": availableCount]
         let resets = available.map { credit in
             credit.filter { $0.key != "is_available" }

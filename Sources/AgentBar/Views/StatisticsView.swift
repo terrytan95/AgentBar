@@ -812,14 +812,14 @@ struct StatisticsView: View {
             if settings.showQuotaPressureSection {
                 activityPanelsLayout {
                     dashboardActivityPanels
-                        .frame(minWidth: stacksActivityPanels ? nil : 640)
+                        .frame(minWidth: usesStackedActivityPanels ? nil : 640)
                     QuotaPressurePanel(
                         pressure: quotaPressure,
                         history: store.quotaCapacityHistory,
                         language: store.language
                     )
-                    .frame(width: stacksActivityPanels ? nil : 230)
-                    .frame(maxHeight: stacksActivityPanels ? nil : .infinity)
+                    .frame(width: usesStackedActivityPanels ? nil : 230)
+                    .frame(maxHeight: usesStackedActivityPanels ? nil : .infinity)
                 }
                 .onGeometryChange(for: Bool.self) { proxy in
                     proxy.size.width < 884
@@ -855,8 +855,12 @@ struct StatisticsView: View {
         }
     }
 
+    private var usesStackedActivityPanels: Bool {
+        usesCompactNavigation || stacksActivityPanels
+    }
+
     private var activityPanelsLayout: AnyLayout {
-        stacksActivityPanels
+        usesStackedActivityPanels
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
     }

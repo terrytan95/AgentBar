@@ -45,10 +45,23 @@ private func codexSidebarQuotaAXCallback(
     }
 }
 
-private final class CodexSidebarQuotaHostingView: NSHostingView<CodexSidebarQuotaCard> {
+private final class CodexSidebarQuotaHostingView: NSHostingView<CodexSidebarQuotaCard>, NSGestureRecognizerDelegate {
     private static let resizeEdgeWidth: CGFloat = 5
     private var resizeTrackingArea: NSTrackingArea?
     private var isShowingResizeCursor = false
+    private var windowDragRecognizer: NSPanGestureRecognizer?
+    private var windowDragStartOrigin: NSPoint?
+    private var windowDragStartMouseLocation: NSPoint?
+    var allowsWindowDragging = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard windowDragRecognizer == nil else { return }
+        let recognizer = NSPanGestureRecognizer(target: self, action: #selector(handleWindowDrag(_:)))
+        recognizer.delegate = self
+        addGestureRecognizer(recognizer)
+        windowDragRecognizer = recognizer
+    }
 
     override func updateTrackingAreas() {
         if let resizeTrackingArea {
@@ -82,6 +95,49 @@ private final class CodexSidebarQuotaHostingView: NSHostingView<CodexSidebarQuot
         guard isShowingResizeCursor else { return }
         isShowingResizeCursor = false
         NSCursor.arrow.set()
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
+        guard allowsWindowDragging else { return false }
+        let x = gestureRecognizer.location(in: self).x
+        return x > Self.resizeEdgeWidth && x < bounds.maxX - Self.resizeEdgeWidth
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: NSGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: NSGestureRecognizer
+    ) -> Bool {
+        true
+    }
+
+    @objc private func handleWindowDrag(_ recognizer: NSPanGestureRecognizer) {
+        guard let window, allowsWindowDragging else {
+            windowDragStartOrigin = nil
+            windowDragStartMouseLocation = nil
+            return
+        }
+        switch recognizer.state {
+        case .began:
+            windowDragStartOrigin = window.frame.origin
+            let translation = recognizer.translation(in: nil)
+            let mouseLocation = NSEvent.mouseLocation
+            windowDragStartMouseLocation = NSPoint(
+                x: mouseLocation.x - translation.x,
+                y: mouseLocation.y - translation.y
+            )
+        case .changed:
+            guard let windowDragStartOrigin, let windowDragStartMouseLocation else { return }
+            let mouseLocation = NSEvent.mouseLocation
+            window.setFrameOrigin(NSPoint(
+                x: windowDragStartOrigin.x + mouseLocation.x - windowDragStartMouseLocation.x,
+                y: windowDragStartOrigin.y + mouseLocation.y - windowDragStartMouseLocation.y
+            ))
+        case .ended, .cancelled, .failed:
+            windowDragStartOrigin = nil
+            windowDragStartMouseLocation = nil
+        default:
+            break
+        }
     }
 }
 
@@ -501,6 +557,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         }
 
         guard let application else { return }
+        hostingView?.allowsWindowDragging = false
         panel?.isMovableByWindowBackground = false
         attach(to: application)
         refreshPanelFrame(forceFullScan: true, reason: .initial)
@@ -583,6 +640,7 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             refreshIndependentPanelFrame()
             return
         }
+        hostingView?.allowsWindowDragging = false
         panel?.styleMask.remove(.resizable)
         if let panel, let hostingView {
             panel.invalidateCursorRects(for: hostingView)
@@ -781,8 +839,9 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
             return
         }
 
-        let enteringIndependentMode = !panel.isMovableByWindowBackground
-        panel.isMovableByWindowBackground = true
+        let enteringIndependentMode = !hostingView.allowsWindowDragging
+        hostingView.allowsWindowDragging = true
+        panel.isMovableByWindowBackground = false
         panel.styleMask.insert(.resizable)
         panel.invalidateCursorRects(for: hostingView)
         if enteringIndependentMode {

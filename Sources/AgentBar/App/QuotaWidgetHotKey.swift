@@ -59,6 +59,7 @@ final class QuotaWidgetHotKeyController: ObservableObject {
     private var cancellable: AnyCancellable?
     private var eventHandler: EventHandlerRef?
     private var registeredHotKey: EventHotKeyRef?
+    private var isRecorderActive = false
 
     func start(settings: SettingsStore) {
         guard self.settings == nil else { return }
@@ -67,6 +68,7 @@ final class QuotaWidgetHotKeyController: ObservableObject {
         cancellable = settings.$quotaWidgetHotKey
             .removeDuplicates()
             .sink { [weak self] hotKey in
+                guard self?.isRecorderActive == false else { return }
                 self?.register(hotKey)
             }
     }
@@ -78,7 +80,18 @@ final class QuotaWidgetHotKeyController: ObservableObject {
             RemoveEventHandler(eventHandler)
             self.eventHandler = nil
         }
+        isRecorderActive = false
         settings = nil
+    }
+
+    func setRecorderActive(_ active: Bool) {
+        guard active != isRecorderActive else { return }
+        isRecorderActive = active
+        if active {
+            unregisterHotKey()
+        } else {
+            register(settings?.quotaWidgetHotKey)
+        }
     }
 
     private func installEventHandler() {
@@ -168,6 +181,7 @@ final class HotKeyRecorderButton: NSButton {
     var recordingText = "Type shortcut…"
     var onChange: ((QuotaWidgetHotKey?) -> Void)?
     private var isRecording = false
+    private nonisolated(unsafe) var keyDownMonitor: Any?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -183,19 +197,61 @@ final class HotKeyRecorderButton: NSButton {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        if let keyDownMonitor {
+            NSEvent.removeMonitor(keyDownMonitor)
+        }
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil {
+            stopRecording()
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     @objc private func beginRecording() {
         isRecording = true
-        window?.makeFirstResponder(self)
+        guard window?.makeFirstResponder(self) == true else {
+            isRecording = false
+            updateTitle()
+            return
+        }
+        QuotaWidgetHotKeyController.shared.setRecorderActive(true)
+        if keyDownMonitor == nil {
+            keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self,
+                      self.isRecording,
+                      event.window === self.window
+                else { return event }
+                self.handleKeyDown(event)
+                return nil
+            }
+        }
         updateTitle()
     }
 
     override func resignFirstResponder() -> Bool {
-        isRecording = false
-        updateTitle()
+        stopRecording()
         return super.resignFirstResponder()
     }
 
+    private func stopRecording() {
+        guard isRecording || keyDownMonitor != nil else { return }
+        isRecording = false
+        if let keyDownMonitor {
+            NSEvent.removeMonitor(keyDownMonitor)
+            self.keyDownMonitor = nil
+        }
+        QuotaWidgetHotKeyController.shared.setRecorderActive(false)
+        updateTitle()
+    }
+
     override func keyDown(with event: NSEvent) {
+        handleKeyDown(event)
+    }
+
+    private func handleKeyDown(_ event: NSEvent) {
         if event.keyCode == UInt16(kVK_Escape) {
             window?.makeFirstResponder(nil)
             return

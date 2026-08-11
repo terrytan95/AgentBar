@@ -65,7 +65,8 @@ struct CodexSidebarQuotaCard: View {
                     }
                 }
 
-                if let resetCredits = state.account?.resetCredits, resetCredits.hasAvailableCredits {
+                if let resetCredits = state.account?.resetCredits,
+                   resetCredits.hasAvailableCredits || resetCredits.error != nil {
                     resetCreditsSection(resetCredits)
                 }
 
@@ -171,6 +172,12 @@ struct CodexSidebarQuotaCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(L.text("reset_credits", model.content.language)), \(resetCredits.visibleCount)")
+
+            if let error = resetCredits.error {
+                metadataLine(error.summaryLine, systemImage: "exclamationmark.triangle.fill", color: .red)
+                    .padding(.top, 4)
+                    .padding(.leading, 16)
+            }
 
             if isResetCreditsExpanded {
                 VStack(alignment: .leading, spacing: 4) {

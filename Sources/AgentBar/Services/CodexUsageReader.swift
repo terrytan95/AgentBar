@@ -899,24 +899,28 @@ private extension String {
 private struct CodexResetCredits: Decodable {
     var availableCount: Int
     var resets: [CodexResetCredit]
+    var error: UsageResetCreditsError?
 
     enum CodingKeys: String, CodingKey {
         case availableCount = "available_count"
         case resets
+        case error
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         availableCount = try container.decodeIfPresent(Int.self, forKey: .availableCount) ?? 0
         resets = try container.decodeIfPresent([CodexResetCredit].self, forKey: .resets) ?? []
+        error = try container.decodeIfPresent(UsageResetCreditsError.self, forKey: .error)
     }
 
     func toUsageResetCredits() -> UsageResetCredits? {
         let credits = UsageResetCredits(
             availableCount: availableCount,
-            resets: resets.map { UsageResetCredit(expiresAt: epochDate($0.expiresAt)) }
+            resets: resets.map { UsageResetCredit(expiresAt: epochDate($0.expiresAt)) },
+            error: error
         )
-        return credits.hasAvailableCredits ? credits : nil
+        return credits.hasAvailableCredits || credits.error != nil ? credits : nil
     }
 }
 

@@ -83,13 +83,34 @@ struct UsageResetCredit: Codable, Equatable, Sendable {
     }
 }
 
+struct UsageResetCreditsError: Codable, Equatable, Sendable {
+    var statusCode: Int
+    var code: String?
+    var message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case statusCode = "status_code"
+        case code
+        case message
+    }
+
+    var summaryLine: String {
+        ["HTTP \(statusCode)", code, message]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+}
+
 struct UsageResetCredits: Codable, Equatable, Sendable {
     var availableCount: Int
     var resets: [UsageResetCredit] = []
+    var error: UsageResetCreditsError? = nil
 
     enum CodingKeys: String, CodingKey {
         case availableCount = "available_count"
         case resets
+        case error
     }
 
     var visibleCount: Int {
@@ -104,9 +125,10 @@ struct UsageResetCredits: Codable, Equatable, Sendable {
         let activeResets = resets.filter { $0.expiresAt.map { $0 > now } ?? true }
         let credits = UsageResetCredits(
             availableCount: max(0, availableCount - (resets.count - activeResets.count)),
-            resets: activeResets
+            resets: activeResets,
+            error: error
         )
-        return credits.hasAvailableCredits ? credits : nil
+        return credits.hasAvailableCredits || credits.error != nil ? credits : nil
     }
 
     func summaryLine(language: AppLanguage) -> String {

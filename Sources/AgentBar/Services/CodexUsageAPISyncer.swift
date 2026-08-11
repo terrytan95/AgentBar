@@ -261,14 +261,27 @@ struct CodexUsageAPISyncer {
             if Self.hasCompleteResetCredits(usage["reset_credits"]) {
                 // The main usage response is authoritative, including an explicit zero.
             } else if hasRecentDetailAttempt {
-                if usage["reset_credits"] == nil, let previousResetCredits {
+                if let previous = previousResetCredits as? [String: Any],
+                   let previousError = previous["error"] {
+                    var current = usage["reset_credits"] as? [String: Any] ?? previous
+                    current["error"] = previousError
+                    usage["reset_credits"] = current
+                } else if usage["reset_credits"] == nil, let previousResetCredits {
                     usage["reset_credits"] = previousResetCredits
                 }
             } else {
                 accounts[index]["agentbar_reset_credits_refresh_at"] = refreshStartedAt
                 updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_reset_credits_refresh_at")
-                if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
+                let detail = await fetchDetailedResetCredits(authInfo: authInfo)
+                if let detailedResetCredits = detail.resetCredits {
                     usage["reset_credits"] = detailedResetCredits
+                } else if let detailError = detail.error {
+                    var resetCredits = usage["reset_credits"] as? [String: Any]
+                        ?? previousResetCredits as? [String: Any]
+                        ?? [:]
+                    resetCredits["available_count"] = resetCredits["available_count"] ?? 0
+                    resetCredits["error"] = detailError
+                    usage["reset_credits"] = resetCredits
                 } else if usage["reset_credits"] == nil, let previousResetCredits {
                     usage["reset_credits"] = previousResetCredits
                 }
@@ -448,7 +461,9 @@ struct CodexUsageAPISyncer {
         return output.isEmpty ? nil : output
     }
 
-    private func fetchDetailedResetCredits(authInfo: CodexUsageAuthInfo) async -> [String: Any]? {
+    private func fetchDetailedResetCredits(
+        authInfo: CodexUsageAuthInfo
+    ) async -> (resetCredits: [String: Any]?, error: [String: Any]?) {
         var request = URLRequest(url: Self.resetCreditsEndpoint)
         request.httpMethod = "GET"
         request.timeoutInterval = timeout
@@ -459,9 +474,22 @@ struct CodexUsageAPISyncer {
         request.setValue("Codex Desktop", forHTTPHeaderField: "originator")
         request.setValue("CODEX", forHTTPHeaderField: "OAI-Product-Sku")
 
-        let response = try? await usageClient(request, timeout)
-        guard let response, 200..<300 ~= response.statusCode else { return nil }
-        return Self.parseDetailedResetCreditsResponse(data: response.data)
+        guard let response = try? await usageClient(request, timeout) else { return (nil, nil) }
+        guard 200..<300 ~= response.statusCode else {
+            return (nil, Self.resetCreditsError(from: response))
+        }
+        return (Self.parseDetailedResetCreditsResponse(data: response.data), nil)
+    }
+
+    private static func resetCreditsError(from response: CodexUsageAPIResponse) -> [String: Any] {
+        var output: [String: Any] = ["status_code": response.statusCode]
+        guard let root = try? JSONSerialization.jsonObject(with: response.data) as? [String: Any] else {
+            return output
+        }
+        let detail = root["detail"] as? [String: Any] ?? root["error"] as? [String: Any]
+        output["code"] = firstNonEmptyString([detail?["type"], detail?["code"]])
+        output["message"] = firstNonEmptyString([detail?["message"]])
+        return output
     }
 
     private static func parseDetailedResetCreditsResponse(data: Data) -> [String: Any]? {

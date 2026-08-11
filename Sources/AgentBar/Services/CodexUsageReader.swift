@@ -155,7 +155,14 @@ struct CodexUsageReader {
         authSnapshotInfo: ((String) -> CodexAuthSnapshotInfo?)? = nil
     ) throws -> (snapshot: UsageSnapshot, activeAccountActivatedAt: Date?) {
         let registry = try JSONDecoder().decode(CodexRegistry.self, from: data)
-        let activeAccountKey = registry.accounts.accountKey(matching: activeAuthInfo?.identity) ?? registry.activeAccountKey
+        let registryActiveAccountUsesOpenCodex = registry.accounts.first {
+            $0.accountKey == registry.activeAccountKey
+        }?.externalAuthSource?.split(separator: "+").contains(
+            Substring(CLIProxyCodexRegistryMetadata.openCodexSourceValue)
+        ) == true
+        let activeAccountKey = registryActiveAccountUsesOpenCodex
+            ? registry.activeAccountKey
+            : registry.accounts.accountKey(matching: activeAuthInfo?.identity) ?? registry.activeAccountKey
         let workspaceNamesByID = registry.accounts.workspaceNamesByID
         let accounts = registry.accounts.map { raw in
             let savedAuthInfo = authSnapshotInfo?(raw.accountKey)

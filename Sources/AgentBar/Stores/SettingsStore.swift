@@ -58,6 +58,13 @@ final class SettingsStore: ObservableObject {
     static let defaultTopUsageRowCount = 3
     static let minimumRefreshInterval: TimeInterval = 120
 
+    nonisolated static func defaultPersistenceURL(bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> URL {
+        let directory = bundleIdentifier == "com.terrytan.AgentBar" ? "AgentBar" : "AgentBarPreview"
+        return FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "\(directory)/Settings.plist")
+    }
+
     @Published var language: AppLanguage {
         didSet { persist(language.rawValue, forKey: Keys.language) }
     }
@@ -660,9 +667,7 @@ private final class SettingsPersistence {
     private static let schemaVersionKey = "_schemaVersion"
     private static let currentSchemaVersion = 1
 
-    static let defaultURL = FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appending(path: "AgentBar/Settings.plist")
+    static let defaultURL = SettingsStore.defaultPersistenceURL()
 
     let url: URL
     private let writer = SettingsBackupWriter()

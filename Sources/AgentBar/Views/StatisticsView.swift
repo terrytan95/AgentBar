@@ -2277,6 +2277,12 @@ private enum QuotaTimelineKind: String, CaseIterable, Identifiable {
     }
 }
 
+enum QuotaTimelineGeometry {
+    static func trackWidth(totalWidth: CGFloat, accountColumnWidth: CGFloat) -> CGFloat {
+        max(0, totalWidth - accountColumnWidth)
+    }
+}
+
 private struct QuotaWindowTimelinePanel: View {
     var accounts: [UsageAccount]
     var language: AppLanguage
@@ -2447,50 +2453,59 @@ private struct QuotaWindowTimelinePanel: View {
     }
 
     private func timelineRow(_ account: UsageAccount) -> some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(serviceColor(account.service))
-                        .frame(width: 6, height: 6)
-                    Text(account.displayNameWithWorkspace(language: language))
-                        .font(.agentBar(size: 10, weight: .bold))
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(windowBadge(for: account))
-                        .font(.agentBarMono(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.1), in: Capsule())
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(serviceColor(account.service))
+                            .frame(width: 6, height: 6)
+                        Text(account.displayNameWithWorkspace(language: language))
+                            .font(.agentBar(size: 10, weight: .bold))
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(windowBadge(for: account))
+                            .font(.agentBarMono(size: 8, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.1), in: Capsule())
+                    }
+
+                    if let window = window(for: account) {
+                        Text(windowLabel(window, account: account))
+                            .font(.agentBarMono(size: 8, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    }
                 }
+                .padding(.horizontal, 12)
+                .frame(width: accountColumnWidth, height: 56, alignment: .leading)
+                .overlay(alignment: .trailing) { Divider() }
 
                 if let window = window(for: account) {
-                    Text(windowLabel(window, account: account))
-                        .font(.agentBarMono(size: 8, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    QuotaTimelineTrack(
+                        account: account,
+                        window: window,
+                        rangeStart: rangeStart,
+                        rangeEnd: rangeEnd,
+                        columnCount: ticks.count,
+                        color: serviceColor(account.service),
+                        language: language
+                    )
+                    .frame(
+                        width: QuotaTimelineGeometry.trackWidth(
+                            totalWidth: proxy.size.width,
+                            accountColumnWidth: accountColumnWidth
+                        ),
+                        height: 56
+                    )
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(width: accountColumnWidth, height: 56, alignment: .leading)
-            .overlay(alignment: .trailing) { Divider() }
-
-            if let window = window(for: account) {
-                QuotaTimelineTrack(
-                    account: account,
-                    window: window,
-                    rangeStart: rangeStart,
-                    rangeEnd: rangeEnd,
-                    columnCount: ticks.count,
-                    color: serviceColor(account.service),
-                    language: language
-                )
-                .frame(maxWidth: .infinity, minHeight: 56, maxHeight: 56)
-            }
         }
+        .frame(height: 56)
     }
 
     private func timelineButton(systemImage: String, action: @escaping () -> Void) -> some View {

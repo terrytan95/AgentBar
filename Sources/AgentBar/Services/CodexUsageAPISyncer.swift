@@ -446,9 +446,10 @@ struct CodexUsageAPISyncer {
         request.setValue("CODEX", forHTTPHeaderField: "OAI-Product-Sku")
 
         var response = try? await usageClient(request, timeout)
-        if response?.statusCode == 429 {
+        for retryDelay in [resetCreditsRetryDelay, resetCreditsRetryDelay + resetCreditsRetryDelay] {
+            guard response?.statusCode == 429 else { break }
             do {
-                try await Task.sleep(for: resetCreditsRetryDelay)
+                try await Task.sleep(for: retryDelay)
             } catch {
                 return nil
             }

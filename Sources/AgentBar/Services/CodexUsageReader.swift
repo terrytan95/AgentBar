@@ -165,7 +165,7 @@ struct CodexUsageReader {
             let nativeAccessTokenExpiresAt = activeAccessTokenExpiresAt ?? savedAuthInfo?.accessTokenExpiresAt
             let externalAccessTokenExpiresAt = epochDate(raw.externalAccessTokenExpiresAt)
             let hasUsableExternalAccessToken =
-                raw.externalAuthSource == CLIProxyCodexRegistryMetadata.sourceValue &&
+                raw.externalAuthSource != nil &&
                 (externalAccessTokenExpiresAt.map { $0 > now } ?? true)
             let usesExternalAccessToken =
                 hasUsableExternalAccessToken &&
@@ -192,6 +192,8 @@ struct CodexUsageReader {
                 raw.hasForcedLogoutWarning(authSnapshotInfo: savedAuthInfo, activeAuthInfo: activeAuthInfo) ? .forcedLogout :
                 raw.lastUsage?.hasUnreadableResetWarning == true ? .unreadableReset :
                 nil
+            let externalAuthName = CLIProxyCodexRegistryMetadata.displayName(for: raw.externalAuthSource)
+            let externalAuthCapability = raw.externalAuthHasSignInLease ? "usage and sign-in lease" : "usage"
 
             return UsageAccount(
                 id: raw.accountKey,
@@ -201,9 +203,9 @@ struct CodexUsageReader {
                 maskedEmail: maskEmail(raw.email),
                 plan: raw.plan ?? raw.lastUsage?.planType,
                 sourceDescription: raw.externalAuthOnly
-                    ? "CLIProxyAPI auth · usage and sign-in lease"
-                    : raw.externalAuthSource == CLIProxyCodexRegistryMetadata.sourceValue
-                        ? "Local Codex account registry · CLIProxyAPI usage and sign-in lease"
+                    ? "\(externalAuthName) auth · \(externalAuthCapability)"
+                    : raw.externalAuthSource != nil
+                        ? "Local Codex account registry · \(externalAuthName) \(externalAuthCapability)"
                         : "Local Codex account registry",
                 status: .live,
                 fiveHourWindow: quotaWindows.fiveHour,
@@ -218,8 +220,8 @@ struct CodexUsageReader {
                 workspaceID: workspaceID,
                 workspaces: workspaces,
                 accessTokenExpiresAt: accessTokenExpiresAt,
-                accessTokenSource: usesExternalAccessToken ? "CLIProxyAPI" : nil,
-                canSwitchAccount: nil,
+                accessTokenSource: usesExternalAccessToken ? externalAuthName : nil,
+                canSwitchAccount: raw.externalAuthOnly ? raw.externalAuthHasSignInLease : nil,
                 canRemoveAccount: raw.externalAuthOnly ? false : nil
             )
         }
@@ -672,6 +674,7 @@ private struct CodexRegistryAccount: Decodable {
     var externalAuthSource: String?
     var externalAuthOnly: Bool
     var externalAccessTokenExpiresAt: Double?
+    var externalAuthHasSignInLease: Bool
 
     enum CodingKeys: String, CodingKey {
         case accountKey = "account_key"
@@ -697,6 +700,7 @@ private struct CodexRegistryAccount: Decodable {
         case externalAuthSource = "agentbar_external_auth_source"
         case externalAuthOnly = "agentbar_external_auth_only"
         case externalAccessTokenExpiresAt = "agentbar_external_access_token_expires_at"
+        case externalAuthHasSignInLease = "agentbar_external_auth_has_sign_in_lease"
     }
 
     init(from decoder: Decoder) throws {
@@ -724,6 +728,9 @@ private struct CodexRegistryAccount: Decodable {
         externalAuthSource = try container.decodeIfPresent(String.self, forKey: .externalAuthSource)
         externalAuthOnly = (try? container.decodeIfPresent(Bool.self, forKey: .externalAuthOnly)) ?? false
         externalAccessTokenExpiresAt = try container.decodeIfPresent(Double.self, forKey: .externalAccessTokenExpiresAt)
+        externalAuthHasSignInLease = (try? container.decodeIfPresent(Bool.self, forKey: .externalAuthHasSignInLease))
+            ?? externalAuthSource?.split(separator: "+").contains(Substring(CLIProxyCodexRegistryMetadata.sourceValue))
+            ?? false
     }
 
     var hasTokenBackedQuotaWarning: Bool {

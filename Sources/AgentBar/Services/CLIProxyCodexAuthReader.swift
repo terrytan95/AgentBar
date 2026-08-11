@@ -6,6 +6,7 @@ struct CLIProxyCodexCredential: Sendable {
     var authInfo: CodexUsageAuthInfo
     var accessTokenExpiresAt: Date?
     var nativeAuthLease: Data?
+    var sources: Set<String> = [CLIProxyCodexRegistryMetadata.sourceValue]
 }
 
 struct CLIProxyCodexDiscovery: Sendable {
@@ -17,9 +18,49 @@ struct CLIProxyCodexDiscovery: Sendable {
 enum CLIProxyCodexRegistryMetadata {
     static let source = "agentbar_external_auth_source"
     static let sourceValue = "cliproxyapi"
+    static let openCodexSourceValue = "opencodex"
     static let externalOnly = "agentbar_external_auth_only"
     static let accessTokenExpiresAt = "agentbar_external_access_token_expires_at"
+    static let hasSignInLease = "agentbar_external_auth_has_sign_in_lease"
     static let broadReadPermissions = "agentbar_cliproxyapi_broad_read_permissions"
+
+    static func displayName(for source: String?) -> String {
+        let names = Set((source ?? "").split(separator: "+").map(String.init)).compactMap {
+            switch $0 {
+            case sourceValue: "CLIProxyAPI"
+            case openCodexSourceValue: "OpenCodex"
+            default: nil
+            }
+        }
+        return names.sorted().joined(separator: " + ")
+    }
+}
+
+extension CLIProxyCodexDiscovery {
+    static func merged(_ discoveries: [Self]) -> Self {
+        let credentials = discoveries.flatMap(\.credentials)
+        let mergedCredentials = Dictionary(grouping: credentials) {
+            $0.authInfo.accountID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }.compactMap { _, matches -> CLIProxyCodexCredential? in
+            guard var selected = matches.max(by: {
+                ($0.accessTokenExpiresAt ?? .distantPast) < ($1.accessTokenExpiresAt ?? .distantPast)
+            }) else { return nil }
+            selected.identity.email = selected.identity.email ?? matches.compactMap(\.identity.email).first
+            selected.nativeAuthLease = matches
+                .filter { $0.nativeAuthLease != nil }
+                .max(by: {
+                    ($0.accessTokenExpiresAt ?? .distantPast) < ($1.accessTokenExpiresAt ?? .distantPast)
+                })?
+                .nativeAuthLease
+            selected.sources = matches.reduce(into: []) { $0.formUnion($1.sources) }
+            return selected
+        }
+        return Self(
+            credentials: mergedCredentials,
+            scanCompleted: discoveries.allSatisfy(\.scanCompleted),
+            hasBroadReadPermissions: discoveries.contains(where: \.hasBroadReadPermissions)
+        )
+    }
 }
 
 struct CLIProxyCodexAuthReader {
@@ -215,5 +256,82 @@ struct CLIProxyCodexAuthReader {
         case credential(CLIProxyCodexCredential, broadPermissions: Bool)
         case retryable
         case ignored
+    }
+}
+
+struct OpenCodexAuthReader {
+    static let relativeAuthDirectory = ".opencodex"
+    static let authFileName = "codex-accounts.json"
+    static let maximumAuthFileBytes = 1024 * 1024
+
+    var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    var now: @Sendable () -> Date = { Date() }
+
+    func discover() -> CLIProxyCodexDiscovery {
+        let directoryURL = homeDirectory.appending(path: Self.relativeAuthDirectory, directoryHint: .isDirectory)
+        let directoryDescriptor = open(directoryURL.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard directoryDescriptor >= 0 else {
+            return empty(completed: errno == ENOENT)
+        }
+        defer { close(directoryDescriptor) }
+
+        var directoryInfo = stat()
+        guard fstat(directoryDescriptor, &directoryInfo) == 0,
+              (directoryInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR),
+              directoryInfo.st_uid == geteuid()
+        else { return empty(completed: false) }
+
+        let descriptor = openat(directoryDescriptor, Self.authFileName, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            return empty(completed: errno == ENOENT)
+        }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              info.st_uid == geteuid(),
+              info.st_nlink == 1,
+              info.st_mode & mode_t(0o022) == 0,
+              info.st_size > 0,
+              info.st_size <= off_t(Self.maximumAuthFileBytes),
+              let data = try? handle.read(upToCount: Self.maximumAuthFileBytes + 1),
+              data.count <= Self.maximumAuthFileBytes,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return empty(completed: false) }
+
+        let readAt = now()
+        let credentials = root.values.compactMap { value -> CLIProxyCodexCredential? in
+            guard let record = value as? [String: Any],
+                  let credential = record["credential"] as? [String: Any],
+                  let accessToken = nonEmptyString(credential["accessToken"]),
+                  let accountID = nonEmptyString(credential["chatgptAccountId"]),
+                  let expiresAtMs = credential["expiresAt"] as? NSNumber
+            else { return nil }
+            let expiresAt = Date(timeIntervalSince1970: expiresAtMs.doubleValue / 1000)
+            guard expiresAt > readAt else { return nil }
+            return CLIProxyCodexCredential(
+                identity: CodexAuthIdentity(accountID: accountID, email: nil),
+                authInfo: CodexUsageAuthInfo(accessToken: accessToken, accountID: accountID),
+                accessTokenExpiresAt: expiresAt,
+                nativeAuthLease: nil,
+                sources: [CLIProxyCodexRegistryMetadata.openCodexSourceValue]
+            )
+        }
+        return CLIProxyCodexDiscovery(
+            credentials: credentials,
+            scanCompleted: true,
+            hasBroadReadPermissions: directoryInfo.st_mode & mode_t(0o077) != 0 || info.st_mode & mode_t(0o077) != 0
+        )
+    }
+
+    private func empty(completed: Bool) -> CLIProxyCodexDiscovery {
+        CLIProxyCodexDiscovery(credentials: [], scanCompleted: completed, hasBroadReadPermissions: false)
+    }
+
+    private func nonEmptyString(_ value: Any?) -> String? {
+        guard let string = value as? String else { return nil }
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

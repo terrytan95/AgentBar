@@ -37,6 +37,7 @@ struct CodexUsageAPISyncer {
     var usageClient: UsageClient
     var timeout: TimeInterval
     var reusesCLIProxyAPIAuth: Bool
+    var reusesOpenCodexAuth: Bool
     var cliProxyAPIAuthDirectory: String
     var accountPollDelay: Duration
     var resetCreditsCacheDuration: TimeInterval
@@ -48,6 +49,7 @@ struct CodexUsageAPISyncer {
         usageClient: @escaping UsageClient = Self.defaultUsageClient,
         timeout: TimeInterval = 5,
         reusesCLIProxyAPIAuth: Bool = false,
+        reusesOpenCodexAuth: Bool = false,
         cliProxyAPIAuthDirectory: String = "",
         accountPollDelay: Duration = .zero,
         resetCreditsCacheDuration: TimeInterval = 0
@@ -58,6 +60,7 @@ struct CodexUsageAPISyncer {
         self.usageClient = usageClient
         self.timeout = timeout
         self.reusesCLIProxyAPIAuth = reusesCLIProxyAPIAuth
+        self.reusesOpenCodexAuth = reusesOpenCodexAuth
         self.cliProxyAPIAuthDirectory = cliProxyAPIAuthDirectory
         self.accountPollDelay = accountPollDelay
         self.resetCreditsCacheDuration = resetCreditsCacheDuration
@@ -70,20 +73,21 @@ struct CodexUsageAPISyncer {
             homeDirectory: homeDirectory,
             now: now
         )
-        let openCodexDiscovery = reusesCLIProxyAPIAuth
+        let openCodexDiscovery = reusesOpenCodexAuth
             ? openCodexReader.discover()
             : CLIProxyCodexDiscovery(credentials: [], scanCompleted: true, hasBroadReadPermissions: false)
-        let discovery = reusesCLIProxyAPIAuth
-            ? CLIProxyCodexDiscovery.merged([
-                CLIProxyCodexAuthReader(
-                    homeDirectory: homeDirectory,
-                    configuredDirectory: cliProxyAPIAuthDirectory,
-                    now: now
-                ).discover(),
-                openCodexDiscovery
-            ])
+        let cliProxyDiscovery = reusesCLIProxyAPIAuth
+            ? CLIProxyCodexAuthReader(
+                homeDirectory: homeDirectory,
+                configuredDirectory: cliProxyAPIAuthDirectory,
+                now: now
+            ).discover()
             : CLIProxyCodexDiscovery(credentials: [], scanCompleted: true, hasBroadReadPermissions: false)
-        let openCodexActiveAccountID = reusesCLIProxyAPIAuth
+        let discovery = CLIProxyCodexDiscovery.merged([
+            cliProxyDiscovery,
+            openCodexDiscovery
+        ])
+        let openCodexActiveAccountID = reusesOpenCodexAuth
             ? await openCodexReader.activeAccountID()
             : nil
 

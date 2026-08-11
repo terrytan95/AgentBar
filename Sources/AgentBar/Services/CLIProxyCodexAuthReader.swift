@@ -47,7 +47,11 @@ extension CLIProxyCodexDiscovery {
                 ?? ""
             return "\(accountID)|\(loginID)"
         }.compactMap { _, matches -> CLIProxyCodexCredential? in
-            guard var selected = matches.max(by: {
+            let openCodexMatches = matches.filter {
+                $0.sources.contains(CLIProxyCodexRegistryMetadata.openCodexSourceValue)
+            }
+            let preferredMatches = openCodexMatches.isEmpty ? matches : openCodexMatches
+            guard var selected = preferredMatches.max(by: {
                 ($0.accessTokenExpiresAt ?? .distantPast) < ($1.accessTokenExpiresAt ?? .distantPast)
             }) else { return nil }
             selected.identity.email = selected.identity.email ?? matches.compactMap(\.identity.email).first

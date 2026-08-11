@@ -179,14 +179,19 @@ struct CodexUsageAPISyncer {
                 storage: storage,
                 activeAuthMatchesAccount: Self.account(accounts[index], matches: activeAuthIdentity)
             )
-            let externalCredential = discovery.credentials.first {
-                Self.account(accounts[index], matches: $0.identity)
-            }
             let nativeAuthData = try? Data(contentsOf: authURL)
-            let authInfo = externalCredential?.authInfo
-                ?? nativeAuthData.flatMap(CodexAccountStorage.usageAuthInfo)
-            let usesExternalCredential = externalCredential != nil
-            guard let authInfo else {
+            var authCandidates: [(authInfo: CodexUsageAuthInfo, usesExternalCredential: Bool)] = []
+            if let nativeAuthInfo = nativeAuthData.flatMap(CodexAccountStorage.usageAuthInfo) {
+                authCandidates.append((nativeAuthInfo, false))
+            }
+            for externalDiscovery in [openCodexDiscovery, cliProxyDiscovery] {
+                if let credential = externalDiscovery.credentials.first(where: {
+                    Self.account(accounts[index], matches: $0.identity)
+                }) {
+                    authCandidates.append((credential.authInfo, true))
+                }
+            }
+            guard !authCandidates.isEmpty else {
                 continue
             }
 
@@ -203,17 +208,22 @@ struct CodexUsageAPISyncer {
                 accounts[index]["agentbar_last_usage_refresh_at"] = now().timeIntervalSince1970
                 updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_last_usage_refresh_at")
             }
-            var request = URLRequest(url: Self.usageEndpoint)
-            request.httpMethod = "GET"
-            request.timeoutInterval = timeout
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("AgentBar", forHTTPHeaderField: "User-Agent")
-            request.setValue("Bearer \(authInfo.accessToken)", forHTTPHeaderField: "Authorization")
-            request.setValue(authInfo.accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
-
-            let response: CodexUsageAPIResponse
+            var response: CodexUsageAPIResponse?
+            var selectedAuth: (authInfo: CodexUsageAuthInfo, usesExternalCredential: Bool)?
+            var triedAccessTokens = Set<String>()
             do {
-                response = try await usageClient(request, timeout)
+                for candidate in authCandidates where triedAccessTokens.insert(candidate.authInfo.accessToken).inserted {
+                    var request = URLRequest(url: Self.usageEndpoint)
+                    request.httpMethod = "GET"
+                    request.timeoutInterval = timeout
+                    request.setValue("application/json", forHTTPHeaderField: "Accept")
+                    request.setValue("AgentBar", forHTTPHeaderField: "User-Agent")
+                    request.setValue("Bearer \(candidate.authInfo.accessToken)", forHTTPHeaderField: "Authorization")
+                    request.setValue(candidate.authInfo.accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
+                    selectedAuth = candidate
+                    response = try await usageClient(request, timeout)
+                    if response?.statusCode != 401 { break }
+                }
             } catch let error as URLError where error.code == .timedOut {
                 if index == activeAccountIndex { activeResult = .timedOut }
                 continue
@@ -221,9 +231,12 @@ struct CodexUsageAPISyncer {
                 if index == activeAccountIndex { activeResult = .failed(error.localizedDescription) }
                 continue
             }
+            guard let response, let selectedAuth else { continue }
+            let authInfo = selectedAuth.authInfo
+            let usesExternalCredential = selectedAuth.usesExternalCredential
 
             guard 200..<300 ~= response.statusCode else {
-                if response.statusCode == 401, !usesExternalCredential {
+                if response.statusCode == 401 {
                     accounts[index]["agentbar_auth_error"] = [
                         "status_code": 401,
                         "detected_at": now().timeIntervalSince1970
@@ -270,7 +283,7 @@ struct CodexUsageAPISyncer {
                     continue
                 }
             }
-            if !usesExternalCredential, accounts[index]["agentbar_auth_error"] != nil {
+            if accounts[index]["agentbar_auth_error"] != nil {
                 accounts[index].removeValue(forKey: "agentbar_auth_error")
                 updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_auth_error")
             }

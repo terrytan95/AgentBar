@@ -25,7 +25,7 @@ final class UsageParsingTests: XCTestCase {
         try checkCodexSessionJsonlDerivesDailyUsageAcrossQuotaReset()
         try await checkCodexUsageAPISyncerUpdatesRegistryWithoutCodexAuthRuntime()
         try await checkCodexUsageAPISyncerRefreshesInactiveAccountsHourly()
-        try await checkCodexUsageAPISyncerAlwaysFetchesDetailedResetExpiryDates()
+        try await checkCodexUsageAPISyncerBacksOffAfterResetCreditsRateLimit()
         try await checkCodexUsageAPISyncerPersists401AndClearsItAfterSuccess()
         try await checkCodexUsageAPISyncerUsesNewerActiveAuthForActiveAccount()
         try await checkCodexUsageAPISyncerRefreshesActiveAuthAccountWhenRegistryActiveIsStale()
@@ -755,14 +755,14 @@ final class UsageParsingTests: XCTestCase {
     }
 
     @MainActor
-    private func checkCodexUsageAPISyncerAlwaysFetchesDetailedResetExpiryDates() async throws {
+    private func checkCodexUsageAPISyncerBacksOffAfterResetCreditsRateLimit() async throws {
         let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temp) }
         let accountDir = temp.appending(path: ".codex/accounts")
         try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
         let registryURL = accountDir.appending(path: "registry.json")
         try """
-        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"person@example.com","agentbar_reset_credits_refresh_at":9999999999,"last_usage":{"reset_credits":{"available_count":2}}}]}
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"person@example.com","last_usage":{"reset_credits":{"available_count":2}}}]}
         """.data(using: .utf8)!.write(to: registryURL)
         try """
         {"auth_mode":"chatgpt","tokens":{"access_token":"secret-access-token","account_id":"chatgpt-account-id"}}
@@ -771,25 +771,14 @@ final class UsageParsingTests: XCTestCase {
         let urlRecorder = UsageAPIURLRecorder()
         let syncer = CodexUsageAPISyncer(
             homeDirectory: temp,
+            now: { Date(timeIntervalSince1970: 4_600) },
             usageClient: { request, _ in
                 urlRecorder.record(request.url?.absoluteString ?? "")
                 if request.url == CodexUsageAPISyncer.resetCreditsEndpoint {
                     XCTAssertEqual(request.value(forHTTPHeaderField: "originator"), "Codex Desktop")
-                    if urlRecorder.urls.filter({ $0 == CodexUsageAPISyncer.resetCreditsEndpoint.absoluteString }).count <= 2 {
-                        return CodexUsageAPIResponse(statusCode: 429, data: Data())
-                    }
                     return CodexUsageAPIResponse(
-                        statusCode: 200,
-                        data: """
-                        {
-                          "available_count": 2,
-                          "credits": [
-                            {"id":"a","status":"available","expires_at":"2026-07-12T18:38:00Z"},
-                            {"id":"b","status":"redeemed","expires_at":"2026-07-13T18:38:00Z"},
-                            {"id":"c","status":"available","expires_at":"2026-07-18T15:16:00Z"}
-                          ]
-                        }
-                        """.data(using: .utf8)!
+                        statusCode: 429,
+                        data: #"{"detail":{"type":"connector_rate_limit"}}"#.data(using: .utf8)!
                     )
                 }
                 return CodexUsageAPIResponse(
@@ -799,23 +788,23 @@ final class UsageParsingTests: XCTestCase {
                     """.data(using: .utf8)!
                 )
             },
-            resetCreditsRetryDelay: .zero
+            resetCreditsCacheDuration: 30 * 60
         )
 
-        let result = await syncer.refreshUsage()
-        XCTAssertEqual(result, .success)
+        let firstResult = await syncer.refreshUsage()
+        let secondResult = await syncer.refreshUsage()
+        XCTAssertEqual(firstResult, .success)
+        XCTAssertEqual(secondResult, .success)
         XCTAssertEqual(urlRecorder.urls, [
             "https://chatgpt.com/backend-api/wham/usage",
             "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
-            "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
-            "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
+            "https://chatgpt.com/backend-api/wham/usage"
         ])
-        let usage = try XCTUnwrap(registryAccount(from: registryURL)["last_usage"] as? [String: Any])
+        let account = try registryAccount(from: registryURL)
+        let usage = try XCTUnwrap(account["last_usage"] as? [String: Any])
         let resetCredits = try XCTUnwrap(usage["reset_credits"] as? [String: Any])
         XCTAssertEqual(resetCredits["available_count"] as? Int, 2)
-        let resets = try XCTUnwrap(resetCredits["resets"] as? [[String: Any]])
-        XCTAssertEqual(resets.count, 2)
-        XCTAssertEqual(resets.map { $0["expires_at"] as? Double }, [1_783_881_480, 1_784_387_760])
+        XCTAssertEqual(account["agentbar_reset_credits_refresh_at"] as? Double, 4_600)
     }
 
     @MainActor

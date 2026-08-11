@@ -762,7 +762,7 @@ final class UsageParsingTests: XCTestCase {
         try FileManager.default.createDirectory(at: accountDir, withIntermediateDirectories: true)
         let registryURL = accountDir.appending(path: "registry.json")
         try """
-        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"person@example.com"}]}
+        {"schema_version":3,"active_account_key":"acct-a","accounts":[{"account_key":"acct-a","email":"person@example.com","agentbar_reset_credits_refresh_at":9999999999,"last_usage":{"reset_credits":{"available_count":2}}}]}
         """.data(using: .utf8)!.write(to: registryURL)
         try """
         {"auth_mode":"chatgpt","tokens":{"access_token":"secret-access-token","account_id":"chatgpt-account-id"}}

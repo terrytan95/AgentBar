@@ -246,14 +246,16 @@ struct CodexUsageAPISyncer {
             let detailedResetCreditsRefreshedAt = Self.firstNumber([
                 accounts[index]["agentbar_reset_credits_refresh_at"]
             ])?.doubleValue ?? -.infinity
-            let usesCachedResetCredits = previousResetCredits != nil &&
+            let usesCachedResetCredits = Self.hasCompleteResetCredits(previousResetCredits) &&
                 detailedResetCreditsRefreshedAt > refreshStartedAt - resetCreditsCacheDuration
             if usesCachedResetCredits, let previousResetCredits {
                 usage["reset_credits"] = previousResetCredits
             } else if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
                 usage["reset_credits"] = detailedResetCredits
-                accounts[index]["agentbar_reset_credits_refresh_at"] = refreshStartedAt
-                updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_reset_credits_refresh_at")
+                if Self.hasCompleteResetCredits(detailedResetCredits) {
+                    accounts[index]["agentbar_reset_credits_refresh_at"] = refreshStartedAt
+                    updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_reset_credits_refresh_at")
+                }
             } else if usage["reset_credits"] == nil, let previousResetCredits {
                 usage["reset_credits"] = previousResetCredits
             }
@@ -405,6 +407,15 @@ struct CodexUsageAPISyncer {
             output["resets"] = resetItems
         }
         return output
+    }
+
+    private static func hasCompleteResetCredits(_ value: Any?) -> Bool {
+        guard let object = value as? [String: Any],
+              let count = firstNumber([object["available_count"]])?.intValue,
+              count >= 0
+        else { return false }
+        if count == 0 { return true }
+        return firstArray([object["resets"]]).compactMap(parseResetCredit).count >= count
     }
 
     private static func parseResetCredit(_ value: Any) -> [String: Any]? {

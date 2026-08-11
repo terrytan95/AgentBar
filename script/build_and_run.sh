@@ -3,7 +3,11 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="AgentBar"
-BUNDLE_ID="com.terrytan.AgentBar"
+if [ "$MODE" = "--package" ] || [ "$MODE" = "package" ]; then
+  BUNDLE_ID="com.terrytan.AgentBar"
+else
+  BUNDLE_ID="com.terrytan.AgentBarPreview"
+fi
 MIN_SYSTEM_VERSION="14.0"
 APP_VERSION="2.6.2"
 APP_BUILD="250"
@@ -13,6 +17,13 @@ DIST_DIR="$ROOT_DIR/dist"
 RUN_DIST_DIR="${AGENTBAR_RUN_DIST_DIR:-${TMPDIR:-/tmp}/AgentBar}"
 BUILD_SCRATCH_DIR="${AGENTBAR_BUILD_DIR:-${TMPDIR:-/tmp}/AgentBar-build}"
 CODESIGN_IDENTITY="${AGENTBAR_CODESIGN_IDENTITY:-}"
+SOURCE_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+SOURCE_DIRTY=false
+if ! git -C "$ROOT_DIR" diff --quiet \
+  || ! git -C "$ROOT_DIR" diff --cached --quiet \
+  || [ -n "$(git -C "$ROOT_DIR" ls-files --others --exclude-standard)" ]; then
+  SOURCE_DIRTY=true
+fi
 
 if [ -z "$CODESIGN_IDENTITY" ] && command -v security >/dev/null 2>&1; then
   CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
@@ -114,6 +125,10 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$APP_BUILD</string>
   <key>CFBundleShortVersionString</key>
   <string>$APP_VERSION</string>
+  <key>AgentBarSourceCommit</key>
+  <string>$SOURCE_COMMIT</string>
+  <key>AgentBarSourceDirty</key>
+  <$SOURCE_DIRTY/>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>

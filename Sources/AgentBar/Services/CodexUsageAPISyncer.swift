@@ -41,7 +41,6 @@ struct CodexUsageAPISyncer {
     var cliProxyAPIAuthDirectory: String
     var accountPollDelay: Duration
     var resetCreditsCacheDuration: TimeInterval
-    var resetCreditsRetryDelay: Duration
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -53,8 +52,7 @@ struct CodexUsageAPISyncer {
         reusesOpenCodexAuth: Bool = false,
         cliProxyAPIAuthDirectory: String = "",
         accountPollDelay: Duration = .zero,
-        resetCreditsCacheDuration: TimeInterval = 0,
-        resetCreditsRetryDelay: Duration = .seconds(10)
+        resetCreditsCacheDuration: TimeInterval = 0
     ) {
         self.homeDirectory = homeDirectory
         self.fileManager = fileManager
@@ -66,7 +64,6 @@ struct CodexUsageAPISyncer {
         self.cliProxyAPIAuthDirectory = cliProxyAPIAuthDirectory
         self.accountPollDelay = accountPollDelay
         self.resetCreditsCacheDuration = resetCreditsCacheDuration
-        self.resetCreditsRetryDelay = resetCreditsRetryDelay
     }
 
     func refreshUsage(refreshAllAccounts: Bool = false) async -> CodexUsageSyncResult {
@@ -256,21 +253,25 @@ struct CodexUsageAPISyncer {
             }
             let previousUsage = accounts[index]["last_usage"] as? [String: Any]
             let previousResetCredits = previousUsage?["reset_credits"]
-            let detailedResetCreditsRefreshedAt = Self.firstNumber([
+            let detailedResetCreditsAttemptedAt = Self.firstNumber([
                 accounts[index]["agentbar_reset_credits_refresh_at"]
             ])?.doubleValue ?? -.infinity
-            let usesCachedResetCredits = Self.hasCompleteResetCredits(previousResetCredits) &&
-                detailedResetCreditsRefreshedAt > refreshStartedAt - resetCreditsCacheDuration
-            if usesCachedResetCredits, let previousResetCredits {
-                usage["reset_credits"] = previousResetCredits
-            } else if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
-                usage["reset_credits"] = detailedResetCredits
-                if Self.hasCompleteResetCredits(detailedResetCredits) {
-                    accounts[index]["agentbar_reset_credits_refresh_at"] = refreshStartedAt
-                    updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_reset_credits_refresh_at")
+            let hasRecentDetailAttempt = detailedResetCreditsAttemptedAt >
+                refreshStartedAt - resetCreditsCacheDuration
+            if Self.hasCompleteResetCredits(usage["reset_credits"]) {
+                // The main usage response is authoritative, including an explicit zero.
+            } else if hasRecentDetailAttempt {
+                if usage["reset_credits"] == nil, let previousResetCredits {
+                    usage["reset_credits"] = previousResetCredits
                 }
-            } else if usage["reset_credits"] == nil, let previousResetCredits {
-                usage["reset_credits"] = previousResetCredits
+            } else {
+                accounts[index]["agentbar_reset_credits_refresh_at"] = refreshStartedAt
+                updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_reset_credits_refresh_at")
+                if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
+                    usage["reset_credits"] = detailedResetCredits
+                } else if usage["reset_credits"] == nil, let previousResetCredits {
+                    usage["reset_credits"] = previousResetCredits
+                }
             }
 
             if !usesExternalCredential,
@@ -458,16 +459,7 @@ struct CodexUsageAPISyncer {
         request.setValue("Codex Desktop", forHTTPHeaderField: "originator")
         request.setValue("CODEX", forHTTPHeaderField: "OAI-Product-Sku")
 
-        var response = try? await usageClient(request, timeout)
-        for retryDelay in [resetCreditsRetryDelay, resetCreditsRetryDelay + resetCreditsRetryDelay] {
-            guard response?.statusCode == 429 else { break }
-            do {
-                try await Task.sleep(for: retryDelay)
-            } catch {
-                return nil
-            }
-            response = try? await usageClient(request, timeout)
-        }
+        let response = try? await usageClient(request, timeout)
         guard let response, 200..<300 ~= response.statusCode else { return nil }
         return Self.parseDetailedResetCreditsResponse(data: response.data)
     }

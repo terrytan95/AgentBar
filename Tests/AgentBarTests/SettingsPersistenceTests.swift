@@ -42,6 +42,7 @@ final class SettingsPersistenceTests: XCTestCase {
 
         defaults.set(60.0, forKey: "refreshInterval")
         let store = SettingsStore(defaults: defaults, persistenceURL: persistenceURL)
+        XCTAssertEqual(store.refreshInterval, 120)
         try await Task.sleep(for: .milliseconds(700))
         let initialData = try Data(contentsOf: persistenceURL)
 

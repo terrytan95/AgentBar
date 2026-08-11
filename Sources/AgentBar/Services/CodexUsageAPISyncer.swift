@@ -38,6 +38,8 @@ struct CodexUsageAPISyncer {
     var timeout: TimeInterval
     var reusesCLIProxyAPIAuth: Bool
     var cliProxyAPIAuthDirectory: String
+    var accountPollDelay: Duration
+    var resetCreditsCacheDuration: TimeInterval
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -46,7 +48,9 @@ struct CodexUsageAPISyncer {
         usageClient: @escaping UsageClient = Self.defaultUsageClient,
         timeout: TimeInterval = 5,
         reusesCLIProxyAPIAuth: Bool = false,
-        cliProxyAPIAuthDirectory: String = ""
+        cliProxyAPIAuthDirectory: String = "",
+        accountPollDelay: Duration = .zero,
+        resetCreditsCacheDuration: TimeInterval = 0
     ) {
         self.homeDirectory = homeDirectory
         self.fileManager = fileManager
@@ -55,9 +59,11 @@ struct CodexUsageAPISyncer {
         self.timeout = timeout
         self.reusesCLIProxyAPIAuth = reusesCLIProxyAPIAuth
         self.cliProxyAPIAuthDirectory = cliProxyAPIAuthDirectory
+        self.accountPollDelay = accountPollDelay
+        self.resetCreditsCacheDuration = resetCreditsCacheDuration
     }
 
-    func refreshUsage() async -> CodexUsageSyncResult {
+    func refreshUsage(refreshAllAccounts: Bool = false) async -> CodexUsageSyncResult {
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
         let discovery = reusesCLIProxyAPIAuth
@@ -107,9 +113,11 @@ struct CodexUsageAPISyncer {
             return .unavailable("No active ChatGPT account was available for usage refresh.")
         }
 
-        let inactiveRefreshCutoff = now().timeIntervalSince1970 - 60 * 60
+        let refreshStartedAt = now().timeIntervalSince1970
+        let inactiveRefreshCutoff = refreshStartedAt - 60 * 60
         let inactiveIndexes = accounts.indices.filter { index in
             guard index != activeAccountIndex else { return false }
+            if refreshAllAccounts { return true }
             let lastRefreshAt = Self.firstNumber([
                 accounts[index]["agentbar_last_usage_refresh_at"],
                 accounts[index]["last_usage_at"]
@@ -120,6 +128,7 @@ struct CodexUsageAPISyncer {
 
         var activeResult: CodexUsageSyncResult?
         var updatedFieldsByAccountKey: [String: Set<String>] = [:]
+        var requestedAccountCount = 0
 
         for index in refreshIndexes {
             if let authMode = accounts[index]["auth_mode"] as? String,
@@ -149,6 +158,15 @@ struct CodexUsageAPISyncer {
             guard let authInfo else {
                 continue
             }
+
+            if requestedAccountCount > 0, accountPollDelay > .zero {
+                do {
+                    try await Task.sleep(for: accountPollDelay)
+                } catch {
+                    return activeResult ?? .timedOut
+                }
+            }
+            requestedAccountCount += 1
 
             if index != activeAccountIndex {
                 accounts[index]["agentbar_last_usage_refresh_at"] = now().timeIntervalSince1970
@@ -192,9 +210,19 @@ struct CodexUsageAPISyncer {
                 }
                 continue
             }
-            let previousResetCredits = (accounts[index]["last_usage"] as? [String: Any])?["reset_credits"]
-            if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
+            let previousUsage = accounts[index]["last_usage"] as? [String: Any]
+            let previousResetCredits = previousUsage?["reset_credits"]
+            let detailedResetCreditsRefreshedAt = Self.firstNumber([
+                accounts[index]["agentbar_reset_credits_refresh_at"]
+            ])?.doubleValue ?? -.infinity
+            let usesCachedResetCredits = previousResetCredits != nil &&
+                detailedResetCreditsRefreshedAt > refreshStartedAt - resetCreditsCacheDuration
+            if usesCachedResetCredits, let previousResetCredits {
+                usage["reset_credits"] = previousResetCredits
+            } else if let detailedResetCredits = await fetchDetailedResetCredits(authInfo: authInfo) {
                 usage["reset_credits"] = detailedResetCredits
+                accounts[index]["agentbar_reset_credits_refresh_at"] = refreshStartedAt
+                updatedFieldsByAccountKey[accountKey, default: []].insert("agentbar_reset_credits_refresh_at")
             } else if usage["reset_credits"] == nil, let previousResetCredits {
                 usage["reset_credits"] = previousResetCredits
             }

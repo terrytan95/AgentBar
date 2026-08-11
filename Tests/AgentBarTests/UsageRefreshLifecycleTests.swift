@@ -14,7 +14,7 @@ final class UsageRefreshLifecycleTests: XCTestCase {
             completed.fulfill()
         })
         await waitForArrivals(1, at: gate)
-        XCTAssertFalse(lifecycle.refresh(force: true) { _ in
+        XCTAssertFalse(lifecycle.refresh(force: true, refreshAllCodexAccounts: true) { _ in
             XCTFail("queued refresh must retain the original receiver")
         })
 
@@ -29,6 +29,8 @@ final class UsageRefreshLifecycleTests: XCTestCase {
             return XCTFail("expected a refresh result")
         }
         XCTAssertGreaterThan(result.generation, 1)
+        let refreshScopes = await gate.refreshAllCodexAccounts
+        XCTAssertEqual(refreshScopes, [false, true])
     }
 
     @MainActor
@@ -89,8 +91,8 @@ final class UsageRefreshLifecycleTests: XCTestCase {
         timeout: Duration = .seconds(1)
     ) -> UsageRefreshLifecycle {
         UsageRefreshLifecycle(
-            codexUsageSynchronizer: {
-                await gate.wait()
+            codexUsageSynchronizer: { refreshAllCodexAccounts in
+                await gate.wait(refreshAllCodexAccounts: refreshAllCodexAccounts)
                 return .success
             },
             codexUsageReader: { snapshot(service: .codex) },
@@ -121,9 +123,11 @@ private final class CompletionRecorder {
 private actor RefreshGate {
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private(set) var count = 0
+    private(set) var refreshAllCodexAccounts: [Bool] = []
 
-    func wait() async {
+    func wait(refreshAllCodexAccounts: Bool = false) async {
         count += 1
+        self.refreshAllCodexAccounts.append(refreshAllCodexAccounts)
         await withCheckedContinuation { continuation in
             waiters.append(continuation)
         }

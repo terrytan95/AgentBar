@@ -2633,7 +2633,7 @@ private struct QuotaTimelineNavigationButtonStyle: ButtonStyle {
     }
 }
 
-private struct QuotaTimelineTrack: View {
+struct QuotaTimelineTrack: View {
     var account: UsageAccount
     var window: UsageWindow
     var rangeStart: Date
@@ -2724,7 +2724,7 @@ private struct QuotaTimelineTrack: View {
                         .offset(x: x(for: Date(), width: size.width))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .clipped()
             .help(trackHelp)
         }

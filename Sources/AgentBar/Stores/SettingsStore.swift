@@ -182,6 +182,10 @@ final class SettingsStore: ObservableObject {
         didSet { persist(reuseCLIProxyAPIAuthEnabled, forKey: Keys.reuseCLIProxyAPIAuthEnabled) }
     }
 
+    @Published var reuseOpenCodexAuthEnabled: Bool {
+        didSet { persist(reuseOpenCodexAuthEnabled, forKey: Keys.reuseOpenCodexAuthEnabled) }
+    }
+
     @Published var cliProxyAPIAuthDirectory: String {
         didSet { persist(cliProxyAPIAuthDirectory, forKey: Keys.cliProxyAPIAuthDirectory) }
     }
@@ -360,6 +364,7 @@ final class SettingsStore: ObservableObject {
         popoverMetrics = Self.normalizedPopoverMetrics(savedPopoverMetrics)
         autoCodexAccountRotationEnabled = defaults.object(forKey: Keys.autoCodexAccountRotationEnabled) as? Bool ?? false
         reuseCLIProxyAPIAuthEnabled = defaults.object(forKey: Keys.reuseCLIProxyAPIAuthEnabled) as? Bool ?? false
+        reuseOpenCodexAuthEnabled = defaults.object(forKey: Keys.reuseOpenCodexAuthEnabled) as? Bool ?? false
         cliProxyAPIAuthDirectory = defaults.string(forKey: Keys.cliProxyAPIAuthDirectory) ?? ""
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
         taskCompletionNotificationsEnabled = defaults.object(forKey: Keys.taskCompletionNotificationsEnabled) as? Bool ?? false
@@ -546,6 +551,7 @@ final class SettingsStore: ObservableObject {
         static let popoverMetrics = "popoverMetrics"
         static let autoCodexAccountRotationEnabled = "autoCodexAccountRotationEnabled"
         static let reuseCLIProxyAPIAuthEnabled = "reuseCLIProxyAPIAuthEnabled"
+        static let reuseOpenCodexAuthEnabled = "reuseOpenCodexAuthEnabled"
         static let cliProxyAPIAuthDirectory = "cliProxyAPIAuthDirectory"
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
         static let taskCompletionNotificationsEnabled = "taskCompletionNotificationsEnabled"
@@ -589,6 +595,7 @@ final class SettingsStore: ObservableObject {
             popoverMetrics,
             autoCodexAccountRotationEnabled,
             reuseCLIProxyAPIAuthEnabled,
+            reuseOpenCodexAuthEnabled,
             cliProxyAPIAuthDirectory,
             quotaResetNotificationsEnabled,
             taskCompletionNotificationsEnabled,

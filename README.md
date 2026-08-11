@@ -50,7 +50,7 @@ AgentBar turns the usage data already available on your Mac into a compact menu 
 
 - **Menu bar at a glance:** show the active account's 5-hour and weekly windows, the lowest remaining quota, total tokens, or Codex-only remaining quota. The popover is vertically resizable.
 - **Codex accounts:** view, sort, switch, add, remove, and recover local accounts. Optional automatic rotation switches away from a low-quota account while avoiding a Codex restart during active CLI work.
-- **External Codex auth reuse:** optionally reuse valid access tokens maintained by CLIProxyAPI and OpenCodex, deduplicate matching user-and-workspace identities, and use the freshest token for quota monitoring. AgentBar also follows OpenCodex automatic account rotation.
+- **External Codex auth reuse:** independently opt in to CLIProxyAPI or OpenCodex credentials, deduplicate matching user-and-workspace identities, and prefer OpenCodex over CLIProxyAPI over AgentBar's local snapshot. AgentBar also follows OpenCodex automatic account rotation when its toggle is enabled.
 - **Quota visibility:** track 5-hour and weekly windows, reset times, reset credits, quota pressure, capacity history, and access-token expiry.
 - **Grok subscription usage:** use the existing Grok CLI login to show the plan, included-credit usage, reset timing, prepaid balance, and on-demand spend. No xAI Management API key or team ID is required.
 - **Codex sidebar widget:** attach a quota card to the Codex sidebar or use it as an independent floating panel. See the active quota window's remaining percentage, progress, exact reset time and countdown, reset credits, and access-token expiry at a glance. The widget supports edge snapping, resizing, and a configurable global shortcut.
@@ -69,7 +69,7 @@ AgentBar has no separate analytics backend. Network access is limited to the Cha
 - `~/.claude/projects/**/*.jsonl` supplies Claude Code model, token, project, and estimated-cost records. Prompts, replies, tool output, and credentials are not extracted or retained.
 - `~/.grok/auth.json` supplies the existing Grok CLI OAuth session used to request subscription quota and plan settings. AgentBar does not log or persist the token contents.
 - `~/.codex/accounts/registry.json`, `~/.codex/auth.json`, and per-account auth snapshots supply account identity, quota state, authentication health, and credential expiry. Token contents are used only when required for quota sync or account actions and are not retained in AgentBar reports.
-- With explicit opt-in, AgentBar scans CLIProxyAPI Codex credentials and `~/.opencodex/codex-accounts.json` during quota refresh. Records are matched by both login and ChatGPT workspace so separate users in one workspace stay separate. Source files stay read-only and refresh tokens are never copied. AgentBar uses OpenCodex's admin token only for an authenticated loopback `GET /api/codex-auth/active`, allowing its active-account display to follow automatic rotation; the token is not retained. CLIProxyAPI ID tokens can still provide a short-lived account-switching lease in Codex's own `~/.codex/auth.json`.
+- When its corresponding toggle is enabled, AgentBar scans CLIProxyAPI Codex credentials or `~/.opencodex/codex-accounts.json` during quota refresh. Records are matched by both login and ChatGPT workspace so separate users in one workspace stay separate; matching credentials are selected in OpenCodex, CLIProxyAPI, then AgentBar-local order. Source files stay read-only and refresh tokens are never copied. AgentBar uses OpenCodex's admin token only for an authenticated loopback `GET /api/codex-auth/active`, allowing its active-account display to follow automatic rotation; the token is not retained. CLIProxyAPI ID tokens can still provide a short-lived account-switching lease in Codex's own `~/.codex/auth.json`.
 - Quota refresh and account-management actions can update Codex's local registry and auth snapshots. Parsed session metrics are cached under `~/Library/Caches/AgentBar/` for faster refreshes.
 - Audit exports contain aggregate metrics and derived thread labels, not full prompts, replies, or tool output.
 - Claude subscription quota and billing totals are not exposed by local session files; AgentBar reports local tokens and price-table estimates instead.
@@ -101,7 +101,7 @@ AgentBar 将 Mac 上已有的用量数据整理为简洁的菜单栏视图和完
 
 - **菜单栏概览：** 可显示当前账户的 5 小时与每周额度、最低剩余额度、Token 总量，或仅显示 Codex 剩余额度；弹窗支持垂直调整大小。
 - **Codex 多账户：** 查看、排序、切换、添加、移除和恢复本地账户。可选的自动轮换会在当前账户额度偏低时切换账户，并在 CLI 任务运行期间避免重启 Codex。
-- **外部 Codex 授权复用：** 可选择复用 CLIProxyAPI 和 OpenCodex 维护的有效访问令牌，按用户与 ChatGPT workspace 身份去重，并用最新令牌监控额度；AgentBar 也会跟随 OpenCodex 的自动账号轮换。
+- **外部 Codex 授权复用：** 可分别选择是否复用 CLIProxyAPI 或 OpenCodex 凭证，按用户与 ChatGPT workspace 身份去重，并按 OpenCodex、CLIProxyAPI、AgentBar 本地快照的顺序读取；启用 OpenCodex 开关后，AgentBar 也会跟随其自动账号轮换。
 - **额度追踪：** 查看 5 小时与每周额度窗口、重置时间、重置额度、额度压力、容量历史，以及访问令牌到期时间。
 - **Grok 订阅用量：** 使用已有的 Grok CLI 登录，查看套餐、包含额度用量、重置时间、预付余额和按量付费消耗；无需配置 xAI Management API Key 或 Team ID。
 - **Codex 侧边栏小组件：** 将额度卡片附加到 Codex 侧边栏，或作为独立悬浮面板使用；可一眼查看当前额度窗口的剩余百分比、进度、准确重置时间与倒计时、重置额度，以及访问令牌到期时间，并支持贴边、调整大小和自定义全局快捷键。
@@ -120,7 +120,7 @@ AgentBar 没有独立的分析后端。网络访问仅用于通过已配置的 C
 - `~/.claude/projects/**/*.jsonl` 提供 Claude Code 的模型、Token、项目与预估费用记录；AgentBar 不提取或保留 prompt、回复、工具输出与凭证。
 - `~/.grok/auth.json` 提供已有的 Grok CLI OAuth 会话，用于请求订阅额度和套餐设置；AgentBar 不会记录或持久化其中的 Token 内容。
 - `~/.codex/accounts/registry.json`、`~/.codex/auth.json` 和各账户的认证快照用于识别账户、读取额度状态、认证健康状态与凭证到期时间。Token 内容只在同步额度或执行账户操作时使用，不会写入 AgentBar 报告。
-- 明确启用后，AgentBar 会在刷新额度时扫描 CLIProxyAPI Codex 凭证和 `~/.opencodex/codex-accounts.json`，同时按登录用户和 ChatGPT workspace 匹配记录，避免把同一 workspace 中的不同用户合并。来源文件始终保持只读，且绝不复制刷新令牌。AgentBar 仅使用 OpenCodex 管理令牌对回环地址执行经过认证的 `GET /api/codex-auth/active`，从而让当前账号状态跟随自动轮换；该令牌不会被保留。CLIProxyAPI ID 令牌仍可向 Codex 自己的 `~/.codex/auth.json` 提供短期账号切换租约。
+- 启用对应开关后，AgentBar 会在刷新额度时扫描 CLIProxyAPI Codex 凭证或 `~/.opencodex/codex-accounts.json`，同时按登录用户和 ChatGPT workspace 匹配记录，避免把同一 workspace 中的不同用户合并；同一账号按 OpenCodex、CLIProxyAPI、AgentBar 本地快照的顺序取用凭证。来源文件始终保持只读，且绝不复制刷新令牌。AgentBar 仅使用 OpenCodex 管理令牌对回环地址执行经过认证的 `GET /api/codex-auth/active`，从而让当前账号状态跟随自动轮换；该令牌不会被保留。CLIProxyAPI ID 令牌仍可向 Codex 自己的 `~/.codex/auth.json` 提供短期账号切换租约。
 - 额度刷新和账户管理操作可能更新 Codex 的本地注册表与认证快照。解析后的会话指标会缓存在 `~/Library/Caches/AgentBar/`，用于加快后续刷新。
 - 审计导出仅包含聚合指标和派生的线程标题，不包含完整 prompt、回复或工具输出。
 - Claude 订阅额度与账单总额不会写入本机会话文件；AgentBar 仅展示本地 Token 和按内置价格表计算的预估费用。

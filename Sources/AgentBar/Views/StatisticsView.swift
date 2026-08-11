@@ -1107,6 +1107,16 @@ struct StatisticsView: View {
                                 store.refresh(force: true)
                             }
                     }
+                }
+                SettingsToggleRow(
+                    title: L.text("reuse_opencodex_auth", store.language),
+                    subtitle: L.text("reuse_opencodex_auth_subtitle", store.language),
+                    isOn: $settings.reuseOpenCodexAuthEnabled
+                )
+                .onChange(of: settings.reuseOpenCodexAuthEnabled) { _, _ in
+                    store.refresh(force: true)
+                }
+                if settings.reuseCLIProxyAPIAuthEnabled || settings.reuseOpenCodexAuthEnabled {
                     SettingsRow(
                         title: L.text("cliproxyapi_security", store.language),
                         subtitle: L.text("cliproxyapi_security_subtitle", store.language)

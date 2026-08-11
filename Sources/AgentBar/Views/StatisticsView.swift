@@ -4473,6 +4473,9 @@ private struct SidebarAccountPopover: View {
                 }
                 if let resetCredits = account.resetCredits {
                     infoRow(L.text("resets", language), resetCredits.summaryLine(language: language))
+                    if let error = resetCredits.error {
+                        infoRow(L.text("reset_credits", language), error.summaryLine)
+                    }
                 }
                 if let usage = account.grokSubscriptionUsage {
                     ForEach(usage.summaryLines(language: language), id: \.self) { line in
@@ -4743,13 +4746,20 @@ private struct AccountLimitGroupView: View {
                 }
             }
 
-            if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
+            if let resetCredits = account.resetCredits,
+               resetCredits.hasAvailableCredits || resetCredits.error != nil {
                 VStack(alignment: .leading, spacing: 2) {
-                    Label(resetCredits.summaryLine(language: language), systemImage: "arrow.counterclockwise.circle")
-                        .labelStyle(.titleAndIcon)
+                    if resetCredits.hasAvailableCredits {
+                        Label(resetCredits.summaryLine(language: language), systemImage: "arrow.counterclockwise.circle")
+                            .labelStyle(.titleAndIcon)
+                    }
                     ForEach(Array(resetCredits.expirationLines(language: language).enumerated()), id: \.offset) { _, line in
                         Text(line)
                             .padding(.leading, 17)
+                    }
+                    if let error = resetCredits.error {
+                        Label(error.summaryLine, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
                     }
                 }
                 .font(.agentBar(size: 10, weight: .semibold))

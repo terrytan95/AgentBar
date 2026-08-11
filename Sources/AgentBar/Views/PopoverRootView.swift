@@ -713,13 +713,20 @@ struct AccountRowView: View {
                 }
             }
 
-            if let resetCredits = account.resetCredits, resetCredits.hasAvailableCredits {
+            if let resetCredits = account.resetCredits,
+               resetCredits.hasAvailableCredits || resetCredits.error != nil {
                 VStack(alignment: .leading, spacing: 2) {
-                    Label(resetCredits.summaryLine(language: language), systemImage: "arrow.counterclockwise.circle")
-                        .labelStyle(.titleAndIcon)
+                    if resetCredits.hasAvailableCredits {
+                        Label(resetCredits.summaryLine(language: language), systemImage: "arrow.counterclockwise.circle")
+                            .labelStyle(.titleAndIcon)
+                    }
                     ForEach(Array(resetCredits.expirationLines(language: language).enumerated()), id: \.offset) { _, line in
                         Text(line)
                             .padding(.leading, 17)
+                    }
+                    if let error = resetCredits.error {
+                        Label(error.summaryLine, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
                     }
                 }
                 .font(.caption2)

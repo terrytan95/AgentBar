@@ -804,7 +804,15 @@ final class UsageParsingTests: XCTestCase {
         let usage = try XCTUnwrap(account["last_usage"] as? [String: Any])
         let resetCredits = try XCTUnwrap(usage["reset_credits"] as? [String: Any])
         XCTAssertEqual(resetCredits["available_count"] as? Int, 2)
+        let detailError = try XCTUnwrap(resetCredits["error"] as? [String: Any])
+        XCTAssertEqual(detailError["status_code"] as? Int, 429)
+        XCTAssertEqual(detailError["code"] as? String, "connector_rate_limit")
         XCTAssertEqual(account["agentbar_reset_credits_refresh_at"] as? Double, 4_600)
+        let snapshot = try CodexUsageReader.parseRegistry(data: Data(contentsOf: registryURL), now: Date(timeIntervalSince1970: 4_600))
+        let displayedError = try XCTUnwrap(snapshot.accounts.first?.resetCredits?.error)
+        XCTAssertEqual(displayedError.statusCode, 429)
+        XCTAssertEqual(displayedError.summaryLine, "HTTP 429 · connector_rate_limit")
+        XCTAssertFalse(displayedError.summaryLine.contains("410"))
     }
 
     @MainActor

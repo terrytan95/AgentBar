@@ -67,11 +67,17 @@ struct CodexUsageAPISyncer {
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
         let discovery = reusesCLIProxyAPIAuth
-            ? CLIProxyCodexAuthReader(
-                homeDirectory: homeDirectory,
-                configuredDirectory: cliProxyAPIAuthDirectory,
-                now: now
-            ).discover()
+            ? CLIProxyCodexDiscovery.merged([
+                CLIProxyCodexAuthReader(
+                    homeDirectory: homeDirectory,
+                    configuredDirectory: cliProxyAPIAuthDirectory,
+                    now: now
+                ).discover(),
+                OpenCodexAuthReader(
+                    homeDirectory: homeDirectory,
+                    now: now
+                ).discover()
+            ])
             : CLIProxyCodexDiscovery(credentials: [], scanCompleted: true, hasBroadReadPermissions: false)
 
         let registryData = try? storage.readRegistryBootstrappingActiveAccount(now: now())
@@ -500,6 +506,7 @@ struct CodexUsageAPISyncer {
             for index in accounts.indices {
                 accounts[index].removeValue(forKey: CLIProxyCodexRegistryMetadata.source)
                 accounts[index].removeValue(forKey: CLIProxyCodexRegistryMetadata.accessTokenExpiresAt)
+                accounts[index].removeValue(forKey: CLIProxyCodexRegistryMetadata.hasSignInLease)
             }
         }
 
@@ -519,16 +526,20 @@ struct CodexUsageAPISyncer {
                 accounts.append(account)
                 index = accounts.index(before: accounts.endIndex)
             }
-            accounts[index][CLIProxyCodexRegistryMetadata.source] = CLIProxyCodexRegistryMetadata.sourceValue
+            accounts[index][CLIProxyCodexRegistryMetadata.source] = credential.sources.sorted().joined(separator: "+")
             accounts[index][CLIProxyCodexRegistryMetadata.accessTokenExpiresAt] =
                 credential.accessTokenExpiresAt?.timeIntervalSince1970
+            accounts[index][CLIProxyCodexRegistryMetadata.hasSignInLease] = credential.nativeAuthLease != nil
         }
         return accounts
     }
 
     private static func externalAccountKey(for credential: CLIProxyCodexCredential) -> String {
         let email = credential.identity.email?.lowercased() ?? ""
-        return "cliproxyapi|\(credential.authInfo.accountID)|\(email)"
+        let source = credential.sources.contains(CLIProxyCodexRegistryMetadata.sourceValue)
+            ? CLIProxyCodexRegistryMetadata.sourceValue
+            : CLIProxyCodexRegistryMetadata.openCodexSourceValue
+        return "\(source)|\(credential.authInfo.accountID)|\(email)"
     }
 
     private static func promoteNativeAccounts(

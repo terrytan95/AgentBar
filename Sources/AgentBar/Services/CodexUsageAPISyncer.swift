@@ -66,6 +66,13 @@ struct CodexUsageAPISyncer {
     func refreshUsage(refreshAllAccounts: Bool = false) async -> CodexUsageSyncResult {
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
+        let openCodexReader = OpenCodexAuthReader(
+            homeDirectory: homeDirectory,
+            now: now
+        )
+        let openCodexDiscovery = reusesCLIProxyAPIAuth
+            ? openCodexReader.discover()
+            : CLIProxyCodexDiscovery(credentials: [], scanCompleted: true, hasBroadReadPermissions: false)
         let discovery = reusesCLIProxyAPIAuth
             ? CLIProxyCodexDiscovery.merged([
                 CLIProxyCodexAuthReader(
@@ -73,12 +80,12 @@ struct CodexUsageAPISyncer {
                     configuredDirectory: cliProxyAPIAuthDirectory,
                     now: now
                 ).discover(),
-                OpenCodexAuthReader(
-                    homeDirectory: homeDirectory,
-                    now: now
-                ).discover()
+                openCodexDiscovery
             ])
             : CLIProxyCodexDiscovery(credentials: [], scanCompleted: true, hasBroadReadPermissions: false)
+        let openCodexActiveAccountID = reusesCLIProxyAPIAuth
+            ? await openCodexReader.activeAccountID()
+            : nil
 
         let registryData = try? storage.readRegistryBootstrappingActiveAccount(now: now())
         let parsedRegistry = registryData
@@ -94,6 +101,16 @@ struct CodexUsageAPISyncer {
             discovery: discovery
         )
         Self.promoteNativeAccounts(&accounts, storage: storage, fileManager: fileManager)
+        let openCodexActiveAccountKey = openCodexActiveAccountID
+            .flatMap { activeID in
+                discovery.credentials.first { $0.openCodexAccountID == activeID }
+            }
+            .flatMap { credential in
+                Self.activeAccountKey(in: accounts, matching: credential.identity)
+            }
+        if let openCodexActiveAccountKey {
+            registry["active_account_key"] = openCodexActiveAccountKey
+        }
         registry["accounts"] = accounts
         if discovery.scanCompleted, discovery.hasBroadReadPermissions {
             registry[CLIProxyCodexRegistryMetadata.broadReadPermissions] = true
@@ -111,7 +128,8 @@ struct CodexUsageAPISyncer {
 
         let activeAuthIdentity = (try? Data(contentsOf: storage.activeAuthURL))
             .flatMap(CodexAccountStorage.chatGPTAuthIdentity)
-        let activeAccountKey = Self.activeAccountKey(in: accounts, matching: activeAuthIdentity)
+        let activeAccountKey = openCodexActiveAccountKey
+            ?? Self.activeAccountKey(in: accounts, matching: activeAuthIdentity)
             ?? registry["active_account_key"] as? String
         guard let activeAccountIndex = accounts.firstIndex(where: { account in
             (account["account_key"] as? String) == activeAccountKey

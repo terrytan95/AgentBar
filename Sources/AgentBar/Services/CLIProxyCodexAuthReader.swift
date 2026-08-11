@@ -7,6 +7,7 @@ struct CLIProxyCodexCredential: Sendable {
     var accessTokenExpiresAt: Date?
     var nativeAuthLease: Data?
     var sources: Set<String> = [CLIProxyCodexRegistryMetadata.sourceValue]
+    var openCodexAccountID: String?
 }
 
 struct CLIProxyCodexDiscovery: Sendable {
@@ -40,7 +41,11 @@ extension CLIProxyCodexDiscovery {
     static func merged(_ discoveries: [Self]) -> Self {
         let credentials = discoveries.flatMap(\.credentials)
         let mergedCredentials = Dictionary(grouping: credentials) {
-            $0.authInfo.accountID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let accountID = $0.authInfo.accountID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let loginID = $0.identity.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                ?? $0.openCodexAccountID
+                ?? ""
+            return "\(accountID)|\(loginID)"
         }.compactMap { _, matches -> CLIProxyCodexCredential? in
             guard var selected = matches.max(by: {
                 ($0.accessTokenExpiresAt ?? .distantPast) < ($1.accessTokenExpiresAt ?? .distantPast)
@@ -53,6 +58,7 @@ extension CLIProxyCodexDiscovery {
                 })?
                 .nativeAuthLease
             selected.sources = matches.reduce(into: []) { $0.formUnion($1.sources) }
+            selected.openCodexAccountID = matches.compactMap(\.openCodexAccountID).first
             return selected
         }
         return Self(
@@ -262,6 +268,8 @@ struct CLIProxyCodexAuthReader {
 struct OpenCodexAuthReader {
     static let relativeAuthDirectory = ".opencodex"
     static let authFileName = "codex-accounts.json"
+    static let runtimePortFileName = "runtime-port.json"
+    static let adminTokenFileName = "admin-api-token"
     static let maximumAuthFileBytes = 1024 * 1024
 
     var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -301,7 +309,7 @@ struct OpenCodexAuthReader {
         else { return empty(completed: false) }
 
         let readAt = now()
-        let credentials = root.values.compactMap { value -> CLIProxyCodexCredential? in
+        let credentials = root.compactMap { openCodexAccountID, value -> CLIProxyCodexCredential? in
             guard let record = value as? [String: Any],
                   let credential = record["credential"] as? [String: Any],
                   let accessToken = nonEmptyString(credential["accessToken"]),
@@ -310,12 +318,17 @@ struct OpenCodexAuthReader {
             else { return nil }
             let expiresAt = Date(timeIntervalSince1970: expiresAtMs.doubleValue / 1000)
             guard expiresAt > readAt else { return nil }
+            let identity = CodexAccountStorage.chatGPTAuthIdentity(
+                accessToken: accessToken,
+                fallbackAccountID: accountID
+            )
             return CLIProxyCodexCredential(
-                identity: CodexAuthIdentity(accountID: accountID, email: nil),
-                authInfo: CodexUsageAuthInfo(accessToken: accessToken, accountID: accountID),
+                identity: identity,
+                authInfo: CodexUsageAuthInfo(accessToken: accessToken, accountID: identity.accountID ?? accountID),
                 accessTokenExpiresAt: expiresAt,
                 nativeAuthLease: nil,
-                sources: [CLIProxyCodexRegistryMetadata.openCodexSourceValue]
+                sources: [CLIProxyCodexRegistryMetadata.openCodexSourceValue],
+                openCodexAccountID: openCodexAccountID
             )
         }
         return CLIProxyCodexDiscovery(
@@ -323,6 +336,74 @@ struct OpenCodexAuthReader {
             scanCompleted: true,
             hasBroadReadPermissions: directoryInfo.st_mode & mode_t(0o077) != 0 || info.st_mode & mode_t(0o077) != 0
         )
+    }
+
+    func activeAccountID() async -> String? {
+        let directoryURL = homeDirectory.appending(path: Self.relativeAuthDirectory, directoryHint: .isDirectory)
+        let directoryDescriptor = open(directoryURL.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard directoryDescriptor >= 0 else { return nil }
+        defer { close(directoryDescriptor) }
+
+        var directoryInfo = stat()
+        guard fstat(directoryDescriptor, &directoryInfo) == 0,
+              (directoryInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR),
+              directoryInfo.st_uid == geteuid(),
+              directoryInfo.st_mode & mode_t(0o077) == 0,
+              let portData = readPrivateFile(
+                named: Self.runtimePortFileName,
+                maximumBytes: 64 * 1024,
+                directoryDescriptor: directoryDescriptor
+              ),
+              let portRoot = try? JSONSerialization.jsonObject(with: portData) as? [String: Any],
+              let port = (portRoot["port"] as? NSNumber)?.intValue,
+              (1...65_535).contains(port),
+              let tokenData = readPrivateFile(
+                named: Self.adminTokenFileName,
+                maximumBytes: 4 * 1024,
+                directoryDescriptor: directoryDescriptor
+              ),
+              let token = String(data: tokenData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty,
+              let url = URL(string: "http://127.0.0.1:\(port)/api/codex-auth/active")
+        else { return nil }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 3
+        configuration.timeoutIntervalForResource = 3
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        guard let (data, response) = try? await session.data(for: request),
+              let status = (response as? HTTPURLResponse)?.statusCode,
+              200..<300 ~= status,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return nonEmptyString(root["activeCodexAccountId"])
+    }
+
+    private func readPrivateFile(
+        named name: String,
+        maximumBytes: Int,
+        directoryDescriptor: Int32
+    ) -> Data? {
+        let descriptor = openat(directoryDescriptor, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else { return nil }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              info.st_uid == geteuid(),
+              info.st_nlink == 1,
+              info.st_mode & mode_t(0o077) == 0,
+              info.st_size > 0,
+              info.st_size <= off_t(maximumBytes),
+              let data = try? handle.read(upToCount: maximumBytes + 1),
+              data.count <= maximumBytes
+        else { return nil }
+        return data
     }
 
     private func empty(completed: Bool) -> CLIProxyCodexDiscovery {

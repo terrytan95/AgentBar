@@ -135,6 +135,16 @@ struct CodexAccountStorage {
         return CodexAuthIdentity(accountID: accountID, email: email)
     }
 
+    static func chatGPTAuthIdentity(accessToken: String, fallbackAccountID: String) -> CodexAuthIdentity {
+        let jwt = jwtPayload(accessToken)
+        let auth = jwt?["https://api.openai.com/auth"] as? [String: Any]
+        let profile = jwt?["https://api.openai.com/profile"] as? [String: Any]
+        return CodexAuthIdentity(
+            accountID: firstNonEmptyString([auth?["chatgpt_account_id"], fallbackAccountID]),
+            email: firstNonEmptyString([profile?["email"], jwt?["email"]])
+        )
+    }
+
     static func usageAuthInfo(from authData: Data) -> CodexUsageAuthInfo? {
         guard let root = try? JSONSerialization.jsonObject(with: authData) as? [String: Any] else {
             return nil

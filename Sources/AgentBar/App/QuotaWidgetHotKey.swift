@@ -99,11 +99,10 @@ final class QuotaWidgetHotKeyController: ObservableObject {
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-        let context = Unmanaged.passUnretained(self).toOpaque()
         InstallEventHandler(
             GetApplicationEventTarget(),
-            { _, event, context in
-                guard let event, let context else { return OSStatus(eventNotHandledErr) }
+            { _, event, _ in
+                guard let event else { return OSStatus(eventNotHandledErr) }
                 var hotKeyID = EventHotKeyID()
                 let status = GetEventParameter(
                     event,
@@ -115,17 +114,14 @@ final class QuotaWidgetHotKeyController: ObservableObject {
                     &hotKeyID
                 )
                 guard status == noErr, hotKeyID.id == 1 else { return OSStatus(eventNotHandledErr) }
-                let controller = Unmanaged<QuotaWidgetHotKeyController>
-                    .fromOpaque(context)
-                    .takeUnretainedValue()
                 DispatchQueue.main.async {
-                    controller.settings?.showCodexSidebarQuotaOverlay.toggle()
+                    CodexSidebarQuotaOverlayController.shared.toggleVisibility()
                 }
                 return noErr
             },
             1,
             &eventType,
-            context,
+            nil,
             &eventHandler
         )
     }

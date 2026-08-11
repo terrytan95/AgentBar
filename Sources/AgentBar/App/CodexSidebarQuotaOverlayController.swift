@@ -529,6 +529,11 @@ final class CodexSidebarQuotaOverlayController: ObservableObject {
         }
     }
 
+    func toggleVisibility() {
+        settings?.showCodexSidebarQuotaOverlay.toggle()
+        refreshVisibility()
+    }
+
     private func refreshVisibility() {
         hasAccessibilityPermission = AXIsProcessTrusted()
         let enabled = settings?.showCodexSidebarQuotaOverlay == true

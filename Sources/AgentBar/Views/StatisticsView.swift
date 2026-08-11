@@ -2488,7 +2488,7 @@ private struct QuotaWindowTimelinePanel: View {
                     color: serviceColor(account.service),
                     language: language
                 )
-                .frame(height: 56)
+                .frame(maxWidth: .infinity, minHeight: 56, maxHeight: 56)
             }
         }
     }

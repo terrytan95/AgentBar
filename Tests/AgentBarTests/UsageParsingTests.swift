@@ -775,6 +775,9 @@ final class UsageParsingTests: XCTestCase {
                 urlRecorder.record(request.url?.absoluteString ?? "")
                 if request.url == CodexUsageAPISyncer.resetCreditsEndpoint {
                     XCTAssertEqual(request.value(forHTTPHeaderField: "originator"), "Codex Desktop")
+                    if urlRecorder.urls.filter({ $0 == CodexUsageAPISyncer.resetCreditsEndpoint.absoluteString }).count == 1 {
+                        return CodexUsageAPIResponse(statusCode: 429, data: Data())
+                    }
                     return CodexUsageAPIResponse(
                         statusCode: 200,
                         data: """
@@ -795,13 +798,15 @@ final class UsageParsingTests: XCTestCase {
                     {"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}},"rate_limit_reset_credits":{"available_count":2}}
                     """.data(using: .utf8)!
                 )
-            }
+            },
+            resetCreditsRetryDelay: .zero
         )
 
         let result = await syncer.refreshUsage()
         XCTAssertEqual(result, .success)
         XCTAssertEqual(urlRecorder.urls, [
             "https://chatgpt.com/backend-api/wham/usage",
+            "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
             "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
         ])
         let usage = try XCTUnwrap(registryAccount(from: registryURL)["last_usage"] as? [String: Any])

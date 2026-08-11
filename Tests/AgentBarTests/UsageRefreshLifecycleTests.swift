@@ -86,6 +86,39 @@ final class UsageRefreshLifecycleTests: XCTestCase {
     }
 
     @MainActor
+    func testProgressIncludesOptionalProvidersBeforeCodexSyncFinishes() async throws {
+        let gate = RefreshGate()
+        let grok = snapshot(service: .xaiAPI, accounts: [account(service: .xaiAPI)])
+        let cursor = snapshot(service: .cursorAgent, accounts: [account(service: .cursorAgent)])
+        let lifecycle = UsageRefreshLifecycle(
+            codexUsageSynchronizer: { _ in
+                await gate.wait()
+                return .success
+            },
+            codexUsagePreviewReader: { snapshot(service: .codex) },
+            codexUsageReader: { snapshot(service: .codex) },
+            claudeUsageReader: { snapshot(service: .claudeCode) },
+            xaiUsageReader: { grok },
+            cursorUsageReader: { cursor },
+            refreshTimeout: .seconds(1)
+        )
+        let progressReceived = expectation(description: "provider progress received")
+        var progress: UsageRefreshLifecycle.Result?
+
+        XCTAssertTrue(lifecycle.refresh(force: false) { completion in
+            guard case let .progress(result) = completion else { return }
+            progress = result
+            progressReceived.fulfill()
+        })
+        await fulfillment(of: [progressReceived], timeout: 1)
+        let result = try XCTUnwrap(progress)
+        await gate.releaseAll()
+
+        XCTAssertEqual(Set(result.snapshots.keys), Set(UsageService.allCases))
+        XCTAssertEqual(Set(result.accounts.map(\.service)), Set([.xaiAPI, .cursorAgent]))
+    }
+
+    @MainActor
     private func makeLifecycle(
         gate: RefreshGate,
         timeout: Duration = .seconds(1)
@@ -147,16 +180,29 @@ private actor RefreshGate {
 
 private func snapshot(
     service: UsageService,
-    points: [UsagePoint] = []
+    points: [UsagePoint] = [],
+    accounts: [UsageAccount] = []
 ) -> UsageSnapshot {
     UsageSnapshot(
         service: service,
         status: .live,
-        accounts: [],
+        accounts: accounts,
         points: points,
         securityNotes: [],
         refreshedAt: Date(),
         pricingFingerprint: Pricing.fingerprint
+    )
+}
+
+private func account(service: UsageService) -> UsageAccount {
+    UsageAccount(
+        id: service.rawValue,
+        service: service,
+        displayName: service.rawValue,
+        sourceDescription: "test",
+        status: .live,
+        tokens: .zero,
+        isActive: true
     )
 }
 

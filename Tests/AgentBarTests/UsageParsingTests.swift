@@ -775,7 +775,7 @@ final class UsageParsingTests: XCTestCase {
                 urlRecorder.record(request.url?.absoluteString ?? "")
                 if request.url == CodexUsageAPISyncer.resetCreditsEndpoint {
                     XCTAssertEqual(request.value(forHTTPHeaderField: "originator"), "Codex Desktop")
-                    if urlRecorder.urls.filter({ $0 == CodexUsageAPISyncer.resetCreditsEndpoint.absoluteString }).count == 1 {
+                    if urlRecorder.urls.filter({ $0 == CodexUsageAPISyncer.resetCreditsEndpoint.absoluteString }).count <= 2 {
                         return CodexUsageAPIResponse(statusCode: 429, data: Data())
                     }
                     return CodexUsageAPIResponse(
@@ -806,6 +806,7 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(result, .success)
         XCTAssertEqual(urlRecorder.urls, [
             "https://chatgpt.com/backend-api/wham/usage",
+            "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
             "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
             "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
         ])

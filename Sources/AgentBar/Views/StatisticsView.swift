@@ -196,6 +196,9 @@ struct StatisticsView: View {
                 sidebarItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview) {
                     setPage(tab: .usage, viewMode: .overview)
                 }
+                sidebarItem(L.text("quota_and_resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
+                    setPage(tab: .usage, viewMode: .resets)
+                }
                 sidebarItem(store.language == .chinese ? "效率指南" : "Efficiency Guide", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency) {
                     setPage(tab: .usage, viewMode: .efficiency)
                 }
@@ -204,9 +207,6 @@ struct StatisticsView: View {
                 }
                 sidebarItem(L.text("project_billing", store.language), systemImage: "folder", active: topTab == .usage && viewMode == .projects) {
                     setPage(tab: .usage, viewMode: .projects)
-                }
-                sidebarItem(L.text("quota_and_resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets) {
-                    setPage(tab: .usage, viewMode: .resets)
                 }
                 sidebarItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit) {
                     setPage(tab: .usage, viewMode: .audit)
@@ -408,6 +408,9 @@ struct StatisticsView: View {
             topNavigationItem(L.text("overview", store.language), systemImage: "rectangle.split.2x2", active: topTab == .usage && viewMode == .overview, showsTitle: showsTitles) {
                 setPage(tab: .usage, viewMode: .overview)
             }
+            topNavigationItem(L.text("quota_and_resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets, showsTitle: showsTitles) {
+                setPage(tab: .usage, viewMode: .resets)
+            }
             topNavigationItem(store.language == .chinese ? "效率指南" : "Efficiency Guide", systemImage: "sparkles", active: topTab == .usage && viewMode == .efficiency, showsTitle: showsTitles) {
                 setPage(tab: .usage, viewMode: .efficiency)
             }
@@ -416,9 +419,6 @@ struct StatisticsView: View {
             }
             topNavigationItem(L.text("project_billing", store.language), systemImage: "folder", active: topTab == .usage && viewMode == .projects, showsTitle: showsTitles) {
                 setPage(tab: .usage, viewMode: .projects)
-            }
-            topNavigationItem(L.text("quota_and_resets", store.language), systemImage: "arrow.counterclockwise.circle", active: topTab == .usage && viewMode == .resets, showsTitle: showsTitles) {
-                setPage(tab: .usage, viewMode: .resets)
             }
             topNavigationItem(L.text("audit", store.language), systemImage: "chart.bar.doc.horizontal", active: topTab == .usage && viewMode == .audit, showsTitle: showsTitles) {
                 setPage(tab: .usage, viewMode: .audit)

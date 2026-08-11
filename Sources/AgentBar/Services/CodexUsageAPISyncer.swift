@@ -41,6 +41,7 @@ struct CodexUsageAPISyncer {
     var cliProxyAPIAuthDirectory: String
     var accountPollDelay: Duration
     var resetCreditsCacheDuration: TimeInterval
+    var resetCreditsRetryDelay: Duration
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -52,7 +53,8 @@ struct CodexUsageAPISyncer {
         reusesOpenCodexAuth: Bool = false,
         cliProxyAPIAuthDirectory: String = "",
         accountPollDelay: Duration = .zero,
-        resetCreditsCacheDuration: TimeInterval = 0
+        resetCreditsCacheDuration: TimeInterval = 0,
+        resetCreditsRetryDelay: Duration = .seconds(10)
     ) {
         self.homeDirectory = homeDirectory
         self.fileManager = fileManager
@@ -64,6 +66,7 @@ struct CodexUsageAPISyncer {
         self.cliProxyAPIAuthDirectory = cliProxyAPIAuthDirectory
         self.accountPollDelay = accountPollDelay
         self.resetCreditsCacheDuration = resetCreditsCacheDuration
+        self.resetCreditsRetryDelay = resetCreditsRetryDelay
     }
 
     func refreshUsage(refreshAllAccounts: Bool = false) async -> CodexUsageSyncResult {
@@ -431,9 +434,16 @@ struct CodexUsageAPISyncer {
         request.setValue("Codex Desktop", forHTTPHeaderField: "originator")
         request.setValue("CODEX", forHTTPHeaderField: "OAI-Product-Sku")
 
-        guard let response = try? await usageClient(request, timeout),
-              200..<300 ~= response.statusCode
-        else { return nil }
+        var response = try? await usageClient(request, timeout)
+        if response?.statusCode == 429 {
+            do {
+                try await Task.sleep(for: resetCreditsRetryDelay)
+            } catch {
+                return nil
+            }
+            response = try? await usageClient(request, timeout)
+        }
+        guard let response, 200..<300 ~= response.statusCode else { return nil }
         return Self.parseDetailedResetCreditsResponse(data: response.data)
     }
 

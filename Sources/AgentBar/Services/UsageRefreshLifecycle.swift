@@ -97,16 +97,23 @@ final class UsageRefreshLifecycle {
             async let cursorUsage = cursorUsageReader()
             let syncResult: CodexUsageSyncResult
             var previewClaude: UsageSnapshot?
+            var xai: UsageSnapshot?
+            var cursor: UsageSnapshot?
             if let codexUsagePreviewReader {
                 async let pendingSyncResult = codexUsageSynchronizer(refreshAllCodexAccounts)
                 let claude = claudeUsageReader()
                 previewClaude = claude
                 let codexPreview = codexUsagePreviewReader()
+                xai = await xaiUsage
+                cursor = await cursorUsage
                 guard !Task.isCancelled else { return }
+                var previewSnapshots: [UsageService: UsageSnapshot] = [.codex: codexPreview, .claudeCode: claude]
+                if let xai { previewSnapshots[.xaiAPI] = xai }
+                if let cursor { previewSnapshots[.cursorAgent] = cursor }
                 let preview = Result(
-                    snapshots: [.codex: codexPreview, .claudeCode: claude],
-                    accounts: codexPreview.accounts + claude.accounts,
-                    points: codexPreview.points + claude.points,
+                    snapshots: previewSnapshots,
+                    accounts: codexPreview.accounts + claude.accounts + (xai?.accounts ?? []) + (cursor?.accounts ?? []),
+                    points: codexPreview.points + claude.points + (xai?.points ?? []) + (cursor?.points ?? []),
                     tasks: codexPreview.tasks,
                     generation: runGeneration
                 )
@@ -114,6 +121,8 @@ final class UsageRefreshLifecycle {
                 syncResult = await pendingSyncResult
             } else {
                 syncResult = await codexUsageSynchronizer(refreshAllCodexAccounts)
+                xai = await xaiUsage
+                cursor = await cursorUsage
             }
             guard !Task.isCancelled else { return }
             var codex = codexUsageReader()
@@ -122,10 +131,6 @@ final class UsageRefreshLifecycle {
                 codex.securityNotes.append(note)
             }
             let claude = previewClaude ?? claudeUsageReader()
-            guard !Task.isCancelled else { return }
-            let xai = await xaiUsage
-            guard !Task.isCancelled else { return }
-            let cursor = await cursorUsage
             guard !Task.isCancelled else { return }
             var snapshots: [UsageService: UsageSnapshot] = [.codex: codex, .claudeCode: claude]
             if let xai {

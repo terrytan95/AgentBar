@@ -475,7 +475,7 @@ struct StatisticsView: View {
             showsAccountPopover.toggle()
         } label: {
             HStack(spacing: 10) {
-                AccountAvatar(text: account?.providerAccountDisplayName ?? "A", color: AgentBarPalette.primary, size: 34)
+                AccountAvatar(service: account?.service, text: account?.providerAccountDisplayName ?? "A", size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account?.providerAccountDisplayName ?? "--")
                         .font(.agentBar(size: 12, weight: .bold))
@@ -4379,13 +4379,23 @@ private struct ResetExpiryRow: View {
 }
 
 private struct AccountAvatar: View {
+    var service: UsageService?
     var text: String
-    var color: Color
     var size: CGFloat
 
     var body: some View {
-        Text(initial)
-            .font(.agentBar(size: max(12, size * 0.42), weight: .bold))
+        Group {
+            if let service {
+                Image(nsImage: ProviderIcon.image(for: service))
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(size * 0.24)
+            } else {
+                Text(initial)
+                    .font(.agentBar(size: max(12, size * 0.42), weight: .bold))
+            }
+        }
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(
@@ -4393,6 +4403,17 @@ private struct AccountAvatar: View {
                 in: Circle()
             )
             .shadow(color: color.opacity(0.24), radius: 8, y: 4)
+            .accessibilityHidden(true)
+    }
+
+    private var color: Color {
+        switch service {
+        case .codex: Color(red: 0.04, green: 0.48, blue: 0.37)
+        case .claudeCode: Color(red: 0.78, green: 0.32, blue: 0.22)
+        case .xaiAPI: Color(red: 0.42, green: 0.30, blue: 0.76)
+        case .cursorAgent: Color(red: 0.12, green: 0.35, blue: 0.70)
+        case nil: AgentBarPalette.primary
+        }
     }
 
     private var initial: String {
@@ -4408,7 +4429,7 @@ private struct SidebarAccountPopover: View {
         VStack(alignment: .leading, spacing: 12) {
             if let account {
                 HStack(spacing: 10) {
-                    AccountAvatar(text: account.providerAccountDisplayName, color: AgentBarPalette.primary, size: 38)
+                    AccountAvatar(service: account.service, text: account.providerAccountDisplayName, size: 38)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(account.providerAccountDisplayName)
                             .font(.agentBar(size: 14, weight: .bold))
@@ -4618,7 +4639,7 @@ private struct AccountLimitGroupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                AccountAvatar(text: account.providerAccountDisplayName, color: account.isActive ? AgentBarPalette.primary : AgentBarPalette.secondary, size: 34)
+                AccountAvatar(service: account.service, text: account.providerAccountDisplayName, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(account.providerAccountDisplayName)

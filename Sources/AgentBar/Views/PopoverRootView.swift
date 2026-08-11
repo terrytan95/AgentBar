@@ -224,7 +224,7 @@ struct PopoverRootView: View {
             }
             Spacer()
             Button {
-                store.refresh(force: true)
+                store.refresh(force: true, showManualFeedback: true)
             } label: {
                 Group {
                     if store.isRefreshing {

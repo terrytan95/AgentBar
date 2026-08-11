@@ -56,6 +56,7 @@ final class SettingsStore: ObservableObject {
     static let defaultPopoverMetrics: [PopoverMetric] = [.tokens, .cost, .availableResets]
     static let maximumTopUsageRowCount = 9
     static let defaultTopUsageRowCount = 3
+    static let minimumRefreshInterval: TimeInterval = 120
 
     @Published var language: AppLanguage {
         didSet { persist(language.rawValue, forKey: Keys.language) }
@@ -315,7 +316,7 @@ final class SettingsStore: ObservableObject {
         persistenceWritesDisabled = restoreError?.stopsWrites == true
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? .english
         let savedInterval = defaults.double(forKey: Keys.refreshInterval)
-        refreshInterval = savedInterval >= 30 ? savedInterval : 60
+        refreshInterval = max(savedInterval, Self.minimumRefreshInterval)
         let savedHistoryInterval = defaults.double(forKey: Keys.quotaCapacityHistoryInterval)
         quotaCapacityHistoryInterval = Self.clampedQuotaCapacityHistoryInterval(savedHistoryInterval > 0 ? savedHistoryInterval : 3_600)
         launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)

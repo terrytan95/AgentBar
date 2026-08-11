@@ -1390,8 +1390,7 @@ struct StatisticsView: View {
             SettingsGroup(title: L.text("refresh", store.language), subtitle: L.text("refresh_settings_subtitle", store.language)) {
                 SettingsRow(title: L.text("refresh_interval", store.language), subtitle: L.text("refresh_interval_subtitle", store.language)) {
                     Picker("", selection: $settings.refreshInterval) {
-                        Text("30s").tag(TimeInterval(30))
-                        Text("60s").tag(TimeInterval(60))
+                        Text("2m").tag(TimeInterval(120))
                         Text("5m").tag(TimeInterval(300))
                         Text("10m").tag(TimeInterval(600))
                     }

@@ -24,7 +24,7 @@ final class UsageRefreshLifecycle {
         var timeoutTask: Task<Void, Never>?
     }
 
-    private let codexUsageSynchronizer: @Sendable () async -> CodexUsageSyncResult
+    private let codexUsageSynchronizer: @Sendable (Bool) async -> CodexUsageSyncResult
     private let codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)?
     private let codexUsageReader: @Sendable () -> UsageSnapshot
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
@@ -34,9 +34,10 @@ final class UsageRefreshLifecycle {
     private var generation: UInt64 = 0
     private var inFlight: Run?
     private var refreshQueued = false
+    private var refreshAllCodexAccountsQueued = false
 
     init(
-        codexUsageSynchronizer: @escaping @Sendable () async -> CodexUsageSyncResult,
+        codexUsageSynchronizer: @escaping @Sendable (Bool) async -> CodexUsageSyncResult,
         codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)? = nil,
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot,
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot,
@@ -56,13 +57,15 @@ final class UsageRefreshLifecycle {
     @discardableResult
     func refresh(
         force: Bool,
+        refreshAllCodexAccounts: Bool = false,
         receive: @escaping Receiver
     ) -> Bool {
         guard inFlight == nil else {
             refreshQueued = refreshQueued || force
+            refreshAllCodexAccountsQueued = refreshAllCodexAccountsQueued || refreshAllCodexAccounts
             return false
         }
-        start(receive: receive)
+        start(refreshAllCodexAccounts: refreshAllCodexAccounts, receive: receive)
         return true
     }
 
@@ -72,9 +75,13 @@ final class UsageRefreshLifecycle {
         inFlight?.timeoutTask?.cancel()
         inFlight = nil
         refreshQueued = false
+        refreshAllCodexAccountsQueued = false
     }
 
-    private func start(receive: @escaping Receiver) {
+    private func start(
+        refreshAllCodexAccounts: Bool,
+        receive: @escaping Receiver
+    ) {
         generation &+= 1
         let runGeneration = generation
         let codexUsageSynchronizer = codexUsageSynchronizer
@@ -91,7 +98,7 @@ final class UsageRefreshLifecycle {
             let syncResult: CodexUsageSyncResult
             var previewClaude: UsageSnapshot?
             if let codexUsagePreviewReader {
-                async let pendingSyncResult = codexUsageSynchronizer()
+                async let pendingSyncResult = codexUsageSynchronizer(refreshAllCodexAccounts)
                 let claude = claudeUsageReader()
                 previewClaude = claude
                 let codexPreview = codexUsagePreviewReader()
@@ -106,7 +113,7 @@ final class UsageRefreshLifecycle {
                 await self?.publishProgress(preview, generation: runGeneration, receive: receive)
                 syncResult = await pendingSyncResult
             } else {
-                syncResult = await codexUsageSynchronizer()
+                syncResult = await codexUsageSynchronizer(refreshAllCodexAccounts)
             }
             guard !Task.isCancelled else { return }
             var codex = codexUsageReader()
@@ -179,9 +186,11 @@ final class UsageRefreshLifecycle {
         inFlight = nil
 
         let shouldRepeat = refreshQueued
+        let shouldRefreshAllCodexAccounts = refreshAllCodexAccountsQueued
         refreshQueued = false
+        refreshAllCodexAccountsQueued = false
         if shouldRepeat {
-            start(receive: receive)
+            start(refreshAllCodexAccounts: shouldRefreshAllCodexAccounts, receive: receive)
         } else {
             receive(completion)
         }

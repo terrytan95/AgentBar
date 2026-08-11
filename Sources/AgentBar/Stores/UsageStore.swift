@@ -151,8 +151,11 @@ final class UsageStore: ObservableObject {
     ) {
         self.settings = settings
         self.quotaCapacityHistoryStore = quotaCapacityHistoryStore
-        let resolvedCodexUsageSynchronizer: @Sendable () async -> CodexUsageSyncResult =
-            codexUsageSynchronizer ?? { [weak settings] in
+        let resolvedCodexUsageSynchronizer: @Sendable (Bool) async -> CodexUsageSyncResult
+        if let codexUsageSynchronizer {
+            resolvedCodexUsageSynchronizer = { _ in await codexUsageSynchronizer() }
+        } else {
+            resolvedCodexUsageSynchronizer = { [weak settings] refreshAllAccounts in
                 let configuration = await MainActor.run {
                     (
                         settings?.reuseCLIProxyAPIAuthEnabled ?? false,
@@ -161,9 +164,12 @@ final class UsageStore: ObservableObject {
                 }
                 return await CodexUsageAPISyncer(
                     reusesCLIProxyAPIAuth: configuration.0,
-                    cliProxyAPIAuthDirectory: configuration.1
-                ).refreshUsage()
+                    cliProxyAPIAuthDirectory: configuration.1,
+                    accountPollDelay: .seconds(5),
+                    resetCreditsCacheDuration: 30 * 60
+                ).refreshUsage(refreshAllAccounts: refreshAllAccounts)
             }
+        }
         refreshLifecycle = UsageRefreshLifecycle(
             codexUsageSynchronizer: resolvedCodexUsageSynchronizer,
             codexUsagePreviewReader: codexUsagePreviewReader,
@@ -528,7 +534,8 @@ final class UsageStore: ObservableObject {
         var next = appSnapshot
         next.isManualRefreshFeedbackVisible = next.isManualRefreshFeedbackVisible || showManualFeedback
         let started = refreshLifecycle.refresh(
-            force: force
+            force: force,
+            refreshAllCodexAccounts: showManualFeedback
         ) { [weak self] completion in
             self?.finishRefresh(completion)
         }
@@ -622,7 +629,7 @@ final class UsageStore: ObservableObject {
 
     func configureTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: max(30, settings.refreshInterval), repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: max(SettingsStore.minimumRefreshInterval, settings.refreshInterval), repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.isStarted else { return }
                 self.refresh()

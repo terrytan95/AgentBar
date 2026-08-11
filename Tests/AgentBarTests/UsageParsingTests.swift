@@ -706,11 +706,18 @@ final class UsageParsingTests: XCTestCase {
                 if accountID == "failed-chatgpt-id" {
                     return CodexUsageAPIResponse(statusCode: 500, data: Data())
                 }
+                if request.url == CodexUsageAPISyncer.resetCreditsEndpoint {
+                    return CodexUsageAPIResponse(
+                        statusCode: 200,
+                        data: #"{"available_count":1,"credits":[{"status":"available","expires_at":"2026-07-18T15:16:00Z"}]}"#.data(using: .utf8)!
+                    )
+                }
                 return CodexUsageAPIResponse(
                     statusCode: 200,
                     data: #"{"rate_limit":{"primary_window":{"used_percent":8,"limit_window_seconds":18000,"reset_at":1781400000}}}"#.data(using: .utf8)!
                 )
-            }
+            },
+            resetCreditsCacheDuration: 30 * 60
         )
 
         let result = await syncer.refreshUsage()
@@ -732,7 +739,19 @@ final class UsageParsingTests: XCTestCase {
 
         let secondResult = await syncer.refreshUsage()
         XCTAssertEqual(secondResult, .success)
-        XCTAssertEqual(requestRecorder.requestCount, 7)
+        XCTAssertEqual(requestRecorder.requestCount, 6)
+
+        let allAccountsResult = await syncer.refreshUsage(refreshAllAccounts: true)
+        XCTAssertEqual(allAccountsResult, .success)
+        XCTAssertEqual(requestRecorder.requestCount, 11)
+        XCTAssertEqual(Array(requestRecorder.accountIDs.suffix(5)), [
+            "active-chatgpt-id",
+            "other-chatgpt-id",
+            "recent-chatgpt-id", "recent-chatgpt-id",
+            "failed-chatgpt-id"
+        ])
+        let allAccounts = try registryAccounts(from: registryURL)
+        XCTAssertNotNil(allAccounts.first { $0["account_key"] as? String == "acct-c" }?["last_usage"])
     }
 
     @MainActor

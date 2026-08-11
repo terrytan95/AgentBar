@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-struct CodexSessionMetricsReader {
+struct CodexSessionMetricsReader: @unchecked Sendable {
     var fileManager: FileManager = .default
 
     private static let sessionMetricsCache = CodexSessionMetricsCache()
@@ -59,25 +59,42 @@ struct CodexSessionMetricsReader {
             }
         }
 
-        let selectedCandidates = candidates
+        let selectedCandidates = Array(candidates
             .sorted { lhs, rhs in
                 if lhs.signature.modifiedAt != rhs.signature.modifiedAt {
                     return lhs.signature.modifiedAt > rhs.signature.modifiedAt
                 }
                 return lhs.url.path > rhs.url.path
             }
-            .prefix(maximumSessionFiles)
+            .prefix(maximumSessionFiles))
         aggregate.skippedSessionFileCapCount = max(0, candidates.count - selectedCandidates.count)
         let livePaths = Set(selectedCandidates.map(\.url.path))
 
-        for candidate in selectedCandidates {
-            guard !Task.isCancelled else { break }
-            guard candidate.signature.size <= UInt64(CodexUsageReader.maximumReasonableSessionFileBytes) else {
-                aggregate.skippedOversizedSessionFileCount += 1
-                continue
+        let scan = CodexSessionScan(candidateCount: selectedCandidates.count)
+        let workerCount = min(8, selectedCandidates.count)
+        DispatchQueue.concurrentPerform(iterations: workerCount) { _ in
+            while let index = scan.nextIndex() {
+                guard !Task.isCancelled else { return }
+                let candidate = selectedCandidates[index]
+                guard candidate.signature.size <= UInt64(CodexUsageReader.maximumReasonableSessionFileBytes) else {
+                    scan.store(.oversized, at: index)
+                    continue
+                }
+                do {
+                    scan.store(.metrics(try metrics(for: candidate, cacheDirectory: cacheDirectory)), at: index)
+                } catch {
+                    scan.store(.failure(error), at: index)
+                }
             }
-            do {
-                let metrics = try metrics(for: candidate, cacheDirectory: cacheDirectory)
+        }
+
+        for (index, result) in scan.results.enumerated() {
+            guard !Task.isCancelled else { break }
+            let candidate = selectedCandidates[index]
+            switch result {
+            case .oversized:
+                aggregate.skippedOversizedSessionFileCount += 1
+            case let .metrics(metrics):
                 if candidate.signature.size > UInt64(maximumSessionFileBytes),
                    metrics.eventCount == 0,
                    metrics.latestRateLimitAt == nil {
@@ -85,9 +102,11 @@ struct CodexSessionMetricsReader {
                     continue
                 }
                 aggregate.merge(metrics, seenPoints: &seenPoints, taskIndexes: &taskIndexes)
-            } catch {
+            case let .failure(error):
                 accessIssueNote = accessIssueNote ??
                     LocalFileAccessWarning.codexNote(for: error, path: candidate.url.path)
+            case nil:
+                break
             }
         }
         if prunesCache {
@@ -246,6 +265,42 @@ struct CodexSessionMetricsReader {
 private struct CodexSessionFileCandidate {
     var url: URL
     var signature: CodexSessionFileSignature
+}
+
+private final class CodexSessionScan: @unchecked Sendable {
+    enum Result {
+        case metrics(CodexSessionMetrics)
+        case oversized
+        case failure(Error)
+    }
+
+    private let lock = NSLock()
+    private var next = 0
+    private var storedResults: [Result?]
+
+    init(candidateCount: Int) {
+        storedResults = Array(repeating: nil, count: candidateCount)
+    }
+
+    func nextIndex() -> Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard next < storedResults.count else { return nil }
+        defer { next += 1 }
+        return next
+    }
+
+    func store(_ result: Result, at index: Int) {
+        lock.lock()
+        storedResults[index] = result
+        lock.unlock()
+    }
+
+    var results: [Result?] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedResults
+    }
 }
 
 private struct CodexSessionFileSignature {

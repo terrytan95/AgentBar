@@ -27,6 +27,7 @@ final class UsageRefreshLifecycle {
     private let codexUsageSynchronizer: @Sendable (Bool) async -> CodexUsageSyncResult
     private let codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)?
     private let codexUsageReader: @Sendable () -> UsageSnapshot
+    private let codexUsageReadCycleFactory: (@Sendable () -> CodexUsageReadCycle)?
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let xaiUsageReader: @Sendable () async -> UsageSnapshot?
     private let cursorUsageReader: @Sendable () async -> UsageSnapshot?
@@ -40,6 +41,7 @@ final class UsageRefreshLifecycle {
         codexUsageSynchronizer: @escaping @Sendable (Bool) async -> CodexUsageSyncResult,
         codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)? = nil,
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot,
+        codexUsageReadCycleFactory: (@Sendable () -> CodexUsageReadCycle)? = nil,
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot,
         xaiUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
         cursorUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
@@ -48,6 +50,7 @@ final class UsageRefreshLifecycle {
         self.codexUsageSynchronizer = codexUsageSynchronizer
         self.codexUsagePreviewReader = codexUsagePreviewReader
         self.codexUsageReader = codexUsageReader
+        self.codexUsageReadCycleFactory = codexUsageReadCycleFactory
         self.claudeUsageReader = claudeUsageReader
         self.xaiUsageReader = xaiUsageReader
         self.cursorUsageReader = cursorUsageReader
@@ -87,6 +90,7 @@ final class UsageRefreshLifecycle {
         let codexUsageSynchronizer = codexUsageSynchronizer
         let codexUsagePreviewReader = codexUsagePreviewReader
         let codexUsageReader = codexUsageReader
+        let codexUsageReadCycleFactory = codexUsageReadCycleFactory
         let claudeUsageReader = claudeUsageReader
         let xaiUsageReader = xaiUsageReader
         let cursorUsageReader = cursorUsageReader
@@ -95,6 +99,7 @@ final class UsageRefreshLifecycle {
         let workTask = Task.detached(priority: .utility) { [weak self] in
             async let xaiUsage = xaiUsageReader()
             async let cursorUsage = cursorUsageReader()
+            let codexUsageReadCycle = codexUsageReadCycleFactory?()
             let syncResult: CodexUsageSyncResult
             var previewClaude: UsageSnapshot?
             var xai: UsageSnapshot?
@@ -103,7 +108,7 @@ final class UsageRefreshLifecycle {
                 async let pendingSyncResult = codexUsageSynchronizer(refreshAllCodexAccounts)
                 let claude = claudeUsageReader()
                 previewClaude = claude
-                let codexPreview = codexUsagePreviewReader()
+                let codexPreview = codexUsageReadCycle?.readPreview() ?? codexUsagePreviewReader()
                 xai = await xaiUsage
                 cursor = await cursorUsage
                 guard !Task.isCancelled else { return }
@@ -125,7 +130,7 @@ final class UsageRefreshLifecycle {
                 cursor = await cursorUsage
             }
             guard !Task.isCancelled else { return }
-            var codex = codexUsageReader()
+            var codex = codexUsageReadCycle?.readFinal() ?? codexUsageReader()
             guard !Task.isCancelled else { return }
             if let note = syncResult.note {
                 codex.securityNotes.append(note)

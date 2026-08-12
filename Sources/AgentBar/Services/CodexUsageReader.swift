@@ -28,6 +28,10 @@ struct CodexUsageReader {
     }
 
     func read() -> UsageSnapshot {
+        read(snapshot: nil)
+    }
+
+    func read(snapshot: CodexSessionScanSnapshot?) -> UsageSnapshot {
         let now = now()
         let storage = CodexAccountStorage(homeDirectory: homeDirectory, fileManager: fileManager)
         let registryURL = storage.registryURL
@@ -81,8 +85,9 @@ struct CodexUsageReader {
             ? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first?
                 .appending(path: Self.sessionMetricsCacheDirectoryName, directoryHint: .isDirectory)
             : nil
-        let metrics = CodexSessionMetricsReader(fileManager: fileManager).read(
-            root: sessionRoot,
+        let metricsReader = CodexSessionMetricsReader(fileManager: fileManager)
+        let metrics = metricsReader.read(
+            snapshot: snapshot ?? metricsReader.capture(root: sessionRoot),
             maximumSessionFileBytes: Self.maximumSessionFileBytes,
             maximumSessionFiles: sessionFileLimit,
             cacheDirectory: sessionCacheDirectory,
@@ -339,6 +344,37 @@ struct CodexUsageReader {
 
     private static func isSessionTitleLine(_ line: String) -> Bool {
         !line.hasPrefix("#") && !line.hasPrefix("<image") && !line.hasPrefix("!")
+    }
+}
+
+final class CodexUsageReadCycle: @unchecked Sendable {
+    private let homeDirectory: URL
+    private let metricsReader: CodexSessionMetricsReader
+    private var snapshot: CodexSessionScanSnapshot
+
+    init(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default
+    ) {
+        self.homeDirectory = homeDirectory
+        metricsReader = CodexSessionMetricsReader(fileManager: fileManager)
+        snapshot = metricsReader.capture(root: homeDirectory.appending(path: ".codex/sessions"))
+    }
+
+    func readPreview() -> UsageSnapshot {
+        CodexUsageReader(
+            homeDirectory: homeDirectory,
+            sessionFileLimit: 5,
+            prunesSessionCache: false
+        ).read(snapshot: snapshot)
+    }
+
+    func readFinal() -> UsageSnapshot {
+        snapshot = metricsReader.refresh(
+            snapshot: snapshot,
+            root: homeDirectory.appending(path: ".codex/sessions")
+        )
+        return CodexUsageReader(homeDirectory: homeDirectory).read(snapshot: snapshot)
     }
 }
 

@@ -7,47 +7,45 @@ struct CodexSessionMetricsReader: @unchecked Sendable {
     private static let sessionMetricsCache = CodexSessionMetricsCache()
     private static let readChunkBytes = 64 * 1024
 
-    func read(
-        root: URL,
-        maximumSessionFileBytes: Int,
-        maximumSessionFiles: Int,
-        cacheDirectory: URL? = nil,
-        prunesCache: Bool = true
-    ) -> CodexSessionMetrics {
+    func capture(root: URL) -> CodexSessionScanSnapshot {
         var accessIssueNote: String?
+        var directorySignatures: [CodexSessionDirectorySignature] = []
         do {
-            let values = try root.resourceValues(forKeys: [.isDirectoryKey])
+            let values = try root.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
             guard values.isDirectory == true else {
-                return CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
+                return CodexSessionScanSnapshot(candidates: [], accessIssueNote: nil)
+            }
+            if let modifiedAt = values.contentModificationDate {
+                directorySignatures.append(CodexSessionDirectorySignature(path: root.path, modifiedAt: modifiedAt))
             }
         } catch {
             if let note = LocalFileAccessWarning.codexNote(for: error, path: root.path) {
-                var empty = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
-                empty.accessIssueNote = note
-                return empty
+                return CodexSessionScanSnapshot(candidates: [], accessIssueNote: note)
             }
         }
         guard let enumerator = fileManager.enumerator(
             at: root,
-            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey, .isDirectoryKey],
             options: [.skipsHiddenFiles],
             errorHandler: { url, error in
                 accessIssueNote = accessIssueNote ?? LocalFileAccessWarning.codexNote(for: error, path: url.path)
                 return true
             }
         ) else {
-            var empty = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
-            empty.accessIssueNote = accessIssueNote
-            return empty
+            return CodexSessionScanSnapshot(candidates: [], accessIssueNote: accessIssueNote)
         }
 
-        var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
         var candidates: [CodexSessionFileCandidate] = []
-        var seenPoints = Set<CodexUsagePointIdentity>()
-        var taskIndexes: [String: Int] = [:]
-
-        for case let fileURL as URL in enumerator where fileURL.pathExtension == "jsonl" {
+        for case let fileURL as URL in enumerator {
             guard !Task.isCancelled else { break }
+            let fileValues = try? fileURL.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
+            if fileValues?.isDirectory == true {
+                if let modifiedAt = fileValues?.contentModificationDate {
+                    directorySignatures.append(CodexSessionDirectorySignature(path: fileURL.path, modifiedAt: modifiedAt))
+                }
+                continue
+            }
+            guard fileURL.pathExtension == "jsonl" else { continue }
             do {
                 guard let fileSignature = try CodexSessionFileSignature(
                     fileURL: fileURL,
@@ -58,16 +56,55 @@ struct CodexSessionMetricsReader: @unchecked Sendable {
                 accessIssueNote = accessIssueNote ?? LocalFileAccessWarning.codexNote(for: error, path: fileURL.path)
             }
         }
-
-        let selectedCandidates = Array(candidates
-            .sorted { lhs, rhs in
-                if lhs.signature.modifiedAt != rhs.signature.modifiedAt {
-                    return lhs.signature.modifiedAt > rhs.signature.modifiedAt
-                }
-                return lhs.url.path > rhs.url.path
+        candidates.sort { lhs, rhs in
+            if lhs.signature.modifiedAt != rhs.signature.modifiedAt {
+                return lhs.signature.modifiedAt > rhs.signature.modifiedAt
             }
-            .prefix(maximumSessionFiles))
-        aggregate.skippedSessionFileCapCount = max(0, candidates.count - selectedCandidates.count)
+            return lhs.url.path > rhs.url.path
+        }
+        return CodexSessionScanSnapshot(
+            rootPath: root.path,
+            candidates: candidates,
+            directorySignatures: directorySignatures,
+            accessIssueNote: accessIssueNote
+        )
+    }
+
+    func refresh(snapshot: CodexSessionScanSnapshot, root: URL) -> CodexSessionScanSnapshot {
+        snapshot.isCurrent(fileManager: fileManager) ? snapshot : capture(root: root)
+    }
+
+    func read(
+        root: URL,
+        maximumSessionFileBytes: Int,
+        maximumSessionFiles: Int,
+        cacheDirectory: URL? = nil,
+        prunesCache: Bool = true
+    ) -> CodexSessionMetrics {
+        read(
+            snapshot: capture(root: root),
+            maximumSessionFileBytes: maximumSessionFileBytes,
+            maximumSessionFiles: maximumSessionFiles,
+            cacheDirectory: cacheDirectory,
+            prunesCache: prunesCache
+        )
+    }
+
+    func read(
+        snapshot: CodexSessionScanSnapshot,
+        maximumSessionFileBytes: Int,
+        maximumSessionFiles: Int,
+        cacheDirectory: URL? = nil,
+        prunesCache: Bool = true
+    ) -> CodexSessionMetrics {
+        var accessIssueNote = snapshot.accessIssueNote
+
+        var aggregate = CodexSessionMetrics(eventCount: 0, tokenTotals: .zero, points: [], latestFiveHour: nil, latestWeekly: nil, latestRateLimitAt: nil)
+        var seenPoints = Set<CodexUsagePointIdentity>()
+        var taskIndexes: [String: Int] = [:]
+
+        let selectedCandidates = Array(snapshot.candidates.prefix(maximumSessionFiles))
+        aggregate.skippedSessionFileCapCount = max(0, snapshot.candidates.count - selectedCandidates.count)
         let livePaths = Set(selectedCandidates.map(\.url.path))
 
         let scan = CodexSessionScan(candidateCount: selectedCandidates.count)
@@ -262,9 +299,50 @@ struct CodexSessionMetricsReader: @unchecked Sendable {
     }
 }
 
-private struct CodexSessionFileCandidate {
+struct CodexSessionScanSnapshot: Sendable {
+    fileprivate let rootPath: String
+    fileprivate let candidates: [CodexSessionFileCandidate]
+    fileprivate let directorySignatures: [CodexSessionDirectorySignature]
+    fileprivate let accessIssueNote: String?
+
+    fileprivate init(
+        rootPath: String = "",
+        candidates: [CodexSessionFileCandidate],
+        directorySignatures: [CodexSessionDirectorySignature] = [],
+        accessIssueNote: String?
+    ) {
+        self.rootPath = rootPath
+        self.candidates = candidates
+        self.directorySignatures = directorySignatures
+        self.accessIssueNote = accessIssueNote
+    }
+
+    fileprivate func isCurrent(fileManager: FileManager) -> Bool {
+        guard !rootPath.isEmpty else { return false }
+        for directory in directorySignatures {
+            guard let values = try? fileManager.attributesOfItem(atPath: directory.path),
+                  let modifiedAt = values[.modificationDate] as? Date,
+                  modifiedAt == directory.modifiedAt
+            else { return false }
+        }
+        for candidate in candidates {
+            guard let current = try? CodexSessionFileSignature(
+                fileURL: candidate.url,
+                fileManager: fileManager
+            ), current == candidate.signature else { return false }
+        }
+        return true
+    }
+}
+
+private struct CodexSessionFileCandidate: Sendable {
     var url: URL
     var signature: CodexSessionFileSignature
+}
+
+private struct CodexSessionDirectorySignature: Sendable {
+    let path: String
+    let modifiedAt: Date
 }
 
 private final class CodexSessionScan: @unchecked Sendable {
@@ -303,7 +381,7 @@ private final class CodexSessionScan: @unchecked Sendable {
     }
 }
 
-private struct CodexSessionFileSignature {
+private struct CodexSessionFileSignature: Sendable, Equatable {
     var fileID: Data
     var modifiedAt: Date
     var size: UInt64

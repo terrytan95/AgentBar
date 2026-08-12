@@ -14,6 +14,7 @@ struct AgentBarApp: App {
             codexUsagePreviewReader: {
                 CodexUsageReader(sessionFileLimit: 5, prunesSessionCache: false).read()
             },
+            codexUsageReadCycleFactory: { CodexUsageReadCycle() },
             cursorUsageReader: { await CursorAgentUsageReader().read() }
         )
         _settings = StateObject(wrappedValue: settings)
@@ -79,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             codexUsagePreviewReader: {
                 CodexUsageReader(sessionFileLimit: 5, prunesSessionCache: false).read()
             },
+            codexUsageReadCycleFactory: { CodexUsageReadCycle() },
             cursorUsageReader: { await CursorAgentUsageReader().read() }
         )
         self.store = store

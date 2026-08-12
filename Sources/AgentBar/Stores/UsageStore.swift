@@ -105,6 +105,7 @@ final class UsageStore: ObservableObject {
         settings: SettingsStore = .shared,
         codexUsageSynchronizer: (@Sendable () async -> CodexUsageSyncResult)? = nil,
         codexUsagePreviewReader: (@Sendable () -> UsageSnapshot)? = nil,
+        codexUsageReadCycleFactory: (@Sendable () -> CodexUsageReadCycle)? = nil,
         codexUsageReader: @escaping @Sendable () -> UsageSnapshot = {
             CodexUsageReader().read()
         },
@@ -176,6 +177,7 @@ final class UsageStore: ObservableObject {
             codexUsageSynchronizer: resolvedCodexUsageSynchronizer,
             codexUsagePreviewReader: codexUsagePreviewReader,
             codexUsageReader: codexUsageReader,
+            codexUsageReadCycleFactory: codexUsageReadCycleFactory,
             claudeUsageReader: claudeUsageReader,
             xaiUsageReader: xaiUsageReader,
             cursorUsageReader: cursorUsageReader,

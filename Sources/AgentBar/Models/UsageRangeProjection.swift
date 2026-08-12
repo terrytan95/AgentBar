@@ -1,6 +1,6 @@
 import Foundation
 
-struct UsageRangeProjection {
+final class UsageRangeProjection {
     let points: [UsagePoint]
     let range: UsageRange
     let now: Date
@@ -33,11 +33,13 @@ struct UsageRangeProjection {
         )
     }
 
-    var summary: UsageSummary {
+    lazy var summary: UsageSummary = {
         UsageStatistics.summarizeFiltered(points: rangePoints, calendar: calendar)
-    }
+    }()
 
-    var periodChange: UsagePeriodChange {
+    lazy var periodChange: UsagePeriodChange = makePeriodChange()
+
+    private func makePeriodChange() -> UsagePeriodChange {
         guard
             let currentInterval = range.dateInterval(now: now, calendar: calendar, customStart: customStart, customEnd: customEnd),
             let previousInterval = range.previousDateInterval(currentInterval: currentInterval, calendar: calendar)
@@ -45,7 +47,7 @@ struct UsageRangeProjection {
             return UsagePeriodChange(tokenPercent: nil, costPercent: nil)
         }
 
-        let current = UsageStatistics.summarizeFiltered(points: points.filter { currentInterval.contains($0.date) }, calendar: calendar)
+        let current = summary
         let previous = UsageStatistics.summarizeFiltered(points: points.filter { previousInterval.contains($0.date) }, calendar: calendar)
         return UsagePeriodChange(
             tokenPercent: UsageStatistics.percentChange(current: current.totalTokens, previous: previous.totalTokens),

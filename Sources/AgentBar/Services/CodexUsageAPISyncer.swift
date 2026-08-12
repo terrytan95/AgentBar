@@ -178,15 +178,18 @@ struct CodexUsageAPISyncer {
             )
             let nativeAuthData = try? Data(contentsOf: authURL)
             var authCandidates: [(authInfo: CodexUsageAuthInfo, usesExternalCredential: Bool)] = []
-            if let nativeAuthInfo = nativeAuthData.flatMap(CodexAccountStorage.usageAuthInfo) {
-                authCandidates.append((nativeAuthInfo, false))
-            }
-            for externalDiscovery in [openCodexDiscovery, cliProxyDiscovery] {
-                if let credential = externalDiscovery.credentials.first(where: {
+            let externalCandidates = [openCodexDiscovery, cliProxyDiscovery].compactMap { discovery in
+                discovery.credentials.first(where: {
                     Self.account(accounts[index], matches: $0.identity)
-                }) {
-                    authCandidates.append((credential.authInfo, true))
-                }
+                }).map { ($0.authInfo, true) }
+            }
+            let nativeCandidate = nativeAuthData.flatMap(CodexAccountStorage.usageAuthInfo).map { ($0, false) }
+            if index == activeAccountIndex, openCodexActiveAccountKey != nil {
+                authCandidates.append(contentsOf: externalCandidates)
+                if let nativeCandidate { authCandidates.append(nativeCandidate) }
+            } else {
+                if let nativeCandidate { authCandidates.append(nativeCandidate) }
+                authCandidates.append(contentsOf: externalCandidates)
             }
             guard !authCandidates.isEmpty else {
                 continue

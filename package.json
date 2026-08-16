@@ -6,7 +6,8 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "lint": "oxlint site/agentbar/script.js"
+    "lint": "oxlint site/agentbar/script.js",
+    "lint:anti-slop": "yarn lint"
   },
   "devDependencies": {
     "@oxlint/plugins": "1.78.0",

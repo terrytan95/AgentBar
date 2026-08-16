@@ -2,6 +2,7 @@
 .build/
 dist/
 DerivedData/
+node_modules/
 *.xcuserdata/
 
 # Local scratch / verification

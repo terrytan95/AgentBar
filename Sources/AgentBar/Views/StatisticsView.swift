@@ -879,7 +879,7 @@ struct StatisticsView: View {
             dailyUsagePanel
 
             Panel(title: yearActivityLocalized("year_activity")) {
-                YearActivityPanel(bars: yearActivityBars, language: store.language)
+                YearActivityPanel(bars: yearActivityBars, language: store.language, loggedInServices: loggedInServices)
             }
         }
         .frame(maxWidth: .infinity)
@@ -917,7 +917,7 @@ struct StatisticsView: View {
                 Spacer()
             }
 
-            DashboardStackedBars(bars: displayBars, language: store.language, isHourly: displayBarsAreHourly)
+            DashboardStackedBars(bars: displayBars, language: store.language, isHourly: displayBarsAreHourly, loggedInServices: loggedInServices)
                 .frame(height: 230)
         }
         .padding(16)
@@ -1611,6 +1611,10 @@ struct StatisticsView: View {
         case .needsAuthorization:
             return .orange
         }
+    }
+
+    private var loggedInServices: Set<UsageService> {
+        Set(store.accounts.lazy.filter { $0.status == .live && !$0.needsLogin }.map(\.service))
     }
 
     private var serviceQuotaSummaries: [ServiceQuotaSummary] {
@@ -2777,6 +2781,7 @@ private struct DashboardStackedBars: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
     var isHourly = false
+    var loggedInServices: Set<UsageService>
     @State private var hoveredBarID: Date?
     @State private var hoverLocation: CGPoint?
     @State private var hoverPlotSize: CGSize = .zero
@@ -2876,7 +2881,7 @@ private struct DashboardStackedBars: View {
 
                     if let hoveredBar, let hoverLocation {
                         let tooltipPosition = chartTooltipPosition(cursor: hoverLocation, calloutSize: calloutSize, plotSize: hoverPlotSize)
-                        ChartHoverCallout(bar: hoveredBar, language: language, isHourly: isHourly)
+                        ChartHoverCallout(bar: hoveredBar, language: language, isHourly: isHourly, loggedInServices: loggedInServices)
                             .frame(width: calloutSize.width, height: calloutSize.height)
                             .position(x: tooltipPosition.x + leftAxisWidth, y: tooltipPosition.y + 4)
                             .padding(.top, 4)
@@ -2979,6 +2984,7 @@ private struct DashboardStackedBars: View {
 private struct YearActivityPanel: View {
     var bars: [DailyUsageBar]
     var language: AppLanguage
+    var loggedInServices: Set<UsageService>
     @State private var hoveredBarID: Date?
     @State private var hoverLocation: CGPoint?
     @State private var heatmapContentHeight: CGFloat = 192
@@ -3124,7 +3130,7 @@ private struct YearActivityPanel: View {
                     calloutSize: calloutSize,
                     plotSize: CGSize(width: gridWidth, height: gridHeight)
                 )
-                ChartHoverCallout(bar: hoveredBar, language: language)
+                ChartHoverCallout(bar: hoveredBar, language: language, loggedInServices: loggedInServices)
                     .frame(width: calloutSize.width, height: calloutSize.height)
                     .allowsHitTesting(false)
                     .position(
@@ -3360,15 +3366,20 @@ private struct ChartHoverCallout: View {
     var bar: DailyUsageBar
     var language: AppLanguage
     var isHourly = false
+    var loggedInServices: Set<UsageService>
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(dateText)
                 .font(.agentBar(size: 11, weight: .bold))
-            metricRow("Codex", tokens: bar.codexTokens, cost: bar.codexCostUSD, color: AgentBarPalette.tertiary)
-            metricRow("Claude", tokens: bar.claudeTokens, cost: bar.claudeCostUSD, color: AgentBarPalette.secondary)
-            if bar.xaiTokens > 0 || bar.xaiCostUSD != 0 {
-                metricRow("xAI", tokens: bar.xaiTokens, cost: bar.xaiCostUSD, color: .purple)
+            if loggedInServices.contains(.codex) {
+                metricRow("Codex", tokens: bar.codexTokens, cost: bar.codexCostUSD, color: AgentBarPalette.tertiary)
+            }
+            if loggedInServices.contains(.claudeCode) {
+                metricRow("Claude", tokens: bar.claudeTokens, cost: bar.claudeCostUSD, color: AgentBarPalette.secondary)
+            }
+            if loggedInServices.contains(.xaiAPI) {
+                metricRow("Grok", tokens: bar.xaiTokens, cost: bar.xaiCostUSD, color: .purple)
             }
             Divider()
             HStack {

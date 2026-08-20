@@ -2786,7 +2786,9 @@ private struct DashboardStackedBars: View {
     @State private var hoverLocation: CGPoint?
     @State private var hoverPlotSize: CGSize = .zero
 
-    private let calloutSize = CGSize(width: 238, height: 146)
+    private var calloutSize: CGSize {
+        CGSize(width: 238, height: 96 + CGFloat(loggedInServices.count) * 25)
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -2992,7 +2994,9 @@ private struct YearActivityPanel: View {
 
     private let spacing: CGFloat = 4
     private let dayLabelWidth: CGFloat = 34
-    private let calloutSize = CGSize(width: 238, height: 146)
+    private var calloutSize: CGSize {
+        CGSize(width: 238, height: 96 + CGFloat(loggedInServices.count) * 25)
+    }
     private var calendar: Calendar { .current }
 
     var body: some View {
@@ -3380,6 +3384,9 @@ private struct ChartHoverCallout: View {
             }
             if loggedInServices.contains(.xaiAPI) {
                 metricRow("Grok", tokens: bar.xaiTokens, cost: bar.xaiCostUSD, color: .purple)
+            }
+            if loggedInServices.contains(.cursorAgent) {
+                metricRow("Cursor Agent", tokens: 0, cost: 0, color: AgentBarPalette.primary)
             }
             Divider()
             HStack {

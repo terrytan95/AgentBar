@@ -144,8 +144,8 @@ final class UsageStore: ObservableObject {
         taskCompletionNotifier: @escaping @Sendable (TaskCompletionNotification) -> Void = { notification in
             TaskCompletionDesktopNotifier.notify(notification)
         },
-        accessTokenExpiryReminderReconciler: @escaping @MainActor @Sendable ([UsageAccount], Bool, AppLanguage) -> Void = { accounts, enabled, language in
-            AccessTokenExpiryDesktopScheduler.shared.reconcile(accounts: accounts, enabled: enabled, language: language)
+        accessTokenExpiryReminderReconciler: @escaping @MainActor @Sendable ([UsageAccount], Bool, AppLanguage) -> Void = { accounts, _, language in
+            AccessTokenExpiryDesktopScheduler.shared.reconcile(accounts: accounts, enabled: false, language: language)
         },
         quotaCapacityHistoryStore: QuotaCapacityHistoryStore = QuotaCapacityHistoryStore(),
         refreshTimeout: Duration = .seconds(180)

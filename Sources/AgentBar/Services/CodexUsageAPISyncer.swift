@@ -30,6 +30,10 @@ struct CodexUsageAPISyncer {
 
     static let usageEndpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
     static let resetCreditsEndpoint = URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!
+    private static let tokenEndpoint = URL(string: "https://auth.openai.com/oauth/token")!
+    private static let codexOAuthClientID = "app_EMoamEEZ73f0CkXaXp7hrann"
+    private static let tokenRefreshWindow: TimeInterval = 2 * AccessTokenExpiryReminderPlanner.warningInterval
+    private static let tokenRefreshFallbackInterval: TimeInterval = 8 * 86_400
 
     var homeDirectory: URL
     var fileManager: FileManager
@@ -176,7 +180,10 @@ struct CodexUsageAPISyncer {
                 storage: storage,
                 activeAuthMatchesAccount: Self.account(accounts[index], matches: activeAuthIdentity)
             )
-            let nativeAuthData = try? Data(contentsOf: authURL)
+            let nativeAuthData = await refreshNativeAuthIfNeeded(
+                at: authURL,
+                snapshotURL: authURL == storage.activeAuthURL ? accountSnapshotURL : nil
+            )
             var authCandidates: [(authInfo: CodexUsageAuthInfo, usesExternalCredential: Bool)] = []
             let externalCandidates = [openCodexDiscovery, cliProxyDiscovery].compactMap { discovery in
                 discovery.credentials.first(where: {
@@ -362,6 +369,94 @@ struct CodexUsageAPISyncer {
     private func modificationDate(_ url: URL) -> Date? {
         guard let attributes = try? fileManager.attributesOfItem(atPath: url.path) else { return nil }
         return attributes[.modificationDate] as? Date
+    }
+
+    private func refreshNativeAuthIfNeeded(at authURL: URL, snapshotURL: URL?) async -> Data? {
+        guard let originalData = try? Data(contentsOf: authURL),
+              shouldRefreshToken(in: originalData),
+              var root = try? JSONSerialization.jsonObject(with: originalData) as? [String: Any],
+              var tokens = root["tokens"] as? [String: Any],
+              let refreshToken = Self.nonEmptyString(tokens["refresh_token"])
+        else {
+            return try? Data(contentsOf: authURL)
+        }
+
+        var request = URLRequest(url: Self.tokenEndpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("AgentBar", forHTTPHeaderField: "User-Agent")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "client_id": Self.codexOAuthClientID,
+            "grant_type": "refresh_token",
+            "refresh_token": refreshToken
+        ])
+
+        guard let response = try? await usageClient(request, timeout),
+              200..<300 ~= response.statusCode,
+              let refreshed = try? JSONSerialization.jsonObject(with: response.data) as? [String: Any]
+        else { return originalData }
+
+        for key in ["id_token", "access_token", "refresh_token"] {
+            if let value = Self.nonEmptyString(refreshed[key]) {
+                tokens[key] = value
+            }
+        }
+        root["tokens"] = tokens
+        root["last_refresh"] = ISO8601DateFormatter().string(from: now())
+        guard let updatedData = try? JSONSerialization.data(
+            withJSONObject: root,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ),
+              (try? Data(contentsOf: authURL)) == originalData
+        else {
+            return try? Data(contentsOf: authURL)
+        }
+
+        do {
+            try writeAuthData(updatedData, to: authURL)
+            if let snapshotURL, snapshotURL != authURL {
+                try writeAuthData(updatedData, to: snapshotURL)
+            }
+            return updatedData
+        } catch {
+            return try? Data(contentsOf: authURL)
+        }
+    }
+
+    private func shouldRefreshToken(in authData: Data) -> Bool {
+        guard let root = try? JSONSerialization.jsonObject(with: authData) as? [String: Any],
+              Self.nonEmptyString(root["OPENAI_API_KEY"]) == nil,
+              Self.nonEmptyString((root["tokens"] as? [String: Any])?["refresh_token"]) != nil
+        else { return false }
+        if let authMode = Self.nonEmptyString(root["auth_mode"]),
+           authMode.localizedCaseInsensitiveCompare("chatgpt") != .orderedSame {
+            return false
+        }
+        if let expiration = CodexAccountStorage.accessTokenExpiration(from: authData) {
+            return expiration <= now().addingTimeInterval(Self.tokenRefreshWindow)
+        }
+        guard let lastRefresh = Self.iso8601Date(root["last_refresh"]) else { return false }
+        return lastRefresh <= now().addingTimeInterval(-Self.tokenRefreshFallbackInterval)
+    }
+
+    private func writeAuthData(_ data: Data, to url: URL) throws {
+        let permissions = try? fileManager.attributesOfItem(atPath: url.path)[.posixPermissions]
+        try data.write(to: url, options: [.atomic])
+        try fileManager.setAttributes([.posixPermissions: permissions ?? 0o600], ofItemAtPath: url.path)
+    }
+
+    private static func nonEmptyString(_ value: Any?) -> String? {
+        guard let value = value as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func iso8601Date(_ value: Any?) -> Date? {
+        guard let value = nonEmptyString(value) else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 
     private static func defaultUsageClient(request: URLRequest, timeout: TimeInterval) async throws -> CodexUsageAPIResponse {

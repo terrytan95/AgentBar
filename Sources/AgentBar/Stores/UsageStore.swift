@@ -161,13 +161,15 @@ final class UsageStore: ObservableObject {
                     (
                         settings?.reuseCLIProxyAPIAuthEnabled ?? false,
                         settings?.reuseOpenCodexAuthEnabled ?? false,
-                        settings?.cliProxyAPIAuthDirectory ?? ""
+                        settings?.cliProxyAPIAuthDirectory ?? "",
+                        settings?.autoAccessTokenRefreshEnabled ?? true
                     )
                 }
                 return await CodexUsageAPISyncer(
                     reusesCLIProxyAPIAuth: configuration.0,
                     reusesOpenCodexAuth: configuration.1,
                     cliProxyAPIAuthDirectory: configuration.2,
+                    autoAccessTokenRefreshEnabled: configuration.3,
                     accountPollDelay: .seconds(5),
                     resetCreditsCacheDuration: 30 * 60
                 ).refreshUsage(refreshAllAccounts: refreshAllAccounts)

@@ -209,6 +209,10 @@ final class SettingsStore: ObservableObject {
         didSet { persist(accessTokenExpiryNotificationsEnabled, forKey: Keys.accessTokenExpiryNotificationsEnabled) }
     }
 
+    @Published var autoAccessTokenRefreshEnabled: Bool {
+        didSet { persist(autoAccessTokenRefreshEnabled, forKey: Keys.autoAccessTokenRefreshEnabled) }
+    }
+
     @Published private(set) var projectBudgets: [ProjectBudget] {
         didSet {
             guard let data = try? JSONEncoder().encode(projectBudgets) else { return }
@@ -376,6 +380,7 @@ final class SettingsStore: ObservableObject {
         quotaResetNotificationsEnabled = defaults.object(forKey: Keys.quotaResetNotificationsEnabled) as? Bool ?? false
         taskCompletionNotificationsEnabled = defaults.object(forKey: Keys.taskCompletionNotificationsEnabled) as? Bool ?? false
         accessTokenExpiryNotificationsEnabled = defaults.object(forKey: Keys.accessTokenExpiryNotificationsEnabled) as? Bool ?? false
+        autoAccessTokenRefreshEnabled = defaults.object(forKey: Keys.autoAccessTokenRefreshEnabled) as? Bool ?? true
         projectBudgets = defaults.data(forKey: Keys.projectBudgets)
             .flatMap { try? JSONDecoder().decode([ProjectBudget].self, from: $0) }
             ?? []
@@ -563,6 +568,7 @@ final class SettingsStore: ObservableObject {
         static let quotaResetNotificationsEnabled = "quotaResetNotificationsEnabled"
         static let taskCompletionNotificationsEnabled = "taskCompletionNotificationsEnabled"
         static let accessTokenExpiryNotificationsEnabled = "accessTokenExpiryNotificationsEnabled"
+        static let autoAccessTokenRefreshEnabled = "autoAccessTokenRefreshEnabled"
         static let projectBudgets = "projectBudgets"
         static let codexRotationThresholdRemainingPercent = "codexRotationThresholdRemainingPercent"
         static let dailyTokenBudget = "dailyTokenBudget"
@@ -607,6 +613,7 @@ final class SettingsStore: ObservableObject {
             quotaResetNotificationsEnabled,
             taskCompletionNotificationsEnabled,
             accessTokenExpiryNotificationsEnabled,
+            autoAccessTokenRefreshEnabled,
             projectBudgets,
             codexRotationThresholdRemainingPercent,
             dailyTokenBudget,

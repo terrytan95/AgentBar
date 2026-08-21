@@ -43,6 +43,7 @@ struct CodexUsageAPISyncer {
     var reusesCLIProxyAPIAuth: Bool
     var reusesOpenCodexAuth: Bool
     var cliProxyAPIAuthDirectory: String
+    var autoAccessTokenRefreshEnabled: Bool
     var accountPollDelay: Duration
     var resetCreditsCacheDuration: TimeInterval
 
@@ -55,6 +56,7 @@ struct CodexUsageAPISyncer {
         reusesCLIProxyAPIAuth: Bool = false,
         reusesOpenCodexAuth: Bool = false,
         cliProxyAPIAuthDirectory: String = "",
+        autoAccessTokenRefreshEnabled: Bool = true,
         accountPollDelay: Duration = .zero,
         resetCreditsCacheDuration: TimeInterval = 0
     ) {
@@ -66,6 +68,7 @@ struct CodexUsageAPISyncer {
         self.reusesCLIProxyAPIAuth = reusesCLIProxyAPIAuth
         self.reusesOpenCodexAuth = reusesOpenCodexAuth
         self.cliProxyAPIAuthDirectory = cliProxyAPIAuthDirectory
+        self.autoAccessTokenRefreshEnabled = autoAccessTokenRefreshEnabled
         self.accountPollDelay = accountPollDelay
         self.resetCreditsCacheDuration = resetCreditsCacheDuration
     }
@@ -372,7 +375,8 @@ struct CodexUsageAPISyncer {
     }
 
     private func refreshNativeAuthIfNeeded(at authURL: URL, snapshotURL: URL?) async -> Data? {
-        guard let originalData = try? Data(contentsOf: authURL),
+        guard autoAccessTokenRefreshEnabled,
+              let originalData = try? Data(contentsOf: authURL),
               shouldRefreshToken(in: originalData),
               var root = try? JSONSerialization.jsonObject(with: originalData) as? [String: Any],
               var tokens = root["tokens"] as? [String: Any],

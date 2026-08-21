@@ -1131,6 +1131,11 @@ struct StatisticsView: View {
                     subtitle: L.text("auto_codex_rotation_subtitle", store.language),
                     isOn: $settings.autoCodexAccountRotationEnabled
                 )
+                SettingsToggleRow(
+                    title: L.text("auto_access_token_refresh", store.language),
+                    subtitle: L.text("auto_access_token_refresh_subtitle", store.language),
+                    isOn: $settings.autoAccessTokenRefreshEnabled
+                )
                 if settings.autoCodexAccountRotationEnabled {
                     SettingsRow(title: L.text("codex_rotation_threshold", store.language), subtitle: L.text("codex_rotation_threshold_subtitle", store.language)) {
                         CodexRotationThresholdControl(

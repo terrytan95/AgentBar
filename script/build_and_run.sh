@@ -9,8 +9,8 @@ else
   BUNDLE_ID="com.terrytan.AgentBarPreview"
 fi
 MIN_SYSTEM_VERSION="14.0"
-APP_VERSION="2.6.7"
-APP_BUILD="255"
+APP_VERSION="2.6.8"
+APP_BUILD="256"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"

@@ -1630,6 +1630,8 @@ final class UsageParsingTests: XCTestCase {
     private func checkPricingNormalizesProviderAndDateSuffixes() {
         XCTAssertEqual(Pricing.normalize(model: "openai/GPT-5.4@20260131"), "gpt-5.4")
         XCTAssertEqual(Pricing.normalize(model: "openai.gpt-5.6-sol"), "gpt-5.6-sol")
+        XCTAssertEqual(Pricing.normalize(model: "google-antigravity/gemini-3.7-flash"), "gemini-3.7-flash")
+        XCTAssertEqual(Pricing.normalize(model: "google/gemini-3.7-flash"), "gemini-3.7-flash")
         XCTAssertEqual(Pricing.normalize(model: "claude-sonnet-4-5-20260229"), "claude-sonnet-4-5")
         XCTAssertEqual(Pricing.normalize(model: "claude-opus-4-7-2026-02-29"), "claude-opus-4-7")
     }
@@ -1640,6 +1642,32 @@ final class UsageParsingTests: XCTestCase {
 
         let known = Pricing.cost(model: "openai/gpt-5.4@20260131", input: 1_000_000, output: 100_000, cacheRead: 100_000, cacheCreation: 0)
         XCTAssertEqual(known, Decimal(string: "4.025"))
+
+        let promoDate = Calendar(identifier: .gregorian).date(
+            from: DateComponents(timeZone: TimeZone(secondsFromGMT: 0), year: 2026, month: 8, day: 21)
+        )!
+        let geminiPromo = Pricing.cost(
+            model: "google-antigravity/gemini-3.7-flash",
+            input: 1_000_000,
+            output: 100_000,
+            cacheRead: 100_000,
+            cacheCreation: 0,
+            at: promoDate
+        )
+        XCTAssertEqual(geminiPromo, Decimal(string: "1.1325"))
+
+        let standardDate = Calendar(identifier: .gregorian).date(
+            from: DateComponents(timeZone: TimeZone(secondsFromGMT: 0), year: 2027, month: 1, day: 1)
+        )!
+        let geminiStandard = Pricing.cost(
+            model: "google-antigravity/gemini-3.7-flash",
+            input: 1_000_000,
+            output: 100_000,
+            cacheRead: 100_000,
+            cacheCreation: 0,
+            at: standardDate
+        )
+        XCTAssertEqual(geminiStandard, Decimal(string: "2.265"))
     }
 
     private func checkPricingFingerprintIsStableSHA256AndIncludedInSummary() {

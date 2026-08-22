@@ -30,6 +30,9 @@ enum Pricing {
         "claude-haiku-4-5": .init(input: 1, output: 5, cacheRead: 0.10, cacheCreation: 1.25),
         "claude-3-5-haiku": .init(input: 0.8, output: 4, cacheRead: 0.08, cacheCreation: 1.0),
 
+        "gemini-3.7-flash": .init(input: 1.50, output: 7.50, cacheRead: 0.15, cacheCreation: 0),
+        "gemini-3.7-flash-intro": .init(input: 0.75, output: 3.75, cacheRead: 0.075, cacheCreation: 0),
+
         "gpt-5": .init(input: 1.25, output: 10, cacheRead: 0.125, cacheCreation: 0),
         "gpt-5-mini": .init(input: 0.25, output: 2, cacheRead: 0.025, cacheCreation: 0),
         "gpt-5-nano": .init(input: 0.05, output: 0.40, cacheRead: 0.005, cacheCreation: 0),
@@ -63,6 +66,9 @@ enum Pricing {
     private static let sonnet5StandardPricingStart = Calendar(identifier: .gregorian).date(
         from: DateComponents(timeZone: TimeZone(secondsFromGMT: 0), year: 2026, month: 9, day: 1)
     )!
+    private static let gemini37FlashStandardPricingStart = Calendar(identifier: .gregorian).date(
+        from: DateComponents(timeZone: TimeZone(secondsFromGMT: 0), year: 2027, month: 1, day: 1)
+    )!
     private static let dataResidencyModels: Set<String> = [
         "claude-fable-5", "claude-mythos-5", "claude-mythos-preview",
         "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6",
@@ -80,6 +86,15 @@ enum Pricing {
         }
         if normalized.hasPrefix("openai.") {
             normalized.removeFirst("openai.".count)
+        }
+        if normalized.hasPrefix("google-antigravity/") {
+            normalized.removeFirst("google-antigravity/".count)
+        }
+        if normalized.hasPrefix("google/") {
+            normalized.removeFirst("google/".count)
+        }
+        if normalized.hasPrefix("google.") {
+            normalized.removeFirst("google.".count)
         }
         if let at = normalized.firstIndex(of: "@") {
             normalized = String(normalized[..<at])
@@ -108,9 +123,14 @@ enum Pricing {
         at date: Date = Date()
     ) -> Decimal {
         let normalizedModel = normalize(model: model)
-        let priceKey = normalizedModel == "claude-sonnet-5" && date < sonnet5StandardPricingStart
-            ? "claude-sonnet-5-intro"
-            : normalizedModel
+        let priceKey: String
+        if normalizedModel == "claude-sonnet-5" && date < sonnet5StandardPricingStart {
+            priceKey = "claude-sonnet-5-intro"
+        } else if normalizedModel == "gemini-3.7-flash" && date < gemini37FlashStandardPricingStart {
+            priceKey = "gemini-3.7-flash-intro"
+        } else {
+            priceKey = normalizedModel
+        }
         guard let price = table[priceKey] else { return 0 }
         let tokenCost = Decimal(input) * price.input / perMillion
             + Decimal(output) * price.output / perMillion

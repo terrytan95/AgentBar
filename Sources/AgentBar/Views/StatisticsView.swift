@@ -1051,6 +1051,14 @@ struct StatisticsView: View {
                     ) {
                         store.openLogin(for: .cursorAgent)
                     }
+                    ProviderSettingsCard(
+                        service: .antigravity,
+                        subtitle: antigravityProviderSubtitle,
+                        statusColor: providerStatusColor(for: .antigravity),
+                        actionTitle: L.text("login_antigravity_terminal", store.language)
+                    ) {
+                        store.openLogin(for: .antigravity)
+                    }
                 }
             }
 
@@ -1583,6 +1591,14 @@ struct StatisticsView: View {
         !cursorAccounts.isEmpty
     }
 
+    private var antigravityAccounts: [UsageAccount] {
+        store.accounts.filter { $0.service == .antigravity }
+    }
+
+    private var hasAntigravityData: Bool {
+        !antigravityAccounts.isEmpty || store.points.contains { $0.service == .antigravity }
+    }
+
     private func hasMenuBarData(for service: UsageService) -> Bool {
         store.snapshots[service]?.status == .live
             || store.accounts.contains { $0.service == service }
@@ -1603,6 +1619,13 @@ struct StatisticsView: View {
         return L.text("cursor_agent_not_logged_in", store.language)
     }
 
+    private var antigravityProviderSubtitle: String {
+        if let snapshot = store.snapshots[.antigravity] {
+            return "\(snapshot.status.label(language: store.language)) · \(L.text("antigravity_opencodex_usage", store.language))"
+        }
+        return L.text("antigravity_not_logged_in", store.language)
+    }
+
     private func providerStatusColor(for service: UsageService) -> Color {
         guard let status = store.snapshots[service]?.status else {
             if service == .codex, !codexAccounts.isEmpty { return AgentBarPalette.primary }
@@ -1621,6 +1644,7 @@ struct StatisticsView: View {
 
     private var loggedInServices: Set<UsageService> {
         Set(store.accounts.lazy.filter { $0.status == .live && !$0.needsLogin }.map(\.service))
+            .union(store.points.map(\.service))
     }
 
     private var serviceQuotaSummaries: [ServiceQuotaSummary] {
@@ -1632,7 +1656,7 @@ struct StatisticsView: View {
             guard !remaining.isEmpty else { return nil }
             return ServiceQuotaSummary(
                 service: service,
-                accountCount: loggedInAccounts.count,
+                accountCount: loggedInAccounts.displayGroupsByIdentity(sortMode: settings.accountSortMode).count,
                 remainingPercent: remaining.reduce(0, +) / Double(remaining.count),
                 color: serviceColor(service)
             )
@@ -1721,7 +1745,8 @@ struct StatisticsView: View {
             guard tokens > 0 ||
                 (service == .codex && !codexAccounts.isEmpty) ||
                 (service == .claudeCode && hasClaudeData) ||
-                (service == .xaiAPI && hasXAIData)
+                (service == .xaiAPI && hasXAIData) ||
+                (service == .antigravity && hasAntigravityData)
             else { return nil }
             return ServiceMixRow(
                 service: service,
@@ -2976,13 +3001,14 @@ private struct DashboardStackedBars: View {
     }
 
     private func tokenValue(_ bar: DailyUsageBar) -> Double {
-        Double(bar.codexTokens + bar.claudeTokens + bar.xaiTokens)
+        Double(bar.codexTokens + bar.claudeTokens + bar.xaiTokens + bar.antigravityTokens)
     }
 
     private func costValue(_ bar: DailyUsageBar) -> Double {
         (bar.codexCostUSD as NSDecimalNumber).doubleValue +
             (bar.claudeCostUSD as NSDecimalNumber).doubleValue +
-            (bar.xaiCostUSD as NSDecimalNumber).doubleValue
+            (bar.xaiCostUSD as NSDecimalNumber).doubleValue +
+            (bar.antigravityCostUSD as NSDecimalNumber).doubleValue
     }
 
     private func tokenAxisText(_ value: Double) -> String {
@@ -3352,7 +3378,7 @@ private struct YearActivityPanel: View {
     }
 
     private func totalTokens(for bar: DailyUsageBar) -> Int {
-        bar.codexTokens + bar.claudeTokens + bar.xaiTokens
+        bar.codexTokens + bar.claudeTokens + bar.xaiTokens + bar.antigravityTokens
     }
 
     private func monthText(_ date: Date) -> String {
@@ -3399,13 +3425,16 @@ private struct ChartHoverCallout: View {
             if loggedInServices.contains(.cursorAgent) {
                 metricRow("Cursor Agent", tokens: 0, cost: 0, color: AgentBarPalette.primary)
             }
+            if loggedInServices.contains(.antigravity) {
+                metricRow("Antigravity", tokens: bar.antigravityTokens, cost: bar.antigravityCostUSD, color: .indigo)
+            }
             Divider()
             HStack {
                 Text(L.text("total", language))
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text(tokenText(bar.codexTokens + bar.claudeTokens + bar.xaiTokens))
-                    Text(DisplayFormatters.costString(bar.codexCostUSD + bar.claudeCostUSD + bar.xaiCostUSD))
+                    Text(tokenText(bar.codexTokens + bar.claudeTokens + bar.xaiTokens + bar.antigravityTokens))
+                    Text(DisplayFormatters.costString(bar.codexCostUSD + bar.claudeCostUSD + bar.xaiCostUSD + bar.antigravityCostUSD))
                         .foregroundStyle(.secondary)
                 }
                 .monospacedDigit()

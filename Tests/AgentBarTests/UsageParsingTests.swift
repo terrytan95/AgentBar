@@ -11,6 +11,12 @@ final class UsageParsingTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: home) }
         let auth = Data(#"{"google-antigravity":{"activeAccountId":"account-1","accounts":[{"id":"account-1","credential":{"access":"token-one","refresh":"refresh-one","expires":9999999999999,"email":"user-one@example.com","projectId":"project-one"}},{"id":"account-2","credential":{"access":"token-two","refresh":"refresh-two","expires":0,"email":"user-two@example.com","projectId":"project-two"}}]}}"#.utf8)
         try auth.write(to: authDirectory.appendingPathComponent("auth.json"))
+        let usageLog = [
+            #"{"requestId":"one","timestamp":1700000000000,"provider":"google-antigravity","model":"gemini-3.7-flash-medium","status":200,"usageStatus":"reported","usage":{"inputTokens":100,"outputTokens":10,"cachedInputTokens":20,"reasoningOutputTokens":5},"totalTokens":110}"#,
+            #"{"requestId":"two","timestamp":1700000001000,"provider":"google-antigravity","model":"gemini-3.7-flash","status":200,"usageStatus":"reported","usage":{"inputTokens":999,"outputTokens":999},"totalTokens":1998,"attempts":[{"ordinal":1,"provider":"google-antigravity","model":"gemini-3.7-flash","adapter":"test","status":200,"durationMs":1,"sendCount":1,"recoveryKinds":[],"usageStatus":"reported","usage":{"inputTokens":200,"outputTokens":20,"cacheReadInputTokens":50,"reasoningOutputTokens":7},"totalTokens":220},{"ordinal":2,"provider":"openai","model":"gpt-5","adapter":"test","status":200,"durationMs":1,"sendCount":1,"recoveryKinds":[],"usageStatus":"reported","usage":{"inputTokens":300,"outputTokens":30},"totalTokens":330}]}"#,
+            #"{"requestId":"three","timestamp":1700000002000,"provider":"google-antigravity","model":"gemini-3.7-flash","status":200,"usageStatus":"unreported"}"#
+        ].joined(separator: "\n")
+        try Data(usageLog.utf8).write(to: authDirectory.appendingPathComponent("usage.jsonl"))
         let quota = Data(#"{"groups":[{"displayName":"Gemini Models","buckets":[{"window":"5h","remainingFraction":0.75},{"window":"weekly","remainingFraction":0.6}]},{"displayName":"Claude and GPT models","buckets":[{"window":"5h","remainingFraction":0.9},{"window":"weekly","remainingFraction":0.8}]}]}"#.utf8)
         let reader = AntigravityUsageReader(homeDirectory: home, now: {
             Date(timeIntervalSince1970: 1_700_000_100)
@@ -26,8 +32,15 @@ final class UsageParsingTests: XCTestCase {
         let result = await reader.read()
         let snapshot = try XCTUnwrap(result)
         XCTAssertEqual(snapshot.accounts.count, 4)
+        XCTAssertEqual(snapshot.accounts.displayGroupsByIdentity(sortMode: .activeFirst).count, 2)
         XCTAssertEqual(snapshot.accounts.filter(\.isActive).count, 2)
         XCTAssertEqual(snapshot.accounts[0].fiveHourWindow?.usedPercent ?? -1, 25, accuracy: 0.001)
+        XCTAssertEqual(snapshot.points.count, 2)
+        XCTAssertEqual(Set(snapshot.points.map(\.model)), ["gemini-3.7-flash"])
+        XCTAssertEqual(snapshot.points.reduce(.zero) { $0 + $1.tokens }, TokenTotals(input: 300, cachedInput: 70, output: 30, reasoningOutput: 12, total: 330))
+        XCTAssertTrue(snapshot.points.allSatisfy { ($0.estimatedCostUSD ?? 0) > 0 })
+        let summary = UsageStatistics.summarize(points: snapshot.points, range: .all)
+        XCTAssertEqual(summary.dailyBars.first?.antigravityTokens, 330)
         let encoded = String(decoding: try JSONEncoder().encode(snapshot), as: UTF8.self)
         XCTAssertFalse(encoded.contains("token-"))
         XCTAssertFalse(encoded.contains("refresh-"))

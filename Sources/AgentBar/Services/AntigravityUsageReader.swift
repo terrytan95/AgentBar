@@ -63,6 +63,33 @@ struct AntigravityUsageReader {
         var buckets: [Bucket]
     }
 
+    private struct UsageLogEntry: Decodable {
+        struct Usage: Decodable {
+            var inputTokens: Int
+            var outputTokens: Int
+            var cachedInputTokens: Int?
+            var cacheReadInputTokens: Int?
+            var reasoningOutputTokens: Int?
+        }
+
+        struct Attempt: Decodable {
+            var provider: String
+            var model: String
+            var usageStatus: String
+            var usage: Usage?
+            var totalTokens: Int?
+        }
+
+        var timestamp: Double
+        var provider: String
+        var model: String
+        var resolvedModel: String?
+        var usageStatus: String
+        var usage: Usage?
+        var totalTokens: Int?
+        var attempts: [Attempt]?
+    }
+
     private struct Window {
         var kind: String
         var usedPercent: Double
@@ -76,6 +103,7 @@ struct AntigravityUsageReader {
 
     func read() async -> UsageSnapshot? {
         let refreshedAt = now()
+        let points = usagePoints()
         if let set = openCodexAccounts(), !set.accounts.isEmpty {
             let rows = await withTaskGroup(of: (Int, [UsageAccount]).self) { group in
                 for (index, account) in set.accounts.enumerated() {
@@ -101,20 +129,29 @@ struct AntigravityUsageReader {
             }
             return Self.snapshot(
                 accounts: rows,
+                points: points,
                 refreshedAt: refreshedAt,
-                source: "Read-only Google quota using OpenCodex account credentials in memory; AgentBar never stores or logs them."
+                source: "Read-only Google quota and OpenCodex usage history; AgentBar never stores or logs credentials."
             )
         }
 
-        guard let executable = executable(named: "agy") else { return nil }
+        guard let executable = executable(named: "agy") else {
+            guard !points.isEmpty else { return nil }
+            return Self.snapshot(
+                accounts: [],
+                points: points,
+                refreshedAt: refreshedAt,
+                source: "Read-only Antigravity usage history from OpenCodex."
+            )
+        }
         guard let result = try? await AsyncProcessRunner.run(
             executableURL: executable,
             arguments: ["-p", "/usage", "--output-format", "json"],
             maximumOutputBytes: 1_048_576,
             timeout: 30
         ), result.exitStatus == 0, !result.timedOut,
-              let snapshot = Self.agySnapshot(data: result.stdout, refreshedAt: refreshedAt)
-        else { return Self.unavailableSnapshot(refreshedAt: refreshedAt) }
+              let snapshot = Self.agySnapshot(data: result.stdout, points: points, refreshedAt: refreshedAt)
+        else { return Self.unavailableSnapshot(points: points, refreshedAt: refreshedAt) }
         return snapshot
     }
 
@@ -148,7 +185,7 @@ struct AntigravityUsageReader {
         }
     }
 
-    static func agySnapshot(data: Data, refreshedAt: Date) -> UsageSnapshot? {
+    static func agySnapshot(data: Data, points: [UsagePoint] = [], refreshedAt: Date) -> UsageSnapshot? {
         guard let envelope = try? JSONDecoder().decode(AgyEnvelope.self, from: data),
               !envelope.command.data.groups.isEmpty
         else { return nil }
@@ -172,9 +209,138 @@ struct AntigravityUsageReader {
         }
         return snapshot(
             accounts: accounts,
+            points: points,
             refreshedAt: refreshedAt,
-            source: "Read-only quota from the installed Antigravity CLI; AgentBar does not read or store its credentials."
+            source: "Read-only quota from Antigravity CLI and usage history from OpenCodex; AgentBar does not store credentials."
         )
+    }
+
+    private func usagePoints() -> [UsagePoint] {
+        let url = homeDirectory.appendingPathComponent(".opencodex/usage.jsonl")
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
+        defer { try? handle.close() }
+
+        var points: [UsagePoint] = []
+        var buffer = Data()
+        var discardingOversizedLine = false
+        var lineNumber = 0
+        let decoder = JSONDecoder()
+
+        // ponytail: stream the append-only ledger on refresh; add an offset cache only if profiling shows a need.
+        while let chunk = try? handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
+            buffer.append(chunk)
+            while let newline = buffer.firstIndex(of: 0x0A) {
+                let line = buffer[..<newline]
+                buffer.removeSubrange(...newline)
+                lineNumber += 1
+                if discardingOversizedLine {
+                    discardingOversizedLine = false
+                } else {
+                    Self.consumeUsageLine(line, lineNumber: lineNumber, sourceFile: url.path, decoder: decoder, points: &points)
+                }
+            }
+            if buffer.count > 4 * 1_024 * 1_024 {
+                buffer.removeAll(keepingCapacity: true)
+                discardingOversizedLine = true
+            }
+        }
+        if !discardingOversizedLine, !buffer.isEmpty {
+            Self.consumeUsageLine(buffer[...], lineNumber: lineNumber + 1, sourceFile: url.path, decoder: decoder, points: &points)
+        }
+        return points.sorted { $0.date < $1.date }
+    }
+
+    private static func consumeUsageLine(
+        _ line: Data.SubSequence,
+        lineNumber: Int,
+        sourceFile: String,
+        decoder: JSONDecoder,
+        points: inout [UsagePoint]
+    ) {
+        guard let entry = try? decoder.decode(UsageLogEntry.self, from: Data(line)) else { return }
+        let date = Date(timeIntervalSince1970: entry.timestamp / 1_000)
+        if let attempts = entry.attempts, !attempts.isEmpty {
+            for attempt in attempts {
+                appendPoint(
+                    provider: attempt.provider,
+                    model: attempt.model,
+                    usageStatus: attempt.usageStatus,
+                    usage: attempt.usage,
+                    totalTokens: attempt.totalTokens,
+                    date: date,
+                    sourceFile: sourceFile,
+                    sourceLine: lineNumber,
+                    points: &points
+                )
+            }
+        } else {
+            appendPoint(
+                provider: entry.provider,
+                model: entry.resolvedModel ?? entry.model,
+                usageStatus: entry.usageStatus,
+                usage: entry.usage,
+                totalTokens: entry.totalTokens,
+                date: date,
+                sourceFile: sourceFile,
+                sourceLine: lineNumber,
+                points: &points
+            )
+        }
+    }
+
+    private static func appendPoint(
+        provider: String,
+        model: String,
+        usageStatus: String,
+        usage: UsageLogEntry.Usage?,
+        totalTokens: Int?,
+        date: Date,
+        sourceFile: String,
+        sourceLine: Int,
+        points: inout [UsagePoint]
+    ) {
+        guard provider == "google-antigravity" || provider.hasPrefix("google-antigravity-"),
+              usageStatus == "reported" || usageStatus == "estimated",
+              let usage
+        else { return }
+        let input = max(0, usage.inputTokens)
+        let output = max(0, usage.outputTokens)
+        let cachedInput = min(input, max(0, usage.cachedInputTokens ?? usage.cacheReadInputTokens ?? 0))
+        let reasoningOutput = max(0, usage.reasoningOutputTokens ?? 0)
+        let tokens = TokenTotals(
+            input: input,
+            cachedInput: cachedInput,
+            output: output,
+            reasoningOutput: reasoningOutput,
+            total: max(0, totalTokens ?? (input + output))
+        )
+        let canonicalModel = antigravityModel(model)
+        let cost = Pricing.cost(
+            model: canonicalModel,
+            input: input - cachedInput,
+            output: output + reasoningOutput,
+            cacheRead: cachedInput,
+            cacheCreation: 0,
+            at: date
+        )
+        points.append(UsagePoint(
+            service: .antigravity,
+            model: canonicalModel,
+            date: date,
+            tokens: tokens,
+            estimatedCostUSD: cost,
+            sourceFile: sourceFile,
+            sourceLine: sourceLine
+        ))
+    }
+
+    private static func antigravityModel(_ model: String) -> String {
+        let normalized = Pricing.normalize(model: model)
+        if normalized == "gemini-pro-agent" { return "gemini-3.1-pro" }
+        guard normalized.hasPrefix("gemini-"),
+              let range = normalized.range(of: #"-(?:minimal|extra-low|low|mid|medium|high|xhigh|max|ultra)$"#, options: .regularExpression)
+        else { return normalized }
+        return String(normalized[..<range.lowerBound])
     }
 
     private func openCodexAccounts() -> AuthSet? {
@@ -258,19 +424,19 @@ struct AntigravityUsageReader {
         )
     }
 
-    private static func snapshot(accounts: [UsageAccount], refreshedAt: Date, source: String) -> UsageSnapshot {
+    private static func snapshot(accounts: [UsageAccount], points: [UsagePoint] = [], refreshedAt: Date, source: String) -> UsageSnapshot {
         UsageSnapshot(
             service: .antigravity,
-            status: accounts.contains { $0.status == .live } ? .live : .unavailable,
+            status: accounts.contains { $0.status == .live } || !points.isEmpty ? .live : .unavailable,
             accounts: accounts,
-            points: [],
+            points: points,
             securityNotes: [source],
             refreshedAt: refreshedAt,
-            pricingFingerprint: "google-antigravity-quota-v1"
+            pricingFingerprint: Pricing.fingerprint
         )
     }
 
-    private static func unavailableSnapshot(refreshedAt: Date) -> UsageSnapshot {
+    private static func unavailableSnapshot(points: [UsagePoint], refreshedAt: Date) -> UsageSnapshot {
         snapshot(
             accounts: [usageAccount(
                 id: "agy",
@@ -282,6 +448,7 @@ struct AntigravityUsageReader {
                 source: "Antigravity CLI · /usage",
                 refreshedAt: refreshedAt
             )],
+            points: points,
             refreshedAt: refreshedAt,
             source: "Google Antigravity quota could not be refreshed."
         )

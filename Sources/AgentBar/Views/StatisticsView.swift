@@ -1242,6 +1242,12 @@ struct StatisticsView: View {
                         language: store.language,
                         isOn: $settings.showCursorAgentInMenuBar
                     )
+                    MenuBarProviderToggleCard(
+                        service: .antigravity,
+                        hasData: hasMenuBarData(for: .antigravity),
+                        language: store.language,
+                        isOn: $settings.showAntigravityInMenuBar
+                    )
                 }
 
                 SettingsRow(
@@ -1953,6 +1959,7 @@ struct StatisticsView: View {
         case .claudeCode: "Claude"
         case .xaiAPI: "Grok"
         case .cursorAgent: "Cursor Agent"
+        case .antigravity: "Antigravity"
         }
     }
 
@@ -1962,6 +1969,7 @@ struct StatisticsView: View {
         case .claudeCode: "Anthropic"
         case .xaiAPI: "xAI · \(L.text("subscription_quota", store.language))"
         case .cursorAgent: "Cursor · \(L.text("subscription_quota", store.language))"
+        case .antigravity: "Google · \(L.text("subscription_quota", store.language))"
         }
     }
 
@@ -1971,6 +1979,7 @@ struct StatisticsView: View {
         case .claudeCode: AgentBarPalette.secondary
         case .xaiAPI: .purple
         case .cursorAgent: AgentBarPalette.primary
+        case .antigravity: .indigo
         }
     }
 
@@ -2215,6 +2224,7 @@ private struct ServiceQuotaOverview: View {
         case .claudeCode: "Claude Code"
         case .xaiAPI: "Grok"
         case .cursorAgent: "Cursor"
+        case .antigravity: "Antigravity"
         }
     }
 
@@ -2610,6 +2620,7 @@ private struct QuotaWindowTimelinePanel: View {
         case .claudeCode: AgentBarPalette.secondary
         case .xaiAPI: .purple
         case .cursorAgent: AgentBarPalette.primary
+        case .antigravity: .indigo
         }
     }
 }
@@ -4445,6 +4456,7 @@ private struct AccountAvatar: View {
         case .claudeCode: Color(red: 0.78, green: 0.32, blue: 0.22)
         case .xaiAPI: Color(red: 0.42, green: 0.30, blue: 0.76)
         case .cursorAgent: Color(red: 0.12, green: 0.35, blue: 0.70)
+        case .antigravity: Color(red: 0.18, green: 0.48, blue: 0.86)
         case nil: AgentBarPalette.primary
         }
     }

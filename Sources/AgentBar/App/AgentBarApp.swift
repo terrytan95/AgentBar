@@ -15,7 +15,8 @@ struct AgentBarApp: App {
                 CodexUsageReader(sessionFileLimit: 5, prunesSessionCache: false).read()
             },
             codexUsageReadCycleFactory: { CodexUsageReadCycle() },
-            cursorUsageReader: { await CursorAgentUsageReader().read() }
+            cursorUsageReader: { await CursorAgentUsageReader().read() },
+            antigravityUsageReader: { await AntigravityUsageReader().read() }
         )
         _settings = StateObject(wrappedValue: settings)
         _store = StateObject(wrappedValue: store)
@@ -81,7 +82,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 CodexUsageReader(sessionFileLimit: 5, prunesSessionCache: false).read()
             },
             codexUsageReadCycleFactory: { CodexUsageReadCycle() },
-            cursorUsageReader: { await CursorAgentUsageReader().read() }
+            cursorUsageReader: { await CursorAgentUsageReader().read() },
+            antigravityUsageReader: { await AntigravityUsageReader().read() }
         )
         self.store = store
         store.start()

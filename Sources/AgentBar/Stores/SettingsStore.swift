@@ -132,6 +132,10 @@ final class SettingsStore: ObservableObject {
         didSet { persist(showCursorAgentInMenuBar, forKey: Keys.showCursorAgentInMenuBar) }
     }
 
+    @Published var showAntigravityInMenuBar: Bool {
+        didSet { persist(showAntigravityInMenuBar, forKey: Keys.showAntigravityInMenuBar) }
+    }
+
     @Published var useDarkAppearance: Bool {
         didSet { persist(useDarkAppearance, forKey: Keys.useDarkAppearance) }
     }
@@ -356,6 +360,7 @@ final class SettingsStore: ObservableObject {
         showClaudeInMenuBar = defaults.object(forKey: Keys.showClaudeInMenuBar) as? Bool ?? true
         showGrokInMenuBar = defaults.object(forKey: Keys.showGrokInMenuBar) as? Bool ?? true
         showCursorAgentInMenuBar = defaults.object(forKey: Keys.showCursorAgentInMenuBar) as? Bool ?? true
+        showAntigravityInMenuBar = defaults.object(forKey: Keys.showAntigravityInMenuBar) as? Bool ?? true
         useDarkAppearance = defaults.object(forKey: Keys.useDarkAppearance) as? Bool ?? false
         colorTheme = AgentBarColorTheme(rawValue: defaults.string(forKey: Keys.colorTheme) ?? "") ?? .classic
         useHighSaturationTheme = defaults.object(forKey: Keys.useHighSaturationTheme) as? Bool ?? false
@@ -548,6 +553,7 @@ final class SettingsStore: ObservableObject {
         static let showClaudeInMenuBar = "showClaudeInMenuBar"
         static let showGrokInMenuBar = "showGrokInMenuBar"
         static let showCursorAgentInMenuBar = "showCursorAgentInMenuBar"
+        static let showAntigravityInMenuBar = "showAntigravityInMenuBar"
         static let xaiTeamID = "xaiTeamID"
         static let didMigrateActiveAccountMenuBarDefault = "didMigrateActiveAccountMenuBarDefault"
         static let didRestoreActiveAccountMenuBarDefault = "didRestoreActiveAccountMenuBarDefault"
@@ -593,6 +599,7 @@ final class SettingsStore: ObservableObject {
             showClaudeInMenuBar,
             showGrokInMenuBar,
             showCursorAgentInMenuBar,
+            showAntigravityInMenuBar,
             xaiTeamID,
             didMigrateActiveAccountMenuBarDefault,
             didRestoreActiveAccountMenuBarDefault,

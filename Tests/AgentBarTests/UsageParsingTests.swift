@@ -4,6 +4,37 @@ import XCTest
 
 final class UsageParsingTests: XCTestCase {
 
+    func testAntigravityReusesOpenCodexAccountsWithoutLeakingCredentials() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let authDirectory = home.appendingPathComponent(".opencodex")
+        try FileManager.default.createDirectory(at: authDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let auth = Data(#"{"google-antigravity":{"activeAccountId":"account-1","accounts":[{"id":"account-1","credential":{"access":"token-one","refresh":"refresh-one","expires":9999999999999,"email":"user-one@example.com","projectId":"project-one"}},{"id":"account-2","credential":{"access":"token-two","refresh":"refresh-two","expires":0,"email":"user-two@example.com","projectId":"project-two"}}]}}"#.utf8)
+        try auth.write(to: authDirectory.appendingPathComponent("auth.json"))
+        let quota = Data(#"{"groups":[{"displayName":"Gemini Models","buckets":[{"window":"5h","remainingFraction":0.75},{"window":"weekly","remainingFraction":0.6}]},{"displayName":"Claude and GPT models","buckets":[{"window":"5h","remainingFraction":0.9},{"window":"weekly","remainingFraction":0.8}]}]}"#.utf8)
+        let reader = AntigravityUsageReader(homeDirectory: home, now: {
+            Date(timeIntervalSince1970: 1_700_000_100)
+        }, client: { request, _ in
+            XCTAssertEqual(request.url?.absoluteString, "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary")
+            XCTAssertTrue(request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true)
+            return (200, quota)
+        }, tokenRefresher: { _, refreshToken in
+            XCTAssertEqual(refreshToken, "refresh-two")
+            return "fresh-two"
+        })
+
+        let result = await reader.read()
+        let snapshot = try XCTUnwrap(result)
+        XCTAssertEqual(snapshot.accounts.count, 4)
+        XCTAssertEqual(snapshot.accounts.filter(\.isActive).count, 2)
+        XCTAssertEqual(snapshot.accounts[0].fiveHourWindow?.usedPercent ?? -1, 25, accuracy: 0.001)
+        let encoded = String(decoding: try JSONEncoder().encode(snapshot), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("token-"))
+        XCTAssertFalse(encoded.contains("refresh-"))
+        XCTAssertFalse(encoded.contains("project-"))
+        XCTAssertFalse(encoded.contains("user-one@example.com"))
+    }
+
     @MainActor
     func testUsageParsingCoverage() async throws {
         try checkCodexRegistryParsesMultipleAccountsWithoutSecrets()

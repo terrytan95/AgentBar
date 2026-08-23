@@ -90,6 +90,7 @@ final class UsageRefreshLifecycleTests: XCTestCase {
         let gate = RefreshGate()
         let grok = snapshot(service: .xaiAPI, accounts: [account(service: .xaiAPI)])
         let cursor = snapshot(service: .cursorAgent, accounts: [account(service: .cursorAgent)])
+        let antigravity = snapshot(service: .antigravity, accounts: [account(service: .antigravity)])
         let lifecycle = UsageRefreshLifecycle(
             codexUsageSynchronizer: { _ in
                 await gate.wait()
@@ -100,6 +101,7 @@ final class UsageRefreshLifecycleTests: XCTestCase {
             claudeUsageReader: { snapshot(service: .claudeCode) },
             xaiUsageReader: { grok },
             cursorUsageReader: { cursor },
+            antigravityUsageReader: { antigravity },
             refreshTimeout: .seconds(1)
         )
         let progressReceived = expectation(description: "provider progress received")
@@ -115,7 +117,7 @@ final class UsageRefreshLifecycleTests: XCTestCase {
         await gate.releaseAll()
 
         XCTAssertEqual(Set(result.snapshots.keys), Set(UsageService.allCases))
-        XCTAssertEqual(Set(result.accounts.map(\.service)), Set([.xaiAPI, .cursorAgent]))
+        XCTAssertEqual(Set(result.accounts.map(\.service)), Set([.xaiAPI, .cursorAgent, .antigravity]))
     }
 
     @MainActor

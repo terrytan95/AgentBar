@@ -119,6 +119,7 @@ final class UsageStore: ObservableObject {
             await XAIUsageReader().read()
         },
         cursorUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
+        antigravityUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
         codexAccountSwitcher: (@Sendable (String) throws -> Void)? = nil,
         codexAccountRemover: @escaping @Sendable (String) throws -> Void = { accountID in
             try CodexAccountRemover().removeAccount(accountID: accountID)
@@ -183,6 +184,7 @@ final class UsageStore: ObservableObject {
             claudeUsageReader: claudeUsageReader,
             xaiUsageReader: xaiUsageReader,
             cursorUsageReader: cursorUsageReader,
+            antigravityUsageReader: antigravityUsageReader,
             refreshTimeout: refreshTimeout
         )
         self.codexTaskReader = codexTaskReader
@@ -391,6 +393,7 @@ final class UsageStore: ObservableObject {
         case .claudeCode: settings.showClaudeInMenuBar
         case .xaiAPI: settings.showGrokInMenuBar
         case .cursorAgent: settings.showCursorAgentInMenuBar
+        case .antigravity: settings.showAntigravityInMenuBar
         }
     }
 
@@ -433,6 +436,11 @@ final class UsageStore: ObservableObject {
         case .cursorAgent:
             guard let usage = account.cursorSubscriptionUsage else { return [] }
             return [("Cursor", usage.includedRemainingPercent)]
+        case .antigravity:
+            return [
+                account.fiveHourWindow.map { ("AG 5H", $0.remainingPercent) },
+                account.weeklyWindow.map { ("AG WK", $0.remainingPercent) }
+            ].compactMap { $0 }
         }
     }
 

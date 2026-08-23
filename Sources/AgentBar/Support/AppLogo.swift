@@ -25,12 +25,14 @@ enum ProviderIcon {
         case .claudeCode: "claude-code"
         case .xaiAPI: "grok"
         case .cursorAgent: "cursor-agent"
+        case .antigravity: "antigravity"
         }
         guard let url = Bundle.main.url(forResource: resourceName, withExtension: "svg", subdirectory: "ProviderIcons")
             ?? Bundle.module.url(forResource: resourceName, withExtension: "svg", subdirectory: "ProviderIcons"),
             let image = NSImage(contentsOf: url)
         else {
-            return NSImage(systemSymbolName: "terminal", accessibilityDescription: service.rawValue) ?? NSImage()
+            let symbol = service == .antigravity ? "sparkles" : "terminal"
+            return NSImage(systemSymbolName: symbol, accessibilityDescription: service.rawValue) ?? NSImage()
         }
         image.isTemplate = true
         return image

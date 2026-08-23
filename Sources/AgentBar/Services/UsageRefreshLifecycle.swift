@@ -31,6 +31,7 @@ final class UsageRefreshLifecycle {
     private let claudeUsageReader: @Sendable () -> UsageSnapshot
     private let xaiUsageReader: @Sendable () async -> UsageSnapshot?
     private let cursorUsageReader: @Sendable () async -> UsageSnapshot?
+    private let antigravityUsageReader: @Sendable () async -> UsageSnapshot?
     private let refreshTimeout: Duration
     private var generation: UInt64 = 0
     private var inFlight: Run?
@@ -45,6 +46,7 @@ final class UsageRefreshLifecycle {
         claudeUsageReader: @escaping @Sendable () -> UsageSnapshot,
         xaiUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
         cursorUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
+        antigravityUsageReader: @escaping @Sendable () async -> UsageSnapshot? = { nil },
         refreshTimeout: Duration = .seconds(180)
     ) {
         self.codexUsageSynchronizer = codexUsageSynchronizer
@@ -54,6 +56,7 @@ final class UsageRefreshLifecycle {
         self.claudeUsageReader = claudeUsageReader
         self.xaiUsageReader = xaiUsageReader
         self.cursorUsageReader = cursorUsageReader
+        self.antigravityUsageReader = antigravityUsageReader
         self.refreshTimeout = refreshTimeout
     }
 
@@ -94,16 +97,19 @@ final class UsageRefreshLifecycle {
         let claudeUsageReader = claudeUsageReader
         let xaiUsageReader = xaiUsageReader
         let cursorUsageReader = cursorUsageReader
+        let antigravityUsageReader = antigravityUsageReader
         inFlight = Run(generation: runGeneration)
 
         let workTask = Task.detached(priority: .utility) { [weak self] in
             async let xaiUsage = xaiUsageReader()
             async let cursorUsage = cursorUsageReader()
+            async let antigravityUsage = antigravityUsageReader()
             let codexUsageReadCycle = codexUsageReadCycleFactory?()
             let syncResult: CodexUsageSyncResult
             var previewClaude: UsageSnapshot?
             var xai: UsageSnapshot?
             var cursor: UsageSnapshot?
+            var antigravity: UsageSnapshot?
             if let codexUsagePreviewReader {
                 async let pendingSyncResult = codexUsageSynchronizer(refreshAllCodexAccounts)
                 let claude = claudeUsageReader()
@@ -111,14 +117,16 @@ final class UsageRefreshLifecycle {
                 let codexPreview = codexUsageReadCycle?.readPreview() ?? codexUsagePreviewReader()
                 xai = await xaiUsage
                 cursor = await cursorUsage
+                antigravity = await antigravityUsage
                 guard !Task.isCancelled else { return }
                 var previewSnapshots: [UsageService: UsageSnapshot] = [.codex: codexPreview, .claudeCode: claude]
                 if let xai { previewSnapshots[.xaiAPI] = xai }
                 if let cursor { previewSnapshots[.cursorAgent] = cursor }
+                if let antigravity { previewSnapshots[.antigravity] = antigravity }
                 let preview = Result(
                     snapshots: previewSnapshots,
-                    accounts: codexPreview.accounts + claude.accounts + (xai?.accounts ?? []) + (cursor?.accounts ?? []),
-                    points: codexPreview.points + claude.points + (xai?.points ?? []) + (cursor?.points ?? []),
+                    accounts: codexPreview.accounts + claude.accounts + (xai?.accounts ?? []) + (cursor?.accounts ?? []) + (antigravity?.accounts ?? []),
+                    points: codexPreview.points + claude.points + (xai?.points ?? []) + (cursor?.points ?? []) + (antigravity?.points ?? []),
                     tasks: codexPreview.tasks,
                     generation: runGeneration
                 )
@@ -128,6 +136,7 @@ final class UsageRefreshLifecycle {
                 syncResult = await codexUsageSynchronizer(refreshAllCodexAccounts)
                 xai = await xaiUsage
                 cursor = await cursorUsage
+                antigravity = await antigravityUsage
             }
             guard !Task.isCancelled else { return }
             var codex = codexUsageReadCycle?.readFinal() ?? codexUsageReader()
@@ -144,10 +153,13 @@ final class UsageRefreshLifecycle {
             if let cursor {
                 snapshots[.cursorAgent] = cursor
             }
+            if let antigravity {
+                snapshots[.antigravity] = antigravity
+            }
             let result = Result(
                 snapshots: snapshots,
-                accounts: codex.accounts + claude.accounts + (xai?.accounts ?? []) + (cursor?.accounts ?? []),
-                points: codex.points + claude.points + (xai?.points ?? []) + (cursor?.points ?? []),
+                accounts: codex.accounts + claude.accounts + (xai?.accounts ?? []) + (cursor?.accounts ?? []) + (antigravity?.accounts ?? []),
+                points: codex.points + claude.points + (xai?.points ?? []) + (cursor?.points ?? []) + (antigravity?.points ?? []),
                 tasks: codex.tasks,
                 generation: runGeneration
             )

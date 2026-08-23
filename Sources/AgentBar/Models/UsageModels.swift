@@ -5,6 +5,7 @@ enum UsageService: String, Codable, CaseIterable, Hashable, Identifiable, Sendab
     case claudeCode = "Claude Code"
     case xaiAPI = "Grok"
     case cursorAgent = "Cursor Agent"
+    case antigravity = "Google Antigravity"
 
     var id: String { rawValue }
 }
@@ -228,6 +229,10 @@ struct UsageAccount: Codable, Equatable, Identifiable, Sendable {
     }
 
     var providerAccountDisplayName: String {
+        if service == .antigravity,
+           let identity = username.trimmedNonEmpty ?? maskedEmail.trimmedNonEmpty {
+            return "\(displayName) • \(identity)"
+        }
         guard service != .claudeCode,
               let identity = username.trimmedNonEmpty ?? maskedEmail.trimmedNonEmpty
         else { return displayName }

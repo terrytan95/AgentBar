@@ -292,6 +292,8 @@ enum AccountLoginLauncher {
             openTerminal(command: "grok login")
         case .cursorAgent:
             openTerminal(command: "cursor-agent login")
+        case .antigravity:
+            openTerminal(command: "agy")
         }
     }
 

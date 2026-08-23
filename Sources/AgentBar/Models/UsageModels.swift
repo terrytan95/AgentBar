@@ -382,6 +382,10 @@ extension Array where Element == UsageAccount {
 
 private extension UsageAccount {
     var identityGroupKey: String {
+        if service == .antigravity {
+            let parts = id.split(separator: ":", maxSplits: 2)
+            if parts.count == 3 { return "\(service.rawValue)|\(parts[1])".lowercased() }
+        }
         let displayNameValue = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         return [
             service.rawValue,
@@ -658,14 +662,16 @@ struct DailyUsageBar: Equatable, Identifiable, Sendable {
     var codexTokens: Int
     var claudeTokens: Int
     var xaiTokens: Int = 0
+    var antigravityTokens: Int = 0
     var codexCostUSD: Decimal = 0
     var claudeCostUSD: Decimal = 0
     var xaiCostUSD: Decimal = 0
+    var antigravityCostUSD: Decimal = 0
 
     func tooltipText(language: AppLanguage) -> String {
         let tokensLabel = L.text("tokens", language)
-        let total = codexTokens + claudeTokens + xaiTokens
-        let totalCost = codexCostUSD + claudeCostUSD + xaiCostUSD
+        let total = codexTokens + claudeTokens + xaiTokens + antigravityTokens
+        let totalCost = codexCostUSD + claudeCostUSD + xaiCostUSD + antigravityCostUSD
         var lines = [
             DisplayFormatters.localizedDateString(for: day, template: "yMMMd", language: language, timeZone: TimeZone(secondsFromGMT: 0)),
             "Codex: \(DisplayFormatters.compactTokenString(codexTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(codexCostUSD))",
@@ -673,6 +679,9 @@ struct DailyUsageBar: Equatable, Identifiable, Sendable {
         ]
         if xaiTokens > 0 || xaiCostUSD != 0 {
             lines.append("xAI: \(DisplayFormatters.compactTokenString(xaiTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(xaiCostUSD))")
+        }
+        if antigravityTokens > 0 || antigravityCostUSD != 0 {
+            lines.append("Antigravity: \(DisplayFormatters.compactTokenString(antigravityTokens, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(antigravityCostUSD))")
         }
         lines.append("Total: \(DisplayFormatters.compactTokenString(total, language: language)) \(tokensLabel) · \(DisplayFormatters.costString(totalCost))")
         return lines.joined(separator: "\n")

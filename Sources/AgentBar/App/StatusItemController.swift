@@ -202,7 +202,8 @@ final class StatusItemController: NSObject {
         enabledServices: Set<UsageService>,
         highlighted: Bool
     ) -> NSImage {
-        let size = NSSize(width: 74, height: 18)
+        let dividerX = CGFloat(5 + UsageService.allCases.count * 13)
+        let size = NSSize(width: dividerX + 18, height: 18)
         return NSImage(size: size, flipped: false) { rect in
             let foreground = highlighted ? NSColor.white : NSColor.labelColor
             foreground.withAlphaComponent(highlighted ? 0.16 : 0.08).setFill()
@@ -218,7 +219,7 @@ final class StatusItemController: NSObject {
             }
 
             foreground.withAlphaComponent(0.28).setFill()
-            NSRect(x: 56, y: 4, width: 1, height: 10).fill()
+            NSRect(x: dividerX, y: 4, width: 1, height: 10).fill()
 
             let count = NSAttributedString(
                 string: "\(enabledServices.count)",
@@ -228,7 +229,7 @@ final class StatusItemController: NSObject {
                 ]
             )
             let countSize = count.size()
-            count.draw(at: NSPoint(x: 62, y: (rect.height - countSize.height) / 2))
+            count.draw(at: NSPoint(x: dividerX + 6, y: (rect.height - countSize.height) / 2))
             return true
         }
     }

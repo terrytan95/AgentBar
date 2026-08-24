@@ -2216,7 +2216,12 @@ private struct ServiceQuotaOverview: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
-                VStack(spacing: 7) {
+                LazyVGrid(
+                    columns: summaries.count >= 4
+                        ? [GridItem(.flexible(), spacing: 16), GridItem(.flexible())]
+                        : [GridItem(.flexible())],
+                    spacing: 7
+                ) {
                     ForEach(summaries) { summary in
                         VStack(spacing: 3) {
                             HStack(spacing: 7) {

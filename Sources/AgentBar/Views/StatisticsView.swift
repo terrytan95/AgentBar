@@ -2227,6 +2227,9 @@ private struct ServiceQuotaOverview: View {
                             HStack(spacing: 7) {
                                 Text(serviceName(summary.service))
                                     .font(.agentBar(size: 11, weight: .bold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                    .layoutPriority(1)
                                 Text(accountCount(summary.accountCount))
                                     .font(.agentBar(size: 10, weight: .semibold))
                                     .foregroundStyle(.secondary)
